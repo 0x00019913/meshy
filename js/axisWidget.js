@@ -17,7 +17,7 @@ AxisWidget = function (sourceCamera) {
 }
 
 AxisWidget.prototype.update = function() {
-  this.camera.position.copy(this.sourceCamera.position);
+  this.camera.position.copy(this.sourceCamera.getWorldDirection());
   this.camera.position.setLength(30);
   this.camera.lookAt(this.origin);
   this.renderer.render(this.scene, this.camera);
