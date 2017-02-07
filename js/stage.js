@@ -29,7 +29,7 @@ Stage = function() {
 
 Stage.prototype.initViewport = function() {
   var width, height;
-  var controls;
+  var axes;
   var _this = this;
 
   init();
@@ -60,6 +60,8 @@ Stage.prototype.initViewport = function() {
     _this.controls.addObject(pointLight);
     var ambientLight = new THREE.AmbientLight(0xffffff, 1);
     _this.scene.add(ambientLight);
+
+    axes = new AxisWidget(_this.camera);
 
     _this.controls.update();
 
@@ -95,6 +97,7 @@ Stage.prototype.initViewport = function() {
   function render() {
     if (!_this.camera || !_this.scene) return;
     _this.controls.update();
+    axes.update();
     _this.renderer.render(_this.scene, _this.camera);
   }
 }
