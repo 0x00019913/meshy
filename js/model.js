@@ -10,6 +10,8 @@ function Model(numSlices) {
   this.sliceCount = null;
   this.numSlices = numSlices;
   this.delta = null;
+  //store header to export back out identically
+  this.header = null;
 }
 
 Model.prototype.add = function(triangle) {

@@ -1,13 +1,6 @@
 body, html {
   padding: 0;
   margin: 0;
-  font-family: sans-serif;
-}
-
-.centerbox {
-  width: 100%;
-  position: absolute;
-  text-align: center;
 }
 
 #uploadbox {
@@ -36,10 +29,35 @@ body, html {
   background-color: transparent;
 }
 
+#titlebox {
+  padding: 0;
+  margin: 0;
+  position: absolute;
+  left: 50%;
+  top: 0;
+  user-select: none;
+  -ms-user-select: none;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  cursor: default;
+}
+
+#titlebox p {
+  position: relative;
+  left: -50%;
+  font-family: 'Crete Round', sans-serif;
+  font-size: 20px;
+  color: #dddddd;
+  padding: 5px;
+  margin: 0;
+  line-height: 100%;
+  display: inline-block;
+}
+
 #container {
   width: 100%;
   height: 100%;
-  margin: 0 auto;
   user-select: none;
   -ms-user-select: none;
   -moz-user-select: none;

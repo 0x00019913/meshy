@@ -5,8 +5,11 @@
 
 Stage = function() {
   // toggles
-  this.uploadButtonEnabled = true;
-  this.floorEnabled = true;
+  this.uploadEnabled = true;
+  this.floorVisible = true;
+  // for keeping track of changes
+  this.uploadEnabledOld = true;
+  this.floorVisibleOld = true;
 
   // geometry
   this.model = null;
@@ -21,10 +24,11 @@ Stage = function() {
   // UI
   this.gui = new dat.GUI();
   this.gui.add(this, 'Upload');
+  var folderUI = this.gui.addFolder("UI");
+  folderUI.add(this, "floorVisible");
 
   this.initViewport();
   this.initFloor();
-  this.update();
 }
 
 Stage.prototype.initViewport = function() {
@@ -96,6 +100,7 @@ Stage.prototype.initViewport = function() {
 
   function render() {
     if (!_this.camera || !_this.scene) return;
+    _this.updateUI();
     _this.controls.update();
     axes.update();
     _this.renderer.render(_this.scene, _this.camera);
@@ -121,6 +126,7 @@ Stage.prototype.initFloor = function() {
     color: 0x444444,
     linewidth: 1
   });
+
   geoPrimary.vertices.push(new THREE.Vector3(0,0,-30));
   geoPrimary.vertices.push(new THREE.Vector3(0,0,30));
   geoPrimary.vertices.push(new THREE.Vector3(-30,0,0));
@@ -143,13 +149,31 @@ Stage.prototype.initFloor = function() {
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
   var lineSecondary = new THREE.LineSegments(geoSecondary, matSecondary);
   var lineTertiary = new THREE.LineSegments(geoTertiary, matTertiary);
+  linePrimary.name = "floor";
+  lineSecondary.name = "floor";
+  lineTertiary.name = "floor";
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
 }
 
-Stage.prototype.update = function() {
-
+Stage.prototype.updateUI = function() {
+  if (this.floorVisible!=this.floorVisibleOld) {
+    this.floorVisibleOld = this.floorVisible;
+    if (this.floorVisible) {
+      //turn on floor
+        // turn off floor
+        this.scene.traverse(function(o) {
+          if (o.name=="floor") o.visible = true;
+        });
+    }
+    else {
+      // turn off floor
+      this.scene.traverse(function(o) {
+        if (o.name=="floor") o.visible = false;
+      });
+    }
+  }
 }
 
 Stage.prototype.Upload = function() {
