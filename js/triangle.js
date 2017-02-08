@@ -26,18 +26,32 @@ Triangle.prototype.addVertex = function(vertex) {
     this.zmax = vertex.z;
   }
   else {
-    this.xmin = vertex.x<this.xmin ? vertex.x : this.xmin;
-    this.xmax = vertex.x>this.xmax ? vertex.x : this.xmax;
-    this.ymin = vertex.y<this.ymin ? vertex.y : this.ymin;
-    this.ymax = vertex.y>this.ymax ? vertex.y : this.ymax;
-    this.zmin = vertex.z<this.zmin ? vertex.z : this.zmin;
-    this.zmax = vertex.z>this.zmax ? vertex.z : this.zmax;
+    this.updateBounds(vertex);
   }
 };
+
+Triangle.prototype.updateBounds = function(vertex) {
+  this.xmin = vertex.x<this.xmin ? vertex.x : this.xmin;
+  this.xmax = vertex.x>this.xmax ? vertex.x : this.xmax;
+  this.ymin = vertex.y<this.ymin ? vertex.y : this.ymin;
+  this.ymax = vertex.y>this.ymax ? vertex.y : this.ymax;
+  this.zmin = vertex.z<this.zmin ? vertex.z : this.zmin;
+  this.zmax = vertex.z>this.zmax ? vertex.z : this.zmax;
+}
 
 Triangle.prototype.setNormal = function(normal) {
   this.normal = normal;
 };
+
+Triangle.prototype.translate = function(axis, amount) {
+  for (var i=0; i<3; i++) {
+    var vertex = this.vertices[i];
+    vertex.setX(0);
+    //vertex["set"+axis.toUpperCase()](vertex[axis]+amount);
+  }
+  this[axis+"min"] += amount;
+  this[axis+"max"] += amount;
+}
 
 Triangle.prototype.yIntersection = function(planePos) {
   var segment = [];

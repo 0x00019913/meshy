@@ -30,13 +30,17 @@ Stage.prototype.generateUI = function() {
   uiFolder.add(this, "floorVisible").onChange(updateFloor);
   var transformationFolder = this.gui.addFolder("Transformation");
   var translationFolder = transformationFolder.addFolder("Translation");
-  translationFolder.add(this, "floorVisible");
+  translationFolder.add(this, "translateX");
+  var floorFolder = transformationFolder.addFolder("Floor");
+  floorFolder.add(this, "floorX");
+  var displayFolder = this.gui.addFolder("Display");
+  displayFolder.add(this, "toggleWireframe");
 
   this.infoBox = new InfoBox();
   this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
   this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
   this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
-  this.infoBox.addMultiple("Center", this, [["model", "getCenterX"],["model", "getCenterY"],["model", "getCenterZ"]]);
+  this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
 
   this.initViewport();
   this.initFloor();
@@ -55,6 +59,27 @@ Stage.prototype.generateUI = function() {
       });
     }
   }
+}
+
+Stage.prototype.updateUI = function() {
+}
+
+Stage.prototype.floorX = function() {
+  var transform = new Transform("floor","x",null,this.model);
+  var inv = transform.makeInverse();
+  transform.apply();
+}
+
+Stage.prototype.translateX = function() {
+  var transform = new Transform("translate","x",5,this.model);
+  var inv = transform.makeInverse();
+  transform.apply();
+}
+
+Stage.prototype.toggleWireframe = function() {
+  var transform = new Transform("toggleWireframe",null,null,this.model);
+  var inv = transform.makeInverse();
+  transform.apply();
 }
 
 Stage.prototype.initViewport = function() {
@@ -181,9 +206,6 @@ Stage.prototype.initFloor = function() {
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
-}
-
-Stage.prototype.updateUI = function() {
 }
 
 Stage.prototype.Upload = function() {

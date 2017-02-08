@@ -124,14 +124,17 @@ InfoBox.prototype.update = function() {
     }
     else {
       var len = item.props.length;
+      var valuesExist = false;
       value += "[ ";
       for (var propIdx=0; propIdx<len; propIdx++) {
         var v = this.getPropValue(item.source, item.props[propIdx]);
+        if (v!="") valuesExist = true;
         if (this.isNumber(v)) v = v.toFixed(3);
         value += v;
         if (propIdx < len-1) value += ", ";
       }
       value += " ]";
+      if (!valuesExist) value = "";
     }
 
     item.element.textContent = value;

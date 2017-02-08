@@ -9,7 +9,7 @@
   </head>
 
   <body>
-    <input type="file" id="file" onchange="handleFile(this.files)">
+    <input type="file" id="file" onchange="stage.handleFile(this.files[0])">
     <div id="titlebox">
       <span>meshy</span>
     </div>
@@ -23,6 +23,7 @@
     <script src="js/controls.js"></script>
     <script src="js/infoBox.js"></script>
     <script src="js/axisWidget.js"></script>
+    <script src="js/transform.js"></script>
     <script src="js/stage.js"></script>
     <script src="js/main.js"></script>
 
