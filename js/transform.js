@@ -47,6 +47,7 @@ Transform.prototype = {
   constructor: Transform,
 
   makeInverse: function() {
+    if (this.op=="noop") return null;
     var amount;
     if (this.axis=="all") {
       amount = [-1*this.amount[0], -1*this.amount[1], -1*this.amount[2]]
@@ -111,6 +112,10 @@ UndoStack.prototype = {
   },
 
   push: function(inv) {
-    this.history.push(inv);
+    if (inv) this.history.push(inv);
+  },
+
+  clear: function() {
+    this.history = [];
   }
 }

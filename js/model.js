@@ -4,6 +4,7 @@ function Model() {
   this.count = 0;
   //store header to export back out identically
   this.header = null;
+  this.isLittleEndian = true;
 
   // calculated stuff
   this.xmin = null;
@@ -24,6 +25,7 @@ function Model() {
   this.currentMesh = null;
   this.plainMesh = null;
   this.slicedMesh = null;
+  this.scene = null;
 }
 
 Model.prototype.add = function(triangle) {
@@ -73,7 +75,7 @@ Model.prototype.translate = function(axis, amount) {
 }
 
 Model.prototype.rotate = function(axis, amount) {
-
+  console.log(axis, amount);
 }
 
 Model.prototype.toggleWireframe = function() {
@@ -84,6 +86,7 @@ Model.prototype.toggleWireframe = function() {
 }
 
 Model.prototype.render = function(scene, mode) {
+  this.scene = scene;
   if (mode == "plain") {
     this.renderPlainModel(scene);
     this.currentMesh = this.plainMesh;
@@ -111,6 +114,7 @@ Model.prototype.renderPlainModel = function(scene) {
     color: 0xffffff
   });
   this.plainMesh = new THREE.Mesh(geo, mat);
+  this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
 }
@@ -130,7 +134,62 @@ Model.prototype.renderSlicedModel = function(scene) {
     linewidth: 1
   });
   this.slicedMesh = new THREE.LineSegments(geo, mat);
+  this.slicedMesh.name = "model";
   scene.add(this.slicedMesh);
+}
+
+Model.prototype.upload = function(file, callback) {
+  var _this = this;
+
+  fr = new FileReader();
+  fr.onload = function() {
+    parseArray(fr.result);
+    callback();
+  };
+  fr.readAsArrayBuffer(file);
+
+  var parseArray = function(array) {
+    // mimicking http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
+    _this.header = array.slice(0, 80); // store header
+
+    var dv = new DataView(array, 80);
+    var isLittleEndian = _this.isLittleEndian;
+
+    var offset = 4;
+    var n = dv.getUint32(0, isLittleEndian);
+    for (var tri=0; tri<n; tri++) {
+      var triangle = new Triangle();
+
+      triangle.setNormal(getVector3(dv, offset, isLittleEndian));
+      offset += 12;
+
+      for (var vert=0; vert<3; vert++) {
+        triangle.addVertex(getVector3(dv, offset, isLittleEndian));
+        offset += 12;
+      }
+
+      // ignore "attribute byte count" (2 bytes)
+      offset += 2;
+      _this.add(triangle);
+    }
+
+    function getVector3(dv, offset, isLittleEndian) {
+      return new THREE.Vector3(
+        dv.getFloat32(offset, isLittleEndian),
+        dv.getFloat32(offset+4, isLittleEndian),
+        dv.getFloat32(offset+8, isLittleEndian)
+      );
+    }
+  }
+}
+
+Model.prototype.delete = function() {
+  var _scene = this.scene;
+  _scene.traverse(function(o) {
+    if (o.name=="model") {
+      _scene.remove(o);
+    }
+  });
 }
 
 Model.prototype.buildSliceLists = function() {

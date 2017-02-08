@@ -4,6 +4,9 @@
 //   displayed meshes (imported and floor mesh)
 
 Stage = function() {
+  // params
+  this.floorSize = 50;
+
   // toggles
   this.uploadEnabled = true;
   this.floorVisible = true;
@@ -33,12 +36,33 @@ Stage.prototype.generateUI = function() {
   uiFolder.add(this, "floorVisible").onChange(updateFloor);
   var transformationFolder = this.gui.addFolder("Transformation");
   var translationFolder = transformationFolder.addFolder("Translation");
+  this.xOffset = 0;
+  translationFolder.add(this, "xOffset", -100, 100);
   translationFolder.add(this, "translateX");
+  this.yOffset = 0;
+  translationFolder.add(this, "yOffset");
+  translationFolder.add(this, "translateY");
+  this.zOffset = 0;
+  translationFolder.add(this, "zOffset");
+  translationFolder.add(this, "translateZ");
+  var rotationFolder = transformationFolder.addFolder("Rotation");
+  this.xRotation = 0;
+  rotationFolder.add(this, "xRotation", -360,360);
+  rotationFolder.add(this, "rotateX");
+  this.yRotation = 0;
+  rotationFolder.add(this, "yRotation", -360,360);
+  rotationFolder.add(this, "rotateY");
+  this.zRotation = 0;
+  rotationFolder.add(this, "zRotation", -360,360);
+  rotationFolder.add(this, "rotateZ");
   var floorFolder = transformationFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
+  floorFolder.add(this, "floorY");
+  floorFolder.add(this, "floorZ");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleWireframe");
   this.gui.add(this, "undo");
+  this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
   this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
@@ -72,21 +96,27 @@ Stage.prototype.transform = function(op, axis, amount) {
   var transform = new Transform(op, axis, amount, this.model);
   var inv = transform.makeInverse();
   this.undoStack.push(inv);
-  console.log(this.undoStack);
   transform.apply();
 }
 
-Stage.prototype.undo = function() {
-  this.undoStack.undo();
+Stage.prototype.undo = function() { this.undoStack.undo(); }
+Stage.prototype.delete = function() {
+  if (this.model) {
+    this.model.delete();
+  }
+  this.model = null;
+  this.undoStack.clear();
 }
 
-Stage.prototype.floorX = function() {
-  this.transform("floor","x",null);
-}
-
-Stage.prototype.translateX = function() {
-  this.transform("translate","x",5);
-}
+Stage.prototype.floorX = function() { this.transform("floor","x",null); }
+Stage.prototype.floorY = function() { this.transform("floor","y",null); }
+Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
+Stage.prototype.translateX = function() { this.transform("translate","x",this.xOffset); }
+Stage.prototype.translateY = function() { this.transform("translate","y",this.yOffset); }
+Stage.prototype.translateZ = function() { this.transform("translate","z",this.zOffset); }
+Stage.prototype.rotateX = function() { this.transform("rotate","x",this.xRotation); }
+Stage.prototype.rotateY = function() { this.transform("rotate","y",this.yRotation); }
+Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotation); }
 
 Stage.prototype.toggleWireframe = function() {
   this.transform("toggleWireframe",null,null,this.model);
@@ -169,7 +199,9 @@ Stage.prototype.initViewport = function() {
 }
 
 Stage.prototype.initFloor = function() {
-  // Primary: center line thru origin
+  var size = this.floorSize;
+
+  // Primary: center line through origin
   // Secondary: lines along multiples of 5
   // Tertiary: everything else
   var geoPrimary = new THREE.Geometry();
@@ -188,23 +220,23 @@ Stage.prototype.initFloor = function() {
     linewidth: 1
   });
 
-  geoPrimary.vertices.push(new THREE.Vector3(0,0,-30));
-  geoPrimary.vertices.push(new THREE.Vector3(0,0,30));
-  geoPrimary.vertices.push(new THREE.Vector3(-30,0,0));
-  geoPrimary.vertices.push(new THREE.Vector3(30,0,0));
-  for (var i=-30; i<=30; i++) {
+  geoPrimary.vertices.push(new THREE.Vector3(0,0,-size));
+  geoPrimary.vertices.push(new THREE.Vector3(0,0,size));
+  geoPrimary.vertices.push(new THREE.Vector3(-size,0,0));
+  geoPrimary.vertices.push(new THREE.Vector3(size,0,0));
+  for (var i=-size; i<=size; i++) {
     if (i==0) continue;
     if (i%5==0) {
-      geoSecondary.vertices.push(new THREE.Vector3(i,0,-30));
-      geoSecondary.vertices.push(new THREE.Vector3(i,0,30));
-      geoSecondary.vertices.push(new THREE.Vector3(-30,0,i));
-      geoSecondary.vertices.push(new THREE.Vector3(30,0,i));
+      geoSecondary.vertices.push(new THREE.Vector3(i,0,-size));
+      geoSecondary.vertices.push(new THREE.Vector3(i,0,size));
+      geoSecondary.vertices.push(new THREE.Vector3(-size,0,i));
+      geoSecondary.vertices.push(new THREE.Vector3(size,0,i));
     }
     else {
-      geoTertiary.vertices.push(new THREE.Vector3(i,0,-30));
-      geoTertiary.vertices.push(new THREE.Vector3(i,0,30));
-      geoTertiary.vertices.push(new THREE.Vector3(-30,0,i));
-      geoTertiary.vertices.push(new THREE.Vector3(30,0,i));
+      geoTertiary.vertices.push(new THREE.Vector3(i,0,-size));
+      geoTertiary.vertices.push(new THREE.Vector3(i,0,size));
+      geoTertiary.vertices.push(new THREE.Vector3(-size,0,i));
+      geoTertiary.vertices.push(new THREE.Vector3(size,0,i));
     }
   }
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
@@ -219,6 +251,11 @@ Stage.prototype.initFloor = function() {
 }
 
 Stage.prototype.Upload = function() {
+  if (this.model) {
+    console.log("A model already exists");
+    return;
+  }
+
   if (this.fileInput) {
     this.fileInput.click();
   }
@@ -227,55 +264,11 @@ Stage.prototype.Upload = function() {
 Stage.prototype.handleFile = function(file) {
   this.model = new Model();
 
-  fr = new FileReader();
-  fr.onload = function() {
-    parseArray(fr.result);
-  };
-  fr.readAsArrayBuffer(file);
-
-  var _this = this;
-
-  var parseArray = function(array) {
-    _this.model.numSlices = parseInt(30);
-
-    // mimicking http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
-    var dv = new DataView(array, 80);
-    var isLittleEndian = true;
-
-    var offset = 4;
-    var n = dv.getUint32(0, isLittleEndian);
-    for (var tri=0; tri<n; tri++) {
-      var triangle = new Triangle();
-
-      triangle.setNormal(getVector3(dv, offset, isLittleEndian));
-      offset += 12;
-
-      for (var vert=0; vert<3; vert++) {
-        triangle.addVertex(getVector3(dv, offset, isLittleEndian));
-        offset += 12;
-      }
-
-      // ignore "attribute byte count" (2 bytes)
-      offset += 2;
-      _this.model.add(triangle);
-    }
-
-    _this.displayMesh();
-  };
-
-  var getVector3 = function(dv, offset, isLittleEndian) {
-    return new THREE.Vector3(
-      dv.getFloat32(offset, isLittleEndian),
-      dv.getFloat32(offset+4, isLittleEndian),
-      dv.getFloat32(offset+8, isLittleEndian)
-    );
-  }
-}
-
+  this.model.upload(file, this.displayMesh.bind(this));
+};
 
 Stage.prototype.displayMesh = function() {
   var center = this.model.getCenter();
   this.model.render(this.scene, "plain");
-  //model.renderLineModel(scene);
   this.controls.update( {origin: new THREE.Vector3(center[0],center[1],center[2])} );
 }
