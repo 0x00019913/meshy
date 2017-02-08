@@ -1,17 +1,29 @@
-function Model(numSlices) {
+function Model() {
+  // internal geometry
   this.triangles = [];
+  this.count = 0;
+  //store header to export back out identically
+  this.header = null;
+
+  // calculated stuff
   this.xmin = null;
   this.xmax = null;
   this.ymin = null;
   this.ymax = null;
   this.zmin = null;
   this.zmax = null;
-  this.count = 0;
+
+  // for slicing
   this.sliceCount = null;
-  this.numSlices = numSlices;
+  this.numSlices = 30;
   this.delta = null;
-  //store header to export back out identically
-  this.header = null;
+  this.segmentLists = null;
+
+  // for display
+  this.wireframe = false;
+  this.currentMesh = null;
+  this.plainMesh = null;
+  this.slicedMesh = null;
 }
 
 Model.prototype.add = function(triangle) {
@@ -25,6 +37,10 @@ Model.prototype.add = function(triangle) {
     this.zmin = triangle.zmin;
     this.zmax = triangle.zmax;
   }
+  this.updateBounds(triangle);
+}
+
+Model.prototype.updateBounds = function(triangle) {
   this.xmin = triangle.xmin<this.xmin ? triangle.xmin : this.xmin;
   this.xmax = triangle.xmax>this.xmax ? triangle.xmax : this.xmax;
   this.ymin = triangle.ymin<this.ymin ? triangle.ymin : this.ymin;
@@ -40,6 +56,9 @@ Model.prototype.getCenter = function() {
     (this.zmax + this.zmin)/2
   ];
 }
+Model.prototype.getCenterX = function() { return (this.xmax+this.xmin)/2; }
+Model.prototype.getCenterY = function() { return (this.ymax+this.ymin)/2; }
+Model.prototype.getCenterZ = function() { return (this.zmax+this.zmin)/2; }
 
 Model.prototype.buildSliceLists = function() {
   // slice thickness
@@ -86,18 +105,24 @@ Model.prototype.slice = function() {
   return segmentLists;
 }
 
+Model.prototype.render = function(scene, mode) {
+  if (mode == "plain") {
+    this.renderPlainModel(scene);
+  }
+}
+
 /* renders line segments in the "set" argument */
 Model.prototype.renderLineModel = function(scene) {
-  var segmentLists = this.slice();
+  this.segmentLists = this.slice();
   /* set up camera, put in model */
   var center = model.getCenter();
   cam.origin = new THREE.Vector3(center[0], center[1], center[2]);
   cam.r = 5;
   var geo = new THREE.Geometry();
-  for (var i=0; i<segmentLists.length; i++) {
-    for (var j=0; j<segmentLists[i].length; j++) {
-      geo.vertices.push(segmentLists[i][j][0]);
-      geo.vertices.push(segmentLists[i][j][1]);
+  for (var i=0; i<this.segmentLists.length; i++) {
+    for (var j=0; j<this.segmentLists[i].length; j++) {
+      geo.vertices.push(this.segmentLists[i][j][0]);
+      geo.vertices.push(this.segmentLists[i][j][1]);
     }
   }
   var mat = new THREE.LineBasicMaterial({
@@ -108,28 +133,19 @@ Model.prototype.renderLineModel = function(scene) {
   scene.add(line);
 }
 
-/* shows full model, unsliced (or a set of triangles, if given) */
-Model.prototype.renderPlainModel = function(scene, set) {
+Model.prototype.renderPlainModel = function(scene) {
+  if (this.plainMesh) return;
   /* set up camera, put in model */
   var geo = new THREE.Geometry();
-  if (set) {
-    for (var i=0; i<set.length; i++) {
-      for (j=0; j<3; j++) {
-        geo.vertices.push(set[i].vertices[j]);
-      }
-      geo.faces.push(new THREE.Face3(i*3, i*3+1, i*3+2));
+  for (var i=0; i<this.count; i++) {
+    for (j=0; j<3; j++) {
+      geo.vertices.push(this.triangles[i].vertices[j]);
     }
-  }
-  else {
-    for (var i=0; i<this.count; i++) {
-      for (j=0; j<3; j++) {
-        geo.vertices.push(this.triangles[i].vertices[j]);
-      }
-      geo.faces.push(new THREE.Face3(i*3, i*3+1, i*3+2, this.triangles[i].normal));
-    }
+    geo.faces.push(new THREE.Face3(i*3, i*3+1, i*3+2, this.triangles[i].normal));
   }
   var mat = new THREE.MeshStandardMaterial({
     color: 0xffffff
   });
-  scene.add(new THREE.Mesh(geo, mat));
+  this.plainMesh = new THREE.Mesh(geo, mat);
+  scene.add(this.plainMesh);
 }

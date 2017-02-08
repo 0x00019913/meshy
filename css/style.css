@@ -43,7 +43,7 @@ body, html {
   cursor: default;
 }
 
-#titlebox p {
+#titlebox span {
   position: relative;
   left: -50%;
   font-family: 'Crete Round', sans-serif;
@@ -53,6 +53,19 @@ body, html {
   margin: 0;
   line-height: 100%;
   display: inline-block;
+}
+
+#infobox {
+  width: 245px;
+  position: absolute;
+  left: 0;
+  margin-left: 15px;
+  background-color: #000;
+  border-bottom: 1px solid #2c2c2c;
+}
+
+#infobox ul {
+
 }
 
 #container {

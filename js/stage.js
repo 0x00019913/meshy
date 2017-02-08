@@ -7,9 +7,6 @@ Stage = function() {
   // toggles
   this.uploadEnabled = true;
   this.floorVisible = true;
-  // for keeping track of changes
-  this.uploadEnabledOld = true;
-  this.floorVisibleOld = true;
 
   // geometry
   this.model = null;
@@ -22,13 +19,42 @@ Stage = function() {
   this.renderer = null;
 
   // UI
+  this.generateUI();
+}
+
+Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, 'Upload');
-  var folderUI = this.gui.addFolder("UI");
-  folderUI.add(this, "floorVisible");
+
+  var uiFolder = this.gui.addFolder("UI");
+  uiFolder.add(this, "floorVisible").onChange(updateFloor);
+  var transformationFolder = this.gui.addFolder("Transformation");
+  var translationFolder = transformationFolder.addFolder("Translation");
+  translationFolder.add(this, "floorVisible");
+
+  this.infoBox = new InfoBox();
+  this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
+  this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
+  this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
+  this.infoBox.addMultiple("Center", this, [["model", "getCenterX"],["model", "getCenterY"],["model", "getCenterZ"]]);
 
   this.initViewport();
   this.initFloor();
+
+  var _this = this;
+
+  function updateFloor() {
+    if (_this.floorVisible) {
+        _this.scene.traverse(function(o) {
+          if (o.name=="floor") o.visible = true;
+        });
+    }
+    else {
+      _this.scene.traverse(function(o) {
+        if (o.name=="floor") o.visible = false;
+      });
+    }
+  }
 }
 
 Stage.prototype.initViewport = function() {
@@ -100,9 +126,9 @@ Stage.prototype.initViewport = function() {
 
   function render() {
     if (!_this.camera || !_this.scene) return;
-    _this.updateUI();
     _this.controls.update();
     axes.update();
+    _this.infoBox.update();
     _this.renderer.render(_this.scene, _this.camera);
   }
 }
@@ -158,22 +184,6 @@ Stage.prototype.initFloor = function() {
 }
 
 Stage.prototype.updateUI = function() {
-  if (this.floorVisible!=this.floorVisibleOld) {
-    this.floorVisibleOld = this.floorVisible;
-    if (this.floorVisible) {
-      //turn on floor
-        // turn off floor
-        this.scene.traverse(function(o) {
-          if (o.name=="floor") o.visible = true;
-        });
-    }
-    else {
-      // turn off floor
-      this.scene.traverse(function(o) {
-        if (o.name=="floor") o.visible = false;
-      });
-    }
-  }
 }
 
 Stage.prototype.Upload = function() {
@@ -233,7 +243,7 @@ Stage.prototype.handleFile = function(file) {
 
 Stage.prototype.displayMesh = function() {
   var center = this.model.getCenter();
-  this.model.renderPlainModel(this.scene);
+  this.model.render(this.scene, "plain");
   //model.renderLineModel(scene);
   this.controls.update( {origin: new THREE.Vector3(center[0],center[1],center[2])} );
 }
