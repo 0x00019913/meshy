@@ -63,17 +63,13 @@ Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
 Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
 
 Model.prototype.translate = function(axis, amount) {
-  var v = this.plainMesh.geometry.vertices;
-  for (var j = 0; j<v.length; j++) {
-    var vtx = v[j];
-    vtx.setX(0);
-  }
+  console.log(this.plainMesh);
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.translate(axis, amount);
   }
-
-    console.log("translation done");
+  this.plainMesh.geometry.verticesNeedUpdate = true;
+  console.log(this.plainMesh);
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
 }
@@ -117,6 +113,7 @@ Model.prototype.renderPlainModel = function(scene) {
     color: 0xffffff
   });
   this.plainMesh = new THREE.Mesh(geo, mat);
+  this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
 }
 

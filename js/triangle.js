@@ -46,8 +46,7 @@ Triangle.prototype.setNormal = function(normal) {
 Triangle.prototype.translate = function(axis, amount) {
   for (var i=0; i<3; i++) {
     var vertex = this.vertices[i];
-    vertex.setX(0);
-    //vertex["set"+axis.toUpperCase()](vertex[axis]+amount);
+    vertex[axis] += amount;
   }
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
