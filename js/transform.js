@@ -92,3 +92,25 @@ Transform.prototype = {
     }
   }
 }
+
+function UndoStack() {
+  // stack of inverse transformations
+  this.history = []
+}
+
+UndoStack.prototype = {
+  constructor: UndoStack,
+
+  undo: function() {
+    if (this.history.length==0) {
+      console.log("can't undo further");
+      return;
+    }
+    var inv = this.history.pop();
+    inv.apply();
+  },
+
+  push: function(inv) {
+    this.history.push(inv);
+  }
+}

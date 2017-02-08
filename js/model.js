@@ -63,13 +63,11 @@ Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
 Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
 
 Model.prototype.translate = function(axis, amount) {
-  console.log(this.plainMesh);
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.translate(axis, amount);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
-  console.log(this.plainMesh);
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
 }

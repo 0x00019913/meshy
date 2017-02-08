@@ -18,6 +18,9 @@ Stage = function() {
   this.scene = null;
   this.renderer = null;
 
+  // undo stack
+  this.undoStack = new UndoStack();
+
   // UI
   this.generateUI();
 }
@@ -35,6 +38,7 @@ Stage.prototype.generateUI = function() {
   floorFolder.add(this, "floorX");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleWireframe");
+  this.gui.add(this, "undo");
 
   this.infoBox = new InfoBox();
   this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
@@ -64,22 +68,28 @@ Stage.prototype.generateUI = function() {
 Stage.prototype.updateUI = function() {
 }
 
-Stage.prototype.floorX = function() {
-  var transform = new Transform("floor","x",null,this.model);
+Stage.prototype.transform = function(op, axis, amount) {
+  var transform = new Transform(op, axis, amount, this.model);
   var inv = transform.makeInverse();
+  this.undoStack.push(inv);
+  console.log(this.undoStack);
   transform.apply();
+}
+
+Stage.prototype.undo = function() {
+  this.undoStack.undo();
+}
+
+Stage.prototype.floorX = function() {
+  this.transform("floor","x",null);
 }
 
 Stage.prototype.translateX = function() {
-  var transform = new Transform("translate","x",5,this.model);
-  var inv = transform.makeInverse();
-  transform.apply();
+  this.transform("translate","x",5);
 }
 
 Stage.prototype.toggleWireframe = function() {
-  var transform = new Transform("toggleWireframe",null,null,this.model);
-  var inv = transform.makeInverse();
-  transform.apply();
+  this.transform("toggleWireframe",null,null,this.model);
 }
 
 Stage.prototype.initViewport = function() {
