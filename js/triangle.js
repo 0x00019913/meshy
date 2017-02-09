@@ -78,6 +78,7 @@ Triangle.prototype.scale = function(axis, amount) {
 }
 
 Triangle.prototype.calcSurfaceArea = function() {
+  if (this.surfaceArea!==null) return this.surfaceArea;
   var v = new THREE.Vector3();
   var v2 = new THREE.Vector3();
   v.subVectors(this.vertices[0], this.vertices[1]);
@@ -88,6 +89,7 @@ Triangle.prototype.calcSurfaceArea = function() {
 }
 
 Triangle.prototype.calcSignedVolume = function() {
+  if (this.signedVolume!==null) return this.signedVolume;
   var sign = Math.sign(this.vertices[0].dot(this.normal));
   var v1 = this.vertices[0];
   var v2 = this.vertices[1];

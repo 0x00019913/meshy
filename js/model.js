@@ -97,7 +97,8 @@ Model.prototype.translate = function(axis, amount) {
     var vector3COM = new THREE.Vector3();
     vector3COM.fromArray(this.centerOfMass);
     vector3COM[axis] += amount;
-    this.centerOfMass.vector3COM.toArray();
+    this.centerOfMass = vector3COM.toArray();
+    this.positionTargetPlanes(this.centerOfMass);
   }
   //transform bounds
   this[axis+"min"] += amount;
@@ -119,7 +120,8 @@ Model.prototype.rotate = function(axis, amount) {
     var vector3COM = new THREE.Vector3();
     vector3COM.fromArray(this.centerOfMass);
     vector3COM.applyAxisAngle(this.axes[axis],amount);
-    this.centerOfMass.vector3COM.toArray();
+    this.centerOfMass = vector3COM.toArray();
+    this.positionTargetPlanes(this.centerOfMass);
   }
 }
 // for turning "x" etc. into a normalized Vector3 along axis
@@ -133,10 +135,20 @@ Model.prototype.scale = function (axis, amount) {
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.scale(axis, amount);
+    tri.surfaceArea = null;
+    tri.volume = null;
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.surfaceArea = null;
   this.volume = null;
+  if (this.centerOfMass) {
+    // transform center of mass
+    var vector3COM = new THREE.Vector3();
+    vector3COM.fromArray(this.centerOfMass);
+    vector3COM[axis] *= amount;
+    this.centerOfMass = vector3COM.toArray();
+    this.positionTargetPlanes(this.centerOfMass);
+  }
   this[axis+"min"] *= amount;
   this[axis+"max"] *= amount;
 }
@@ -166,7 +178,19 @@ Model.prototype.calcVolume = function() {
 }
 
 Model.prototype.calcCenterOfMass = function() {
-  if (this.centerOfMass) return;
+  if (this.centerOfMass) return this.centerOfMass;
+  var modelVolume = 0, triVolume = 0;
+  var center = [0,0,0];
+  for (var i=0; i<this.count; i++) {
+    var tri = this.triangles[i];
+    var verts = tri.vertices;
+    triVolume = tri.calcSignedVolume();
+    modelVolume += triVolume;
+    center[0] += ((verts[0].x + verts[1].x + verts[2].x) / 4) * triVolume;
+    center[1] += ((verts[0].y + verts[1].y + verts[2].y) / 4) * triVolume;
+    center[2] += ((verts[0].z + verts[1].z + verts[2].z) / 4) * triVolume;
+  }
+  this.centerOfMass = center.map(function(x) {return x/modelVolume});
 }
 
 Model.prototype.toggleCenterOfMass = function() {
@@ -229,6 +253,10 @@ Model.prototype.positionTargetPlanes = function(point) {
   vZ[1].set(xmin, ymax, point[2]);
   vZ[2].set(xmax, ymin, point[2]);
   vZ[3].set(xmax, ymax, point[2]);
+
+    this.targetPlanes[0].verticesNeedUpdate = true;
+    this.targetPlanes[1].verticesNeedUpdate = true;
+    this.targetPlanes[2].verticesNeedUpdate = true;
 }
 
 Model.prototype.render = function(scene, mode) {
