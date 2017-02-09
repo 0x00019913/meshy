@@ -37,6 +37,17 @@ function Transform(op, axis, amount, model) {
       this.axis = axis;
       this.amount = amount;
       break;
+    case "scale":
+      var isBadScale = amount<=0 || (amount.length && (amount[0]<=0 || amount[1]<=0 || amount[2]<=0));
+      if (isBadScale) {
+        this.op = "noop";
+        this.reason = "Cannot scale to 0 or negative numbers: " + amount;
+        return this;
+      }
+      this.op = "scale";
+      this.axis = axis;
+      this.amount = amount;
+      break;
     case "toggleWireframe":
       this.op = "toggleWireframe";
       break;
@@ -50,11 +61,21 @@ Transform.prototype = {
   makeInverse: function() {
     if (this.op=="noop") return null;
     var amount;
-    if (this.axis=="all") {
-      amount = [-1*this.amount[0], -1*this.amount[1], -1*this.amount[2]]
+    if (this.op=="scale") {
+      if (this.axis=="all") {
+        amount = [1/this.amount[0], 1/this.amount[1], 1/this.amount[2]];
+      }
+      else {
+        amount = 1/this.amount;
+      }
     }
-    else {
-      amount = -1*this.amount;
+    else { // translations and rotations
+      if (this.axis=="all") {
+        amount = [-1*this.amount[0], -1*this.amount[1], -1*this.amount[2]]
+      }
+      else {
+        amount = -1*this.amount;
+      }
     }
     var inv = new this.constructor(this.op, this.axis, amount, this.model);
     inv.inverse = true;
@@ -86,6 +107,16 @@ Transform.prototype = {
         }
         else {
           this.model.rotate(this.axis, this.amount);
+        }
+        break;
+      case "scale":
+        if (this.axis=="all") {
+          this.model.scale("x", this.amount[0]);
+          this.model.scale("y", this.amount[0]);
+          this.model.scale("z", this.amount[0]);
+        }
+        else {
+          this.model.scale(this.axis, this.amount);
         }
         break;
       case "toggleWireframe":

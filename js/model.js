@@ -25,31 +25,22 @@ function Model() {
   this.scene = null;
   // three orthogonal planes that intersect at the center of the mesh
   this.targetPlanes = null;
+  this.showCenterOfMass = false;
 }
 
 Model.prototype.add = function(triangle) {
   this.triangles.push(triangle);
   this.count++;
-  if (this.count==1) {
-    this.xmin = triangle.xmin;
-    this.xmax = triangle.xmax;
-    this.ymin = triangle.ymin;
-    this.ymax = triangle.ymax;
-    this.zmin = triangle.zmin;
-    this.zmax = triangle.zmax;
-  }
-  else {
-    this.updateBounds(triangle);
-  }
+  this.updateBounds(triangle);
 }
 
 Model.prototype.resetBounds = function() {
-  this.xmin = -Infinity;
-  this.xmax = Infinity;
-  this.ymin = -Infinity;
-  this.ymax = Infinity;
-  this.zmin = -Infinity;
-  this.zmax = Infinity;
+  this.xmin = Infinity;
+  this.xmax = -Infinity;
+  this.ymin = Infinity;
+  this.ymax = -Infinity;
+  this.zmin = Infinity;
+  this.zmax = -Infinity;
 }
 
 Model.prototype.updateBounds = function(triangle) {
@@ -100,18 +91,52 @@ Model.prototype.translate = function(axis, amount) {
     tri.translate(axis, amount);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
+  if (this.centerOfMass) {
+    // transform center of mass
+    var vector3COM = new THREE.Vector3();
+    vector3COM.fromArray(this.centerOfMass);
+    vector3COM[axis] += amount;
+    this.centerOfMass.vector3COM.toArray();
+  }
+  //transform bounds
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
 }
 
 Model.prototype.rotate = function(axis, amount) {
   this.resetBounds();
+  amount = amount*Math.PI/180.0;
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.rotate(axis, amount);
     this.updateBounds(tri);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.plainMesh.geometry.normalsNeedUpdate = true;
+  if (this.centerOfMass) {
+    // transform center of mass
+    var vector3COM = new THREE.Vector3();
+    vector3COM.fromArray(this.centerOfMass);
+    vector3COM.applyAxisAngle(this.axes[axis],amount);
+    this.centerOfMass.vector3COM.toArray();
+  }
+}
+// for turning "x" etc. into a normalized Vector3 along axis
+Model.prototype.axes = {
+  x: new THREE.Vector3(1,0,0),
+  y: new THREE.Vector3(0,1,0),
+  z: new THREE.Vector3(0,0,1),
+}
+
+Model.prototype.scale = function (axis, amount) {
+  for (var i=0; i<this.count; i++) {
+    var tri = this.triangles[i];
+    tri.scale(axis, amount);
+  }
+  this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.surfaceArea = null;
+  this[axis+"min"] *= amount;
+  this[axis+"max"] *= amount;
 }
 
 Model.prototype.toggleWireframe = function() {
@@ -126,12 +151,22 @@ Model.prototype.calcCenterOfMass = function() {
 }
 
 Model.prototype.calcSurfaceArea = function() {
-
+  this.surfaceArea = 0;
+  for (var i=0; i<this.count; i++) {
+    var tri = this.triangles[i];
+    this.surfaceArea += tri.calcSurfaceArea();
+  }
+  return this.surfaceArea;
 }
 
-Model.prototype.showCenterOfMass = function() {
+Model.prototype.toggleCenterOfMass = function() {
   this.calcCenterOfMass();
+  this.showCenterOfMass = !this.showCenterOfMass;
+  var visible = this.showCenterOfMass;
   this.positionTargetPlanes(this.centerOfMass);
+  this.scene.traverse(function(o) {
+    if (o.name == "targetPlane") o.visible = visible;
+  });
 }
 
 Model.prototype.generateTargetPlanes = function() {
@@ -151,6 +186,7 @@ Model.prototype.generateTargetPlanes = function() {
   ];
   for (var i=0; i<planeMeshes.length; i++) {
     planeMeshes[i].name = "targetPlane";
+    planeMeshes[i].visible = false;
     this.scene.add(planeMeshes[i]);
   }
 }
@@ -217,7 +253,6 @@ Model.prototype.renderPlainModel = function(scene) {
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
-  //this.generateTargetPlanes();
 }
 
 /* renders line segments in the "set" argument */

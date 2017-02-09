@@ -3,6 +3,7 @@ function Triangle() {
   this.normal = null;
   this.resetBounds();
   this.count = 0;
+  this.surfaceArea = 0;
 }
 
 Triangle.prototype.addVertex = function(vertex) {
@@ -26,12 +27,12 @@ Triangle.prototype.addVertex = function(vertex) {
 };
 
 Triangle.prototype.resetBounds = function() {
-  this.xmin = -Infinity;
-  this.xmax = Infinity;
-  this.ymin = -Infinity;
-  this.ymax = Infinity;
-  this.zmin = -Infinity;
-  this.zmax = Infinity;
+  this.xmin = Infinity;
+  this.xmax = -Infinity;
+  this.ymin = Infinity;
+  this.ymax = -Infinity;
+  this.zmin = Infinity;
+  this.zmax = -Infinity;
 }
 Triangle.prototype.updateBounds = function(vertex) {
   this.xmin = vertex.x<this.xmin ? vertex.x : this.xmin;
@@ -56,13 +57,33 @@ Triangle.prototype.translate = function(axis, amount) {
 }
 
 Triangle.prototype.rotate = function(axis, amount) {
+  this.resetBounds();
   var axisVector = this.axes[axis];
-  var degree = amount*Math.PI/180.0;
   for (var i=0; i<3; i++) {
     var vertex = this.vertices[i];
-    vertex.applyAxisAngle(axisVector, degree);
+    vertex.applyAxisAngle(axisVector, amount);
     this.updateBounds(vertex);
   }
+  this.normal.applyAxisAngle(axisVector, amount);
+}
+
+Triangle.prototype.scale = function(axis, amount) {
+  for (var i=0; i<3; i++) {
+    var vertex = this.vertices[i];
+    vertex[axis] *= amount;
+  }
+  this[axis+"min"] *= amount;
+  this[axis+"max"] *= amount;
+}
+
+Triangle.prototype.calcSurfaceArea = function() {
+  var v = new THREE.Vector3();
+  var v2 = new THREE.Vector3();
+  v.subVectors(this.vertices[0], this.vertices[1]);
+  v2.subVectors(this.vertices[0], this.vertices[2]);
+  v.cross(v2);
+  this.surfaceArea = 0.5 * v.length();
+  return this.surfaceArea;
 }
 
 // for turning "x" etc. into a normalized Vector3 along axis
@@ -72,6 +93,8 @@ Triangle.prototype.axes = {
   z: new THREE.Vector3(0,0,1),
 }
 
+// calculate endpoints of segment formed by the intersection of this triangle
+// and a plane normal to the y-axis
 Triangle.prototype.yIntersection = function(planePos) {
   var segment = [];
   for (var i=0; i<3; i++) {

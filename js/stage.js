@@ -59,6 +59,16 @@ Stage.prototype.generateUI = function() {
   this.zRotation = 0;
   rotationFolder.add(this, "zRotation", -360,360);
   rotationFolder.add(this, "rotateZ");
+  var scaleFolder = transformationFolder.addFolder("Scale");
+  this.xScale = 1;
+  scaleFolder.add(this, "xScale", 0);
+  scaleFolder.add(this, "scaleX");
+  this.yScale = 1;
+  scaleFolder.add(this, "yScale", 0);
+  scaleFolder.add(this, "scaleY");
+  this.zScale = 1;
+  scaleFolder.add(this, "zScale", 0);
+  scaleFolder.add(this, "scaleZ");
   var floorFolder = transformationFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -72,7 +82,7 @@ Stage.prototype.generateUI = function() {
   calculateFolder.add(this, "calcCenterOfMass");
   calculateFolder.add(this, "calcSurfaceArea");
   var displayFolder = this.gui.addFolder("Display");
-  displayFolder.add(this, "showCOM");
+  displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
   this.gui.add(this, "undo");
@@ -83,6 +93,7 @@ Stage.prototype.generateUI = function() {
   this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
   this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
   this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
+  this.infoBox.addMultiple("Size", this, [["model", "getSizex"],["model", "getSizey"],["model", "getSizez"]]);
   this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]]);
   this.infoBox.add("Surface area", this, ["model","surfaceArea"]);
 
@@ -110,6 +121,9 @@ Stage.prototype.translateZ = function() { this.transform("translate","z",this.zT
 Stage.prototype.rotateX = function() { this.transform("rotate","x",this.xRotation); }
 Stage.prototype.rotateY = function() { this.transform("rotate","y",this.yRotation); }
 Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotation); }
+Stage.prototype.scaleX = function() { this.transform("scale","x",this.xScale); }
+Stage.prototype.scaleY = function() { this.transform("scale","y",this.yScale); }
+Stage.prototype.scaleZ = function() { this.transform("scale","z",this.zScale); }
 Stage.prototype.floorX = function() { this.transform("floor","x",null); }
 Stage.prototype.floorY = function() { this.transform("floor","y",null); }
 Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
@@ -127,9 +141,9 @@ Stage.prototype.toggleFloor = function() {
     if (o.name=="floor") o.visible = visible;
   });
 }
-Stage.prototype.showCOM = function() {
+Stage.prototype.toggleCOM = function() {
   if (this.model) {
-    this.model.showCenterOfMass();
+    this.model.toggleCenterOfMass();
   }
 }
 Stage.prototype.toggleWireframe = function() {

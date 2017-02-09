@@ -45,6 +45,8 @@ InfoBox = function() {
   this.box.appendChild(this.infoList);
 
   this.items = [];
+
+  this.decimals = 4;
 }
 
 // add a line with a single data source
@@ -121,6 +123,7 @@ InfoBox.prototype.update = function() {
 
     if (item.props.length==1) {
       value = this.getPropValue(item.source, item.props[0]);
+      if (this.isNumber(value)) value = value.toFixed(this.decimals);
     }
     else {
       var len = item.props.length;
@@ -129,7 +132,7 @@ InfoBox.prototype.update = function() {
       for (var propIdx=0; propIdx<len; propIdx++) {
         var v = this.getPropValue(item.source, item.props[propIdx]);
         if (v!=="") valuesExist = true;
-        if (this.isNumber(v)) v = v.toFixed(3);
+        if (this.isNumber(v)) v = v.toFixed(this.decimals);
         value += v;
         if (propIdx < len-1) value += ", ";
       }
