@@ -9,6 +9,7 @@ function Model() {
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
   this.centerOfMass = null;
+  this.surfaceArea = null;
 
   // for slicing
   this.sliceCount = null;
@@ -80,6 +81,18 @@ Model.prototype.getSize = function() {
 Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
 Model.prototype.getSizey = function() { return (this.ymax-this.ymin); }
 Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
+Model.prototype.getCOMx = function() {
+  if (this.centerOfMass) return this.centerOfMass[0];
+  return null;
+}
+Model.prototype.getCOMy = function() {
+  if (this.centerOfMass) return this.centerOfMass[1];
+  return null;
+}
+Model.prototype.getCOMz = function() {
+  if (this.centerOfMass) return this.centerOfMass[2];
+  return null;
+}
 
 Model.prototype.translate = function(axis, amount) {
   for (var i=0; i<this.count; i++) {
@@ -108,6 +121,19 @@ Model.prototype.toggleWireframe = function() {
   }
 }
 
+Model.prototype.calcCenterOfMass = function() {
+  if (this.centerOfMass) return;
+}
+
+Model.prototype.calcSurfaceArea = function() {
+
+}
+
+Model.prototype.showCenterOfMass = function() {
+  this.calcCenterOfMass();
+  this.positionTargetPlanes(this.centerOfMass);
+}
+
 Model.prototype.generateTargetPlanes = function() {
   var size = 1;
   this.targetPlanes = [
@@ -127,10 +153,11 @@ Model.prototype.generateTargetPlanes = function() {
     planeMeshes[i].name = "targetPlane";
     this.scene.add(planeMeshes[i]);
   }
-  this.positionTargetPlanes(this.getCenter());
 }
 
 Model.prototype.positionTargetPlanes = function(point) {
+  if (!this.targetPlanes) this.generateTargetPlanes();
+
   var vX = this.targetPlanes[0].vertices;
   var vY = this.targetPlanes[1].vertices;
   var vZ = this.targetPlanes[2].vertices;
@@ -217,8 +244,14 @@ Model.prototype.upload = function(file, callback) {
 
   fr = new FileReader();
   fr.onload = function() {
-    parseArray(fr.result);
-    callback();
+    var success = false;
+    try {
+      parseArray(fr.result);
+      success = true;
+    } catch(e) {
+      console.log("error uploading");
+    }
+    callback(success);
   };
   fr.readAsArrayBuffer(file);
 

@@ -128,7 +128,7 @@ InfoBox.prototype.update = function() {
       value += "[ ";
       for (var propIdx=0; propIdx<len; propIdx++) {
         var v = this.getPropValue(item.source, item.props[propIdx]);
-        if (v!="") valuesExist = true;
+        if (v!=="") valuesExist = true;
         if (this.isNumber(v)) v = v.toFixed(3);
         value += v;
         if (propIdx < len-1) value += ", ";
@@ -143,9 +143,9 @@ InfoBox.prototype.update = function() {
 
 InfoBox.prototype.getPropValue = function(source, propPath) {
   for (var i=0; i<propPath.length; i++) {
-    if (!source && source!==0) return "";
     if (this.isFunction(source[propPath[i]])) source = source[propPath[i]]();
     else source = source[propPath[i]];
+    if (source===null || source===undefined) return "";
   }
   return source;
 }

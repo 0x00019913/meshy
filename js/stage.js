@@ -14,6 +14,7 @@ Stage = function() {
   // geometry
   this.model = null;
   this.fileInput = document.getElementById("file");
+  this.isLittleEndian = true;
 
   // webgl viewport
   this.container = null;
@@ -33,8 +34,10 @@ Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, 'upload');
 
-  var uiFolder = this.gui.addFolder("UI");
-  uiFolder.add(this, "floorVisible").onChange(updateFloor);
+  var settingsFolder = this.gui.addFolder("Settings");
+  settingsFolder.add(this, "toggleFloor");
+  settingsFolder.add(this, "toggleAxisWidget");
+  settingsFolder.add(this, "isLittleEndian");
   var transformationFolder = this.gui.addFolder("Transformation");
   var translationFolder = transformationFolder.addFolder("Translation");
   this.xTranslation = 0;
@@ -65,10 +68,13 @@ Stage.prototype.generateUI = function() {
   centerFolder.add(this, "centerX");
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
+  var calculateFolder = this.gui.addFolder("Calculate");
+  calculateFolder.add(this, "calcCenterOfMass");
+  calculateFolder.add(this, "calcSurfaceArea");
   var displayFolder = this.gui.addFolder("Display");
+  displayFolder.add(this, "showCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
-  displayFolder.add(this, "toggleAxisWidget");
   this.gui.add(this, "undo");
   this.gui.add(this, "delete");
 
@@ -77,24 +83,13 @@ Stage.prototype.generateUI = function() {
   this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
   this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
   this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
+  this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]]);
+  this.infoBox.add("Surface area", this, ["model","surfaceArea"]);
 
   this.initViewport();
   this.initFloor();
 
   var _this = this;
-
-  function updateFloor() {
-    if (_this.floorVisible) {
-        _this.scene.traverse(function(o) {
-          if (o.name=="floor") o.visible = true;
-        });
-    }
-    else {
-      _this.scene.traverse(function(o) {
-        if (o.name=="floor") o.visible = false;
-      });
-    }
-  }
 }
 
 Stage.prototype.updateUI = function() {
@@ -118,11 +113,25 @@ Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotatio
 Stage.prototype.floorX = function() { this.transform("floor","x",null); }
 Stage.prototype.floorY = function() { this.transform("floor","y",null); }
 Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
+Stage.prototype.centerAll = function() { this.transform("center","all",null); }
 Stage.prototype.centerX = function() { this.transform("center","x",null); }
 Stage.prototype.centerY = function() { this.transform("center","y",null); }
 Stage.prototype.centerZ = function() { this.transform("center","z",null); }
-Stage.prototype.centerAll = function() { this.transform("center","all",null); }
+Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
+Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 
+Stage.prototype.toggleFloor = function() {
+  this.floorVisible = !this.floorVisible;
+  var visible = this.floorVisible;
+  this.scene.traverse(function(o) {
+    if (o.name=="floor") o.visible = visible;
+  });
+}
+Stage.prototype.showCOM = function() {
+  if (this.model) {
+    this.model.showCenterOfMass();
+  }
+}
 Stage.prototype.toggleWireframe = function() {
   this.transform("toggleWireframe",null,null,this.model);
 }
@@ -157,7 +166,7 @@ Stage.prototype.initViewport = function() {
       }
     );
 
-    var pointLight = new THREE.PointLight(0xffffff, 3, 0, 1);
+    var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
     _this.controls.addObject(pointLight);
     var ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
@@ -270,6 +279,7 @@ Stage.prototype.upload = function() {
 
 Stage.prototype.handleFile = function(file) {
   this.model = new Model();
+  this.model.isLittleEndian = this.isLittleEndian;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
@@ -289,13 +299,20 @@ Stage.prototype.delete = function() {
   this.undoStack.clear();
 }
 
-Stage.prototype.displayMesh = function() {
+Stage.prototype.displayMesh = function(success) {
+  if (!success) {
+    this.model = null;
+    return;
+  }
   this.model.render(this.scene, "plain");
   this.cameraToModel();
 }
 
 Stage.prototype.cameraToModel = function() {
-  if (!this.model) return;
+  if (!this.model) {
+    console.log("No model.");
+    return;
+  }
   var center = this.model.getCenter();
   this.controls.update( {origin: new THREE.Vector3(center[0],center[1],center[2])} );
 }
