@@ -331,5 +331,8 @@ Stage.prototype.cameraToModel = function() {
     return;
   }
   var center = this.model.getCenter();
-  this.controls.update( {origin: new THREE.Vector3(center[0],center[1],center[2])} );
+  this.controls.update({
+    origin: new THREE.Vector3(center[0],center[1],center[2]),
+    r: this.model.getMaxSize() * 3 // factor of 3 empirically determined
+  });
 }

@@ -73,6 +73,10 @@ Model.prototype.getSize = function() {
 Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
 Model.prototype.getSizey = function() { return (this.ymax-this.ymin); }
 Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
+Model.prototype.getMaxSize = function() {
+  var size = this.getSize();
+  return Math.max(size[0], Math.max(size[1], size[2]));
+}
 Model.prototype.getCOMx = function() {
   if (this.centerOfMass) return this.centerOfMass[0];
   return null;
