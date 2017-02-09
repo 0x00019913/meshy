@@ -79,8 +79,9 @@ Stage.prototype.generateUI = function() {
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
   var calculateFolder = this.gui.addFolder("Calculate");
-  calculateFolder.add(this, "calcCenterOfMass");
   calculateFolder.add(this, "calcSurfaceArea");
+  calculateFolder.add(this, "calcVolume");
+  calculateFolder.add(this, "calcCenterOfMass");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
@@ -94,8 +95,9 @@ Stage.prototype.generateUI = function() {
   this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
   this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
   this.infoBox.addMultiple("Size", this, [["model", "getSizex"],["model", "getSizey"],["model", "getSizez"]]);
-  this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]]);
-  this.infoBox.add("Surface area", this, ["model","surfaceArea"]);
+  this.infoBox.add("Surface area", this, ["model","surfaceArea"],"[calculate]");
+  this.infoBox.add("Volume", this, ["model", "volume"], "[calculate]");
+  this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]], "[calculate]");
 
   this.initViewport();
   this.initFloor();
@@ -131,8 +133,9 @@ Stage.prototype.centerAll = function() { this.transform("center","all",null); }
 Stage.prototype.centerX = function() { this.transform("center","x",null); }
 Stage.prototype.centerY = function() { this.transform("center","y",null); }
 Stage.prototype.centerZ = function() { this.transform("center","z",null); }
-Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
+Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
+Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
 
 Stage.prototype.toggleFloor = function() {
   this.floorVisible = !this.floorVisible;

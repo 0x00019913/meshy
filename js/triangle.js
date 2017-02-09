@@ -3,7 +3,8 @@ function Triangle() {
   this.normal = null;
   this.resetBounds();
   this.count = 0;
-  this.surfaceArea = 0;
+  this.surfaceArea = null;
+  this.signedVolume = null;
 }
 
 Triangle.prototype.addVertex = function(vertex) {
@@ -84,6 +85,17 @@ Triangle.prototype.calcSurfaceArea = function() {
   v.cross(v2);
   this.surfaceArea = 0.5 * v.length();
   return this.surfaceArea;
+}
+
+Triangle.prototype.calcSignedVolume = function() {
+  var sign = Math.sign(this.vertices[0].dot(this.normal));
+  var v1 = this.vertices[0];
+  var v2 = this.vertices[1];
+  var v3 = this.vertices[2];
+  var volume = (-v3.x*v2.y*v1.z + v2.x*v3.y*v1.z + v3.x*v1.y*v2.z);
+  volume += (-v1.x*v3.y*v2.z - v2.x*v1.y*v3.z + v1.x*v2.y*v3.z);
+  this.signedVolume = sign * Math.abs(volume/6.0);
+  return this.signedVolume;
 }
 
 // for turning "x" etc. into a normalized Vector3 along axis

@@ -8,8 +8,9 @@ function Model() {
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
-  this.centerOfMass = null;
   this.surfaceArea = null;
+  this.volume = null;
+  this.centerOfMass = null;
 
   // for slicing
   this.sliceCount = null;
@@ -135,6 +136,7 @@ Model.prototype.scale = function (axis, amount) {
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.surfaceArea = null;
+  this.volume = null;
   this[axis+"min"] *= amount;
   this[axis+"max"] *= amount;
 }
@@ -146,10 +148,6 @@ Model.prototype.toggleWireframe = function() {
   }
 }
 
-Model.prototype.calcCenterOfMass = function() {
-  if (this.centerOfMass) return;
-}
-
 Model.prototype.calcSurfaceArea = function() {
   this.surfaceArea = 0;
   for (var i=0; i<this.count; i++) {
@@ -157,6 +155,18 @@ Model.prototype.calcSurfaceArea = function() {
     this.surfaceArea += tri.calcSurfaceArea();
   }
   return this.surfaceArea;
+}
+
+Model.prototype.calcVolume = function() {
+  this.volume = 0;
+  for (var i=0; i<this.count; i++) {
+    var tri = this.triangles[i];
+    this.volume += tri.calcSignedVolume();
+  }
+}
+
+Model.prototype.calcCenterOfMass = function() {
+  if (this.centerOfMass) return;
 }
 
 Model.prototype.toggleCenterOfMass = function() {

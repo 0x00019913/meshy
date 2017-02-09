@@ -2,8 +2,8 @@
 // Hangs out in the corner and provides information.
 // Usage:
 //  var box = new InfoBox();
-//  box.add(title, source, props);
-//  box.addMultiple(title2, source2, props);
+//  box.add(title, source, props, def;
+//  box.addMultiple(title2, source2, props, def);
 //  box.update(); // called manually to update the values in the box
 //
 // Arguments for .add:
@@ -11,6 +11,7 @@
 //  -source: closest unchanging reference to the requisite property
 //  -props: a single property name, or an array of property names, that
 //    lead to the data source
+//  -def: default value if the line needs to be calculated
 // Arguments for .addMultiple:
 //  -props: an array of single property names, or an array of arrays of
 //    property names
@@ -50,7 +51,7 @@ InfoBox = function() {
 }
 
 // add a line with a single data source
-InfoBox.prototype.add = function(title, source, props) {
+InfoBox.prototype.add = function(title, source, props, def) {
   var liValueElement = this.createLine(title);
 
   if (!this.isArray(props)){
@@ -64,11 +65,12 @@ InfoBox.prototype.add = function(title, source, props) {
   this.items.push({
     element: liValueElement,
     source: source,
-    props: props
+    props: props,
+    def: def
   });
 }
 
-InfoBox.prototype.addMultiple = function(title, source, props) {
+InfoBox.prototype.addMultiple = function(title, source, props, def) {
     var liValueElement = this.createLine(title);
 
     if (!this.isArray(props)) {
@@ -84,7 +86,8 @@ InfoBox.prototype.addMultiple = function(title, source, props) {
     this.items.push({
       element: liValueElement,
       source: source,
-      props: props
+      props: props,
+      def: def
     });
 }
 
@@ -139,6 +142,8 @@ InfoBox.prototype.update = function() {
       value += " ]";
       if (!valuesExist) value = "";
     }
+
+    if (value==="" && item.def) value = item.def;
 
     item.element.textContent = value;
   }
