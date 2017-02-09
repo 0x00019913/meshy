@@ -1,9 +1,9 @@
 AxisWidget = function (sourceCamera) {
   this.sourceCamera = sourceCamera;
-  //this.camera = new THREE.PerspectiveCamera(90, 1, 1, 1000);
   this.camera = new THREE.OrthographicCamera(-30,30,30,-30,1,1000);
   this.camera.up = this.sourceCamera.up;
   this.container = document.getElementById("axes");
+  this.visible = true;
 
   this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   this.renderer.setClearAlpha(0);
@@ -11,9 +11,15 @@ AxisWidget = function (sourceCamera) {
   this.container.appendChild(this.renderer.domElement);
   this.scene = new THREE.Scene();
 
-  this.scene.add(new THREE.AmbientLight(0xffffff, 1));
+  this.cameraLight = new THREE.PointLight(0xffffff, 1);
+  this.scene.add(this.cameraLight);
+  this.scene.add(new THREE.AmbientLight(0xffffff, 0.1));
 
-  this.scene.add(new THREE.AxisHelper(22));
+  this.size = 26;
+  var cubeGeo = new THREE.BoxGeometry(this.size, this.size, this.size);
+  var cubeMat = new THREE.MeshPhongMaterial({color: 0xbbbbbb, shininess: 0, specular: 0});
+  var cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
+  this.scene.add(cubeMesh);
 
   var _this = this;
   var fontLoader = new THREE.FontLoader();
@@ -23,31 +29,59 @@ AxisWidget = function (sourceCamera) {
       size: 7,
       height: 1
     };
-    var geoX = new THREE.TextGeometry("x", params);
-    var geoY = new THREE.TextGeometry("y", params);
-    geoY.rotateY(-3*Math.PI/4);
-    var geoZ = new THREE.TextGeometry("z", params);
-    geoZ.rotateY(-Math.PI/2);
-    geoX.translate(24,-3,-2);
-    geoY.translate(2,26,0);
-    geoZ.translate(0,-3,25);
-    var matX = new THREE.MeshPhongMaterial({color: 0xff3333});
-    var matY = new THREE.MeshPhongMaterial({color: 0x33ff33});
-    var matZ = new THREE.MeshPhongMaterial({color: 0x3333ff});
-    var meshX = new THREE.Mesh(geoX, matX);
-    var meshY = new THREE.Mesh(geoY, matY);
-    var meshZ = new THREE.Mesh(geoZ, matZ);
-    _this.scene.add(meshX);
-    _this.scene.add(meshY);
-    _this.scene.add(meshZ);
+    var dist = _this.size/2 + 1;
+    var geos = [
+      new THREE.TextGeometry("x", params),
+      new THREE.TextGeometry("-x", params),
+      new THREE.TextGeometry("y", params),
+      new THREE.TextGeometry("-y", params),
+      new THREE.TextGeometry("z", params),
+      new THREE.TextGeometry("-z", params),
+    ];
+    geos[0].rotateY(-Math.PI/2);
+    geos[0].translate(-dist,-2,-2);
+    geos[1].rotateY(Math.PI/2);
+    geos[1].translate(dist,-2,4);
+    geos[2].rotateX(-Math.PI/2);
+    geos[2].rotateY(Math.PI);
+    geos[2].translate(2,dist,-2);
+    geos[3].rotateX(Math.PI/2);
+    geos[3].translate(-4,-dist,-2);
+    geos[4].rotateY(Math.PI);
+    geos[4].translate(2,-2,-dist);
+    geos[5].translate(-4,-2,dist);
+    mats = [
+      new THREE.MeshPhongMaterial({color: 0xff3333}),
+      new THREE.MeshPhongMaterial({color: 0x33ff33}),
+      new THREE.MeshPhongMaterial({color: 0x3333ff})
+    ];
+    meshes = [
+      new THREE.Mesh(geos[0],mats[0]),
+      new THREE.Mesh(geos[1],mats[0]),
+      new THREE.Mesh(geos[2],mats[1]),
+      new THREE.Mesh(geos[3],mats[1]),
+      new THREE.Mesh(geos[4],mats[2]),
+      new THREE.Mesh(geos[5],mats[2])
+    ];
+    for (var i=0; i<meshes.length; i++) {
+      _this.scene.add(meshes[i]);
+    }
   });
 
   this.origin = new THREE.Vector3(0,0,0);
 }
 
+AxisWidget.prototype.toggleVisibility = function() {
+  this.visible = !this.visible;
+  if (this.scene) this.scene.visible = this.visible;
+}
+
 AxisWidget.prototype.update = function() {
-  this.camera.position.copy(this.sourceCamera.getWorldDirection());
+  var camPos = this.sourceCamera.getWorldDirection();
+  camPos.y *= -1;
+  this.camera.position.copy(camPos);
   this.camera.position.setLength(30);
   this.camera.lookAt(this.origin);
+  this.cameraLight.position.set(camPos);
   this.renderer.render(this.scene, this.camera);
 }

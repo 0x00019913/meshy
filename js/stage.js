@@ -20,6 +20,7 @@ Stage = function() {
   this.camera = null;
   this.scene = null;
   this.renderer = null;
+  this.axisWidget = null;
 
   // undo stack
   this.undoStack = new UndoStack();
@@ -30,20 +31,20 @@ Stage = function() {
 
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
-  this.gui.add(this, 'Upload');
+  this.gui.add(this, 'upload');
 
   var uiFolder = this.gui.addFolder("UI");
   uiFolder.add(this, "floorVisible").onChange(updateFloor);
   var transformationFolder = this.gui.addFolder("Transformation");
   var translationFolder = transformationFolder.addFolder("Translation");
-  this.xOffset = 0;
-  translationFolder.add(this, "xOffset", -100, 100);
+  this.xTranslation = 0;
+  translationFolder.add(this, "xTranslation", -50, 50);
   translationFolder.add(this, "translateX");
-  this.yOffset = 0;
-  translationFolder.add(this, "yOffset");
+  this.yTranslation = 0;
+  translationFolder.add(this, "yTranslation", -50, 50);
   translationFolder.add(this, "translateY");
-  this.zOffset = 0;
-  translationFolder.add(this, "zOffset");
+  this.zTranslation = 0;
+  translationFolder.add(this, "zTranslation", -50, 50);
   translationFolder.add(this, "translateZ");
   var rotationFolder = transformationFolder.addFolder("Rotation");
   this.xRotation = 0;
@@ -59,8 +60,15 @@ Stage.prototype.generateUI = function() {
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
   floorFolder.add(this, "floorZ");
+  var centerFolder = transformationFolder.addFolder("Center");
+  centerFolder.add(this, "centerAll");
+  centerFolder.add(this, "centerX");
+  centerFolder.add(this, "centerY");
+  centerFolder.add(this, "centerZ");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleWireframe");
+  displayFolder.add(this, "cameraToModel");
+  displayFolder.add(this, "toggleAxisWidget");
   this.gui.add(this, "undo");
   this.gui.add(this, "delete");
 
@@ -100,31 +108,30 @@ Stage.prototype.transform = function(op, axis, amount) {
 }
 
 Stage.prototype.undo = function() { this.undoStack.undo(); }
-Stage.prototype.delete = function() {
-  if (this.model) {
-    this.model.delete();
-  }
-  this.model = null;
-  this.undoStack.clear();
-}
 
-Stage.prototype.floorX = function() { this.transform("floor","x",null); }
-Stage.prototype.floorY = function() { this.transform("floor","y",null); }
-Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
-Stage.prototype.translateX = function() { this.transform("translate","x",this.xOffset); }
-Stage.prototype.translateY = function() { this.transform("translate","y",this.yOffset); }
-Stage.prototype.translateZ = function() { this.transform("translate","z",this.zOffset); }
+Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
+Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
+Stage.prototype.translateZ = function() { this.transform("translate","z",this.zTranslation); }
 Stage.prototype.rotateX = function() { this.transform("rotate","x",this.xRotation); }
 Stage.prototype.rotateY = function() { this.transform("rotate","y",this.yRotation); }
 Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotation); }
+Stage.prototype.floorX = function() { this.transform("floor","x",null); }
+Stage.prototype.floorY = function() { this.transform("floor","y",null); }
+Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
+Stage.prototype.centerX = function() { this.transform("center","x",null); }
+Stage.prototype.centerY = function() { this.transform("center","y",null); }
+Stage.prototype.centerZ = function() { this.transform("center","z",null); }
+Stage.prototype.centerAll = function() { this.transform("center","all",null); }
 
 Stage.prototype.toggleWireframe = function() {
   this.transform("toggleWireframe",null,null,this.model);
 }
+Stage.prototype.toggleAxisWidget = function() {
+  this.axisWidget.toggleVisibility();
+}
 
 Stage.prototype.initViewport = function() {
   var width, height;
-  var axes;
   var _this = this;
 
   init();
@@ -153,10 +160,10 @@ Stage.prototype.initViewport = function() {
     var pointLight = new THREE.PointLight(0xffffff, 3, 0, 1);
     _this.scene.add(pointLight);
     _this.controls.addObject(pointLight);
-    var ambientLight = new THREE.AmbientLight(0xffffff, 1);
+    var ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     _this.scene.add(ambientLight);
 
-    axes = new AxisWidget(_this.camera);
+    _this.axisWidget = new AxisWidget(_this.camera);
 
     _this.controls.update();
 
@@ -192,7 +199,7 @@ Stage.prototype.initViewport = function() {
   function render() {
     if (!_this.camera || !_this.scene) return;
     _this.controls.update();
-    axes.update();
+    _this.axisWidget.update();
     _this.infoBox.update();
     _this.renderer.render(_this.scene, _this.camera);
   }
@@ -250,7 +257,7 @@ Stage.prototype.initFloor = function() {
   this.scene.add(lineTertiary);
 }
 
-Stage.prototype.Upload = function() {
+Stage.prototype.upload = function() {
   if (this.model) {
     console.log("A model already exists");
     return;
@@ -263,12 +270,32 @@ Stage.prototype.Upload = function() {
 
 Stage.prototype.handleFile = function(file) {
   this.model = new Model();
-
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
+Stage.prototype.delete = function() {
+  // it's necessary to clear file input box because it blocks uploading
+  // a model with the same name twice in a row
+  this.fileInput.value = "";
+
+  if (this.model) {
+    this.model.deleteGeometry();
+  }
+  else {
+    console.log("No model to delete.");
+    return;
+  }
+  this.model = null;
+  this.undoStack.clear();
+}
+
 Stage.prototype.displayMesh = function() {
-  var center = this.model.getCenter();
   this.model.render(this.scene, "plain");
+  this.cameraToModel();
+}
+
+Stage.prototype.cameraToModel = function() {
+  if (!this.model) return;
+  var center = this.model.getCenter();
   this.controls.update( {origin: new THREE.Vector3(center[0],center[1],center[2])} );
 }

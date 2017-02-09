@@ -7,12 +7,8 @@ function Model() {
   this.isLittleEndian = true;
 
   // calculated stuff
-  this.xmin = null;
-  this.xmax = null;
-  this.ymin = null;
-  this.ymax = null;
-  this.zmin = null;
-  this.zmax = null;
+  this.resetBounds(); // sets bounds to Infinity
+  this.centerOfMass = null;
 
   // for slicing
   this.sliceCount = null;
@@ -26,6 +22,8 @@ function Model() {
   this.plainMesh = null;
   this.slicedMesh = null;
   this.scene = null;
+  // three orthogonal planes that intersect at the center of the mesh
+  this.targetPlanes = null;
 }
 
 Model.prototype.add = function(triangle) {
@@ -42,6 +40,15 @@ Model.prototype.add = function(triangle) {
   else {
     this.updateBounds(triangle);
   }
+}
+
+Model.prototype.resetBounds = function() {
+  this.xmin = -Infinity;
+  this.xmax = Infinity;
+  this.ymin = -Infinity;
+  this.ymax = Infinity;
+  this.zmin = -Infinity;
+  this.zmax = Infinity;
 }
 
 Model.prototype.updateBounds = function(triangle) {
@@ -63,6 +70,16 @@ Model.prototype.getCenter = function() {
 Model.prototype.getCenterx = function() { return (this.xmax+this.xmin)/2; }
 Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
 Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
+Model.prototype.getSize = function() {
+  return [
+    this.getSizex(),
+    this.getSizey(),
+    this.getSizez()
+  ];
+}
+Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
+Model.prototype.getSizey = function() { return (this.ymax-this.ymin); }
+Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
 
 Model.prototype.translate = function(axis, amount) {
   for (var i=0; i<this.count; i++) {
@@ -75,7 +92,13 @@ Model.prototype.translate = function(axis, amount) {
 }
 
 Model.prototype.rotate = function(axis, amount) {
-  console.log(axis, amount);
+  this.resetBounds();
+  for (var i=0; i<this.count; i++) {
+    var tri = this.triangles[i];
+    tri.rotate(axis, amount);
+    this.updateBounds(tri);
+  }
+  this.plainMesh.geometry.verticesNeedUpdate = true;
 }
 
 Model.prototype.toggleWireframe = function() {
@@ -83,6 +106,56 @@ Model.prototype.toggleWireframe = function() {
   if (this.plainMesh) {
     this.plainMesh.material.wireframe = this.wireframe;
   }
+}
+
+Model.prototype.generateTargetPlanes = function() {
+  var size = 1;
+  this.targetPlanes = [
+    new THREE.PlaneGeometry(size,size).rotateY(Math.PI/2), // normal x
+    new THREE.PlaneGeometry(size,size).rotateX(Math.PI/2), // normal y
+    new THREE.PlaneGeometry(size,size) // normal z
+  ];
+  var planeMat = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  planeMat.transparent = true;
+  planeMat.opacity = 0.5;
+  var planeMeshes = [
+    new THREE.Mesh(this.targetPlanes[0], planeMat),
+    new THREE.Mesh(this.targetPlanes[1], planeMat),
+    new THREE.Mesh(this.targetPlanes[2], planeMat)
+  ];
+  for (var i=0; i<planeMeshes.length; i++) {
+    planeMeshes[i].name = "targetPlane";
+    this.scene.add(planeMeshes[i]);
+  }
+  this.positionTargetPlanes(this.getCenter());
+}
+
+Model.prototype.positionTargetPlanes = function(point) {
+  var vX = this.targetPlanes[0].vertices;
+  var vY = this.targetPlanes[1].vertices;
+  var vZ = this.targetPlanes[2].vertices;
+  // arrange that the planes protrude from the boundaries of the object
+  // by 0.1 times its size
+  var extendFactor = 0.1;
+  var size = this.getSize().map(function(x) { return x*=extendFactor; });
+  var xmin = this.xmin-size[0], xmax = this.xmax+size[0];
+  var ymin = this.ymin-size[1], ymax = this.ymax+size[1];
+  var zmin = this.zmin-size[2], zmax = this.zmax+size[2];
+
+  vX[0].set(point[0], ymin, zmin);
+  vX[1].set(point[0], ymin, zmax);
+  vX[2].set(point[0], ymax, zmin);
+  vX[3].set(point[0], ymax, zmax);
+
+  vY[0].set(xmin, point[1], zmin);
+  vY[1].set(xmin, point[1], zmax);
+  vY[2].set(xmax, point[1], zmin);
+  vY[3].set(xmax, point[1], zmax);
+
+  vZ[0].set(xmin, ymin, point[2]);
+  vZ[1].set(xmin, ymax, point[2]);
+  vZ[2].set(xmax, ymin, point[2]);
+  vZ[3].set(xmax, ymax, point[2]);
 }
 
 Model.prototype.render = function(scene, mode) {
@@ -117,6 +190,7 @@ Model.prototype.renderPlainModel = function(scene) {
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
+  //this.generateTargetPlanes();
 }
 
 /* renders line segments in the "set" argument */
@@ -183,13 +257,14 @@ Model.prototype.upload = function(file, callback) {
   }
 }
 
-Model.prototype.delete = function() {
-  var _scene = this.scene;
-  _scene.traverse(function(o) {
-    if (o.name=="model") {
-      _scene.remove(o);
+Model.prototype.deleteGeometry = function() {
+  for (var i=this.scene.children.length-1; i>=0; i--) {
+    var child = this.scene.children[i];
+    if (child.name=="model" || child.name=="targetPlane") {
+      this.scene.remove(child);
     }
-  });
+  }
+
 }
 
 Model.prototype.buildSliceLists = function() {

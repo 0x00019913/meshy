@@ -5,6 +5,7 @@ function Transform(op, axis, amount, model) {
     return this;
   }
   this.model = model;
+  this.dynamic = false;
   switch (op) {
     case "floor":
       this.op = "translate";
@@ -91,7 +92,45 @@ Transform.prototype = {
         this.model.toggleWireframe();
         break;
     }
+  },
+
+  /* Intended pattern for dynamic updates (not using because updating in
+      real time in WebGL is slow for large meshes):
+    // in UI setup
+    this.xOffset = 0;
+    this.xOffsetPrev = this.xOffset;
+    translationFolder.add(this, "xOffset", -50, 50).onChange(this.translateXDynamic.bind(this).onFinishChange(this.endTranslateXDynamic.bind(this));
+    ...
+    // functions
+    this.translateXDynamic = function() {
+      if (!this.translationXDynamic) {
+        this.translationXDynamic = new Transform("translate","x",0,this.model);
+        this.translationXDynamic.setDynamicStart(this.xOffsetPrev);
+      }
+      var delta = this.xOffset - this.xOffsetPrev;
+      this.translationXDynamic.setAmount(delta);
+      this.translationXDynamic.apply();
+
+      console.log(this);
+
+      this.xOffsetPrev = this.xOffset;
+    }
+    this.endTranslateXDynamic = function() {
+      this.undoStack.push(this.translationXDynamic.makeInverse());
+      this.xOffsetPrev = this.xOffset;
+      this.translationXDynamic = null;
+    }
+  */
+
+  setDynamicStart: function(start) {
+    this.dynamic = true;
+    this.start = start;
+  },
+
+  setAmount: function(amount) {
+    this.amount = amount;
   }
+
 }
 
 function UndoStack() {
@@ -104,7 +143,7 @@ UndoStack.prototype = {
 
   undo: function() {
     if (this.history.length==0) {
-      console.log("can't undo further");
+      console.log("No more undo history available.");
       return;
     }
     var inv = this.history.pop();

@@ -1,12 +1,7 @@
 function Triangle() {
   this.vertices = [];
   this.normal = null;
-  this.xmin = null;
-  this.xmax = null;
-  this.ymin = null;
-  this.ymax = null;
-  this.zmin = null;
-  this.zmax = null;
+  this.resetBounds();
   this.count = 0;
 }
 
@@ -30,6 +25,14 @@ Triangle.prototype.addVertex = function(vertex) {
   }
 };
 
+Triangle.prototype.resetBounds = function() {
+  this.xmin = -Infinity;
+  this.xmax = Infinity;
+  this.ymin = -Infinity;
+  this.ymax = Infinity;
+  this.zmin = -Infinity;
+  this.zmax = Infinity;
+}
 Triangle.prototype.updateBounds = function(vertex) {
   this.xmin = vertex.x<this.xmin ? vertex.x : this.xmin;
   this.xmax = vertex.x>this.xmax ? vertex.x : this.xmax;
@@ -50,6 +53,23 @@ Triangle.prototype.translate = function(axis, amount) {
   }
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
+}
+
+Triangle.prototype.rotate = function(axis, amount) {
+  var axisVector = this.axes[axis];
+  var degree = amount*Math.PI/180.0;
+  for (var i=0; i<3; i++) {
+    var vertex = this.vertices[i];
+    vertex.applyAxisAngle(axisVector, degree);
+    this.updateBounds(vertex);
+  }
+}
+
+// for turning "x" etc. into a normalized Vector3 along axis
+Triangle.prototype.axes = {
+  x: new THREE.Vector3(1,0,0),
+  y: new THREE.Vector3(0,1,0),
+  z: new THREE.Vector3(0,0,1),
 }
 
 Triangle.prototype.yIntersection = function(planePos) {

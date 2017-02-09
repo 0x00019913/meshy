@@ -93,7 +93,7 @@ InfoBox.prototype.createLine = function(title) {
 
   var liTitle = document.createElement("span");
   this.styleLITitle(liTitle);
-  var liTitleText = document.createTextNode(title + ": ");
+  var liTitleText = document.createTextNode(title);
   liTitle.appendChild(liTitleText);
 
   li.appendChild(liTitle);
@@ -143,7 +143,7 @@ InfoBox.prototype.update = function() {
 
 InfoBox.prototype.getPropValue = function(source, propPath) {
   for (var i=0; i<propPath.length; i++) {
-    if (!source) return "";
+    if (!source && source!==0) return "";
     if (this.isFunction(source[propPath[i]])) source = source[propPath[i]]();
     else source = source[propPath[i]];
   }
