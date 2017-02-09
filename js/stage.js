@@ -90,6 +90,7 @@ Stage.prototype.generateUI = function() {
   this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
+  this.infoBox.add("polycount", this, ["model","count"]);
   this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
   this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
   this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);

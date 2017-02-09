@@ -126,7 +126,7 @@ InfoBox.prototype.update = function() {
 
     if (item.props.length==1) {
       value = this.getPropValue(item.source, item.props[0]);
-      if (this.isNumber(value)) value = value.toFixed(this.decimals);
+      if (this.isNumber(value)) value = this.formatNumber(value);
     }
     else {
       var len = item.props.length;
@@ -135,7 +135,7 @@ InfoBox.prototype.update = function() {
       for (var propIdx=0; propIdx<len; propIdx++) {
         var v = this.getPropValue(item.source, item.props[propIdx]);
         if (v!=="") valuesExist = true;
-        if (this.isNumber(v)) v = v.toFixed(this.decimals);
+        if (this.isNumber(v)) v = this.formatNumber(v);
         value += v;
         if (propIdx < len-1) value += ", ";
       }
@@ -147,6 +147,11 @@ InfoBox.prototype.update = function() {
 
     item.element.textContent = value;
   }
+}
+
+InfoBox.prototype.formatNumber = function(num) {
+  if ((num%1)===0) return num;
+  else return num.toFixed(this.decimals);
 }
 
 InfoBox.prototype.getPropValue = function(source, propPath) {
