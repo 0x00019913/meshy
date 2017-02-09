@@ -190,6 +190,7 @@ Model.prototype.calcCenterOfMass = function() {
     center[1] += ((verts[0].y + verts[1].y + verts[2].y) / 4) * triVolume;
     center[2] += ((verts[0].z + verts[1].z + verts[2].z) / 4) * triVolume;
   }
+  this.volume = modelVolume;
   this.centerOfMass = center.map(function(x) {return x/modelVolume});
 }
 
@@ -254,9 +255,9 @@ Model.prototype.positionTargetPlanes = function(point) {
   vZ[2].set(xmax, ymin, point[2]);
   vZ[3].set(xmax, ymax, point[2]);
 
-    this.targetPlanes[0].verticesNeedUpdate = true;
-    this.targetPlanes[1].verticesNeedUpdate = true;
-    this.targetPlanes[2].verticesNeedUpdate = true;
+  this.targetPlanes[0].verticesNeedUpdate = true;
+  this.targetPlanes[1].verticesNeedUpdate = true;
+  this.targetPlanes[2].verticesNeedUpdate = true;
 }
 
 Model.prototype.render = function(scene, mode) {
