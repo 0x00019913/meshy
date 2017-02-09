@@ -51,9 +51,9 @@ AxisWidget = function (sourceCamera) {
     geos[4].translate(2,-2,-dist);
     geos[5].translate(-4,-2,dist);
     mats = [
-      new THREE.MeshPhongMaterial({color: 0xff3333}),
-      new THREE.MeshPhongMaterial({color: 0x33ff33}),
-      new THREE.MeshPhongMaterial({color: 0x3333ff})
+      new THREE.MeshBasicMaterial({color: 0xff3333}),
+      new THREE.MeshBasicMaterial({color: 0x33ff33}),
+      new THREE.MeshBasicMaterial({color: 0x3333ff})
     ];
     meshes = [
       new THREE.Mesh(geos[0],mats[0]),
