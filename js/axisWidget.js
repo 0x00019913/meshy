@@ -17,7 +17,7 @@ AxisWidget = function (sourceCamera) {
 
   this.size = 26;
   var cubeGeo = new THREE.BoxGeometry(this.size, this.size, this.size);
-  var cubeMat = new THREE.MeshPhongMaterial({color: 0xbbbbbb, shininess: 0, specular: 0});
+  var cubeMat = new THREE.MeshPhongMaterial({color: 0xbbbbbb, shininess: 10});
   var cubeMesh = new THREE.Mesh(cubeGeo, cubeMat);
   this.scene.add(cubeMesh);
 
@@ -82,6 +82,6 @@ AxisWidget.prototype.update = function() {
   this.camera.position.copy(camPos);
   this.camera.position.setLength(this.size*1.5);
   this.camera.lookAt(this.origin);
-  this.cameraLight.position.copy(camPos).multiplyScalar(this.size*1.5);
+  this.cameraLight.position.copy(camPos).multiplyScalar(this.size*1.2);
   this.renderer.render(this.scene, this.camera);
 }
