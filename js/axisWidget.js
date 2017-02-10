@@ -51,9 +51,9 @@ AxisWidget = function (sourceCamera) {
     geos[4].translate(2,-2,-dist);
     geos[5].translate(-4,-2,dist);
     mats = [
-      new THREE.MeshBasicMaterial({color: 0xff3333}),
-      new THREE.MeshBasicMaterial({color: 0x33ff33}),
-      new THREE.MeshBasicMaterial({color: 0x3333ff})
+      new THREE.MeshPhongMaterial({color: 0xff3333}),
+      new THREE.MeshPhongMaterial({color: 0x33ff33}),
+      new THREE.MeshPhongMaterial({color: 0x3333ff})
     ];
     meshes = [
       new THREE.Mesh(geos[0],mats[0]),
@@ -80,8 +80,8 @@ AxisWidget.prototype.update = function() {
   var camPos = this.sourceCamera.getWorldDirection();
   camPos.y *= -1;
   this.camera.position.copy(camPos);
-  this.camera.position.setLength(30);
+  this.camera.position.setLength(this.size*1.5);
   this.camera.lookAt(this.origin);
-  this.cameraLight.position.set(camPos);
+  this.cameraLight.position.copy(camPos).multiplyScalar(this.size*1.5);
   this.renderer.render(this.scene, this.camera);
 }
