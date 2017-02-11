@@ -22,6 +22,7 @@ Stage = function() {
   this.scene = null;
   this.renderer = null;
   this.axisWidget = null;
+  this.pointer = null;
 
   // undo stack
   this.undoStack = new UndoStack();
@@ -41,23 +42,23 @@ Stage.prototype.generateUI = function() {
   var transformationFolder = this.gui.addFolder("Transformation");
   var translationFolder = transformationFolder.addFolder("Translation");
   this.xTranslation = 0;
-  translationFolder.add(this, "xTranslation", -50, 50);
+  translationFolder.add(this, "xTranslation");
   translationFolder.add(this, "translateX");
   this.yTranslation = 0;
-  translationFolder.add(this, "yTranslation", -50, 50);
+  translationFolder.add(this, "yTranslation");
   translationFolder.add(this, "translateY");
   this.zTranslation = 0;
-  translationFolder.add(this, "zTranslation", -50, 50);
+  translationFolder.add(this, "zTranslation");
   translationFolder.add(this, "translateZ");
   var rotationFolder = transformationFolder.addFolder("Rotation");
   this.xRotation = 0;
-  rotationFolder.add(this, "xRotation", -360,360);
+  rotationFolder.add(this, "xRotation");
   rotationFolder.add(this, "rotateX");
   this.yRotation = 0;
-  rotationFolder.add(this, "yRotation", -360,360);
+  rotationFolder.add(this, "yRotation");
   rotationFolder.add(this, "rotateY");
   this.zRotation = 0;
-  rotationFolder.add(this, "zRotation", -360,360);
+  rotationFolder.add(this, "zRotation");
   rotationFolder.add(this, "rotateZ");
   var scaleFolder = transformationFolder.addFolder("Scale");
   this.xScale = 1;
@@ -102,8 +103,6 @@ Stage.prototype.generateUI = function() {
 
   this.initViewport();
   this.initFloor();
-
-  var _this = this;
 }
 
 Stage.prototype.updateUI = function() {
@@ -183,6 +182,8 @@ Stage.prototype.initViewport = function() {
         theta: 5*Math.PI/12
       }
     );
+
+    _this.pointer = new Pointer(_this.scene, _this.camera, _this.container);
 
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
