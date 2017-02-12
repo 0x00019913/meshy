@@ -22,7 +22,7 @@ Stage = function() {
   this.scene = null;
   this.renderer = null;
   this.axisWidget = null;
-  this.pointer = null;
+  this.measurement = null;
 
   // undo stack
   this.undoStack = new UndoStack();
@@ -79,10 +79,16 @@ Stage.prototype.generateUI = function() {
   centerFolder.add(this, "centerX");
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
-  var calculateFolder = this.gui.addFolder("Calculate");
-  calculateFolder.add(this, "calcSurfaceArea");
-  calculateFolder.add(this, "calcVolume");
-  calculateFolder.add(this, "calcCenterOfMass");
+  var calculationFolder = this.gui.addFolder("Calculation");
+  calculationFolder.add(this, "calcSurfaceArea");
+  calculationFolder.add(this, "calcVolume");
+  calculationFolder.add(this, "calcCenterOfMass");
+  var measurementFolder = this.gui.addFolder("Measurement");
+  measurementFolder.add(this, "mSegmentLength");
+  measurementFolder.add(this, "mAngle");
+  measurementFolder.add(this, "mRadius");
+  measurementFolder.add(this, "mArcLength");
+  measurementFolder.add(this, "mDeactivate");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
@@ -136,6 +142,24 @@ Stage.prototype.centerZ = function() { this.transform("center","z",null); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
 Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
+Stage.prototype.startMeasurement = function(type) {
+  if (this.measurement.active) this.measurement.deactivate();
+  if (this.model) this.measurement.activate(type);
+}
+Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
+Stage.prototype.mAngle = function() {
+  if (this.measurement.active) this.measurement.deactivate();
+  if (this.model) this.measurement.activate("angle");
+}
+Stage.prototype.mRadius = function() {
+  if (this.measurement.active) this.measurement.deactivate();
+  if (this.model) this.measurement.activate("radius");
+}
+Stage.prototype.mArcLength = function() {
+  if (this.measurement.active) this.measurement.deactivate();
+  if (this.model) this.measurement.activate("arcLength");
+}
+Stage.prototype.mDeactivate = function() { if (this.model) this.measurement.deactivate(); }
 
 Stage.prototype.toggleFloor = function() {
   this.floorVisible = !this.floorVisible;
@@ -183,7 +207,7 @@ Stage.prototype.initViewport = function() {
       }
     );
 
-    _this.pointer = new Pointer(_this.scene, _this.camera, _this.container);
+    _this.measurement = new Measurement(_this.scene, _this.camera, _this.container);
 
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
@@ -306,6 +330,7 @@ Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks uploading
   // a model with the same name twice in a row
   this.fileInput.value = "";
+  this.measurement.deactivate();
 
   if (this.model) {
     this.model.deleteGeometry();
@@ -325,6 +350,7 @@ Stage.prototype.displayMesh = function(success) {
   }
   this.model.render(this.scene, "plain");
   this.cameraToModel();
+  this.measurement.setScale(this.model.getMinSize() * 0.4);
 }
 
 Stage.prototype.cameraToModel = function() {
