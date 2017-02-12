@@ -8,7 +8,7 @@ Measurement = function(scene, camera, domElement) {
   this.markerColor = 0x4adeff;
   this.connectorColor = 0x0;
 
-  var markerGeo = new THREE.SphereGeometry(.01, 8, 6);
+  var markerGeo = new THREE.SphereGeometry(.03, 8, 6);
   var markerMat = new THREE.MeshStandardMaterial({color: this.markerColor});
   var marker = new THREE.Mesh(markerGeo, markerMat);
   marker.name = "marker";
@@ -83,11 +83,11 @@ Measurement.prototype.deactivate = function() {
   this.active = false;
   this.type = null;
 
-  for (var m=0; m<this.activeMarkers.length; m++) {
-    this.activeMarkers[m].visible = false;
+  for (var i=0; i<this.activeMarkers.length; i++) {
+    this.activeMarkers[i].visible = false;
   }
-  for (var c=0; c<this.activeConnectors.length; c++) {
-    this.activeConnectors[c].visible = false;
+  for (var i=0; i<this.activeConnectors.length; i++) {
+    this.activeConnectors[i].visible = false;
   }
 
   this.pointer.removeClickCallback(this.callbackIdx);
@@ -97,18 +97,21 @@ Measurement.prototype.deactivate = function() {
 // accepts an intersection object returned by THREE.Raycaster
 Measurement.prototype.onClick = function(intersection) {
   var point = intersection.point;
-  this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
   var marker = this.markers[this.markerIdx];
   marker.position.copy(point);
   if (this.activeMarkers.length<this.measurementPoints) {
     marker.visible = true;
-    this.activeMarkers.push(marker);
+    this.activeMarkers[this.markerIdx] = marker;
   }
   else {
-
+    // todo; connect and measure here
   }
+  this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
 }
 
 Measurement.prototype.setScale = function(scale) {
   this.pointer.setScale(scale);
+  for (var i=0; i<this.markers.length; i++) {
+    this.markers[i].scale.set(scale, scale, scale);
+  }
 }
