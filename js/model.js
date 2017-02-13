@@ -95,11 +95,16 @@ Model.prototype.getCOMz = function() {
 }
 
 Model.prototype.translate = function(axis, amount) {
+  console.log("translate", axis, amount);
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.translate(axis, amount);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
+  //transform bounds
+  this[axis+"min"] += amount;
+  this[axis+"max"] += amount;
+
   if (this.centerOfMass) {
     // transform center of mass
     var vector3COM = new THREE.Vector3();
@@ -108,9 +113,6 @@ Model.prototype.translate = function(axis, amount) {
     this.centerOfMass = vector3COM.toArray();
     this.positionTargetPlanes(this.centerOfMass);
   }
-  //transform bounds
-  this[axis+"min"] += amount;
-  this[axis+"max"] += amount;
 }
 
 Model.prototype.rotate = function(axis, amount) {
@@ -149,6 +151,8 @@ Model.prototype.scale = function (axis, amount) {
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.surfaceArea = null;
   this.volume = null;
+  this[axis+"min"] *= amount;
+  this[axis+"max"] *= amount;
   if (this.centerOfMass) {
     // transform center of mass
     var vector3COM = new THREE.Vector3();
@@ -157,8 +161,6 @@ Model.prototype.scale = function (axis, amount) {
     this.centerOfMass = vector3COM.toArray();
     this.positionTargetPlanes(this.centerOfMass);
   }
-  this[axis+"min"] *= amount;
-  this[axis+"max"] *= amount;
 }
 
 Model.prototype.toggleWireframe = function() {
@@ -219,7 +221,7 @@ Model.prototype.generateTargetPlanes = function() {
     new THREE.PlaneGeometry(size,size).rotateX(Math.PI/2), // normal y
     new THREE.PlaneGeometry(size,size) // normal z
   ];
-  var planeMat = new THREE.MeshPhongMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  var planeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide });
   planeMat.transparent = true;
   planeMat.opacity = 0.5;
   var planeMeshes = [

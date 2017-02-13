@@ -10,14 +10,16 @@ Pointer = function(scene, camera, domElement) {
   this.clickCallbacks = [];
   // pixel difference between mousedown and mouseup for a mouse press
   // to count as a click
-  this.clickAllowance = 3;
+  this.clickAllowance = 5;
+  this.cursorColor = 0xff0000;
+  this.cursorColorDown = 0xffff00;
 
   this.scale = 1;
   var r = 0.05;
   this.cursorRadius = r;
   this.cursorSegments = 32;
   var cursorGeo = new THREE.Geometry();
-  var cursorMat = new THREE.LineBasicMaterial({color: 0x17caef});
+  var cursorMat = new THREE.LineBasicMaterial({color: this.cursorColor});
   var thetaIncrement = 2 * Math.PI / this.cursorSegments;
   for (var i=0; i<=this.cursorSegments; i++) {
     var theta = i * thetaIncrement;
@@ -44,6 +46,8 @@ Pointer = function(scene, camera, domElement) {
 
   function onMouseDown(e) {
     if (!_this.active) return;
+
+    _this.cursor.material.color.set(_this.cursorColorDown);
     clickLocation.x = e.clientX;
     clickLocation.y = e.clientY;
   }
@@ -51,12 +55,15 @@ Pointer = function(scene, camera, domElement) {
   function onMouseUp(e) {
     if (!_this.active) return;
     if (_this.clickCallbacks.length==0 || !_this.intersection) return;
+
+    _this.cursor.material.color.set(_this.cursorColor);
     clickLocation.x -= e.clientX;
     clickLocation.y -= e.clientY;
-    if (clickLocation.length()<_this.clickAllowance) {
+    if (clickLocation.length()<_this.clickAllowance && _this.intersection) {
       for (var i=0; i<_this.clickCallbacks.length; i++) {
         _this.clickCallbacks[i](_this.intersection);
       }
+      _this.intersection = null;
     }
   }
 }
@@ -102,5 +109,6 @@ Pointer.prototype.update = function() {
   }
   if (!intersectsMesh) {
     this.cursor.visible = false;
+    this.intersection = null;
   }
 }
