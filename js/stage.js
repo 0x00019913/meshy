@@ -83,7 +83,7 @@ Stage.prototype.generateUI = function() {
   calculationFolder.add(this, "calcSurfaceArea");
   calculationFolder.add(this, "calcVolume");
   calculationFolder.add(this, "calcCenterOfMass");
-  var measurementFolder = this.gui.addFolder("Measurement");
+  var measurementFolder = this.gui.addFolder("Measurement (coming soon)");
   measurementFolder.add(this, "mSegmentLength");
   measurementFolder.add(this, "mAngle");
   measurementFolder.add(this, "mRadius");

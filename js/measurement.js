@@ -41,8 +41,8 @@ Measurement = function(scene, camera, domElement) {
     this.scene.add(this.lineConnectors[i]);
   }
 
-  var r = 0.05;
-  var circleConnectorSegments = 32;
+  var r = 1;
+  var circleConnectorSegments = 64;
   var circleConnectorGeo = new THREE.Geometry();
   var circleConnectorMat = new THREE.LineBasicMaterial({color: this.connectorColor});
   var thetaIncrement = 2 * Math.PI / circleConnectorSegments;
@@ -58,8 +58,6 @@ Measurement = function(scene, camera, domElement) {
   circleConnector.visible = false;
   // should only need one ever, but putting it in an array for consistency
   this.circleConnectors = [circleConnector];
-
-  this.activeConnectors = [];
 
   for (var i=0; i<this.circleConnectors.length; i++) {
     this.scene.add(this.circleConnectors[i]);
@@ -83,7 +81,6 @@ Measurement.prototype.activate = function(type) {
   this.type = type;
 
   this.activeMarkers = 0;
-  this.activeConnectors = [];
   this.markerIdx = 0;
   this.connectorIdx = 0;
 
@@ -100,8 +97,11 @@ Measurement.prototype.deactivate = function() {
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].visible = false;
   }
-  for (var i=0; i<this.activeConnectors.length; i++) {
-    this.activeConnectors[i].visible = false;
+  for (var i=0; i<this.lineConnectors.length; i++) {
+    this.lineConnectors[i].visible = false;
+  }
+  for (var i=0; i<this.circleConnectors.length; i++) {
+    this.circleConnectors[i].visible = false;
   }
 
   this.pointer.removeClickCallback(this.callbackIdx);
@@ -132,7 +132,6 @@ Measurement.prototype.onClick = function(intersection) {
       connector.geometry.vertices[1].copy(marker.position);
       connector.geometry.verticesNeedUpdate = true;
 
-      this.activeConnectors[this.connectorIdx] = connector;
       this.connectorIdx = (this.connectorIdx+1)%(this.measurementPoints-1);
     }
   }
@@ -155,8 +154,22 @@ Measurement.prototype.onClick = function(intersection) {
         var d2 = v2.clone().sub(v3).normalize();
         result = Math.acos(d1.dot(d2)) * 180 / Math.PI;
         break;
+      case "radius":
+        var prevprevMarkerIdx =
+          (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
+        var v1 = this.markers[prevprevMarkerIdx].position;
+        var v2 = this.markers[prevMarkerIdx].position;
+        var v3 = this.markers[this.markerIdx].position;
+        var circle = this.calculateCircle(v1, v2, v3);
+        if (!circle) console.log("Error: couldn't calculate circle.");
+        console.log(circle.r);
+        var connector = this.circleConnectors[0];
+        connector.position.copy(circle.center);
+        connector.scale.set(circle.r, circle.r, circle.r);
+        connector.lookAt(circle.center.clone().add(circle.n));
+        connector.visible = true;
+        break;
     }
-    console.log(result);
   }
 
   this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
@@ -164,6 +177,55 @@ Measurement.prototype.onClick = function(intersection) {
 
 Measurement.prototype.isLinearMeasurement = function() {
   return this.type=="segmentLength" || this.type=="angle";
+}
+
+Measurement.prototype.calculateCircle = function(v1, v2, v3) {
+  // vectors from v1/2 to v2: d32 = v3-v2, d12 = v1-v2
+  var d32 = v3.clone().sub(v2);
+  var d12 = v1.clone().sub(v2);
+  // normal: n = (v3-v2) x (v1-v2)
+  var n = new THREE.Vector3().crossVectors(d32, d12).normalize();
+  // points bisecting v1-v2 and v3-v2 segments
+  var b12 = v1.clone().add(v2).multiplyScalar(1/2);
+  var b32 = v3.clone().add(v2).multiplyScalar(1/2);
+  // vector tangent to line thru center at b12: t12 = n cross(v1-v2)
+  var t12 = n.clone().cross(d12);
+  var t32 = n.clone().cross(d32);
+  // center: c = b32 + k32*t32, c = b12 + k12*t12 for some variables k
+  // so (b32-b12) = k12*t12 - k32*t32
+  // pick x and y rows of that equation to solve for k32 =
+  //  ((b32.x-b12.x)/t12.x-(b32.y-b12.y)/t12.y) / (t32.x/t12.x-t32.y/t12.y)
+  // caution: need to test if any components of t12 are 0 b/c of division
+  centers = [];
+  if (t12.x!=0 && t12.y!=0) {
+    var k32xy =
+      (-(b32.x-b12.x)/t12.x+(b32.y-b12.y)/t12.y) / (t32.x/t12.x-t32.y/t12.y);
+    var cxy = b32.clone().add(t32.clone().multiplyScalar(k32xy));
+    centers.push(cxy);
+  }
+  if (t12.z!=0 && t12.y!=0) {
+    var k32zy =
+      (-(b32.z-b12.z)/t12.z+(b32.y-b12.y)/t12.y) / (t32.z/t12.z-t32.y/t12.y);
+    var czy = b32.clone().add(t32.clone().multiplyScalar(k32zy));
+    centers.push(czy);
+  }
+  if (t12.x!=0 && t12.z!=0) {
+    var k32xz =
+      (-(b32.x-b12.x)/t12.x+(b32.z-b12.z)/t12.z) / (t32.x/t12.x-t32.z/t12.z);
+    var cxz = b32.clone().add(t32.clone().multiplyScalar(k32xz));
+    centers.push(cxz);
+  }
+
+  var center = null;
+  if (centers.length==0) console.log("Error: couldn't calculate center.");
+  else if (centers.length==1) center = centers[0];
+  else if (centers.length==2) center = centers[0].add(centers[1]).multiplyScalar(1/2);
+  else if (centers.length==3) center =
+    centers[0].add(centers[1]).add(centers[2]).multiplyScalar(1/3);
+  if (!center) return;
+  var r = v1.clone().sub(center).length();
+
+  return { center: center, r: r, n: n};
 }
 
 Measurement.prototype.setScale = function(scale) {
