@@ -5,16 +5,19 @@ Measurement = function(scene, camera, domElement) {
   this.scene = scene;
   this.active = false;
 
-  this.markerColor = 0x4adeff;
-  this.connectorColor = 0xffff00;
+  // ordered from most to least recent (darker is more recent)
+  this.markerColors = [0x1adeff, 0x8adeff, 0xeadeff];
+  this.connectorColor = 0xffff66;
 
   var markerGeo = new THREE.SphereGeometry(.03, 8, 6);
-  var markerMat = new THREE.MeshStandardMaterial({color: this.markerColor});
+  var markerMat = new THREE.MeshStandardMaterial({color: this.markerColors[0]});
   var marker = new THREE.Mesh(markerGeo, markerMat);
   marker.name = "marker";
   marker.visible = false;
   // need at most three markers at the moment
   this.markers = [marker, marker.clone(true), marker.clone(true)];
+  this.markers[1].material = markerMat.clone();
+  this.markers[2].material = markerMat.clone();
   this.activeMarkers = 0;
   for (var i=0; i<this.markers.length; i++) {
     this.scene.add(this.markers[i]);
@@ -114,6 +117,15 @@ Measurement.prototype.onClick = function(intersection) {
   var marker = this.markers[this.markerIdx];
   marker.position.copy(point);
   var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
+  var prevprevMarkerIdx =
+    (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
+
+  // can reconsolidate but doesn't seem necessary
+  marker.material.color.set(this.markerColors[0]);
+  if (this.measurementPoints>1)
+    this.markers[prevMarkerIdx].material.color.set(this.markerColors[1]);
+  if (this.measurementPoints>2)
+    this.markers[prevprevMarkerIdx].material.color.set(this.markerColors[2]);
 
   if (this.activeMarkers<this.measurementPoints) {
     this.activeMarkers++;
@@ -138,38 +150,38 @@ Measurement.prototype.onClick = function(intersection) {
 
   var result = 0;
   if (this.activeMarkers==this.measurementPoints) {
+    var v1 = this.markers[prevprevMarkerIdx].position;
+    var v2 = this.markers[prevMarkerIdx].position;
+    var v3 = this.markers[this.markerIdx].position;
     switch(this.type) {
       case "segmentLength":
-        var v1 = this.markers[prevMarkerIdx].position;
-        var v2 = this.markers[this.markerIdx].position;
         result = new THREE.Vector3().subVectors(v1,v2).length();
         break;
       case "angle":
-        var prevprevMarkerIdx =
-          (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
-        var v1 = this.markers[prevprevMarkerIdx].position;
-        var v2 = this.markers[prevMarkerIdx].position;
-        var v3 = this.markers[this.markerIdx].position;
         var d1 = v2.clone().sub(v1).normalize();
         var d2 = v2.clone().sub(v3).normalize();
         result = Math.acos(d1.dot(d2)) * 180 / Math.PI;
         break;
       case "radius":
-        var prevprevMarkerIdx =
-          (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
-        var v1 = this.markers[prevprevMarkerIdx].position;
-        var v2 = this.markers[prevMarkerIdx].position;
-        var v3 = this.markers[this.markerIdx].position;
         var circle = this.calculateCircle(v1, v2, v3);
         if (!circle) console.log("Error: couldn't calculate circle.");
-        console.log(circle.r);
-        var connector = this.circleConnectors[0];
-        connector.position.copy(circle.center);
-        connector.scale.set(circle.r, circle.r, circle.r);
-        connector.lookAt(circle.center.clone().add(circle.n));
-        connector.visible = true;
+        this.setCircleConnector(circle);
+        result = circle.r;
+        break;
+      case "arcLength":
+        var circle = this.calculateCircle(v1, v2, v3);
+        if (!circle) console.log("Error: couldn't calculate circle.");
+        this.setCircleConnector(circle);
+        var dc1 = circle.center.clone().sub(v1).normalize();
+        var dc2 = circle.center.clone().sub(v2).normalize();
+        var dc3 = circle.center.clone().sub(v3).normalize();
+        var theta12 = Math.acos(dc1.dot(dc2));
+        var theta23 = Math.acos(dc2.dot(dc3));
+        var result = circle.r * (theta12+theta23);
         break;
     }
+
+    console.log(result);
   }
 
   this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
@@ -193,7 +205,7 @@ Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   var t32 = n.clone().cross(d32);
   // center: c = b32 + k32*t32, c = b12 + k12*t12 for some variables k
   // so (b32-b12) = k12*t12 - k32*t32
-  // pick x and y rows of that equation to solve for k32 =
+  // pick two rows (say, x and y) of that equation to solve for k32 =
   //  ((b32.x-b12.x)/t12.x-(b32.y-b12.y)/t12.y) / (t32.x/t12.x-t32.y/t12.y)
   // caution: need to test if any components of t12 are 0 b/c of division
   centers = [];
@@ -217,7 +229,15 @@ Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   }
 
   var center = null;
-  if (centers.length==0) console.log("Error: couldn't calculate center.");
+  // This method is somewhat suspect but should work:
+  // We have three pairs of equations to solve for the center and therefore
+  // three solutions. 0 or 2 of them may be disqualified because the t vectors
+  // contain elements equal to 0. If only one center is calculated, that's the
+  // center. If two (shouldn't happen) or three, take the answer to be the mean.
+  // Picking a random one doesn't make sense, and, as they should be almost
+  // identical, the mean should be very close to the right answer (and, given
+  // many measurements, should equal the right answer on average).
+  if (centers.length==0) console.log("Error: couldn't calculate center, try again.");
   else if (centers.length==1) center = centers[0];
   else if (centers.length==2) center = centers[0].add(centers[1]).multiplyScalar(1/2);
   else if (centers.length==3) center =
@@ -226,6 +246,14 @@ Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   var r = v1.clone().sub(center).length();
 
   return { center: center, r: r, n: n};
+}
+
+Measurement.prototype.setCircleConnector = function(circle) {
+  var connector = this.circleConnectors[0];
+  connector.position.copy(circle.center);
+  connector.scale.set(circle.r, circle.r, circle.r);
+  connector.lookAt(circle.center.clone().add(circle.n));
+  connector.visible = true;
 }
 
 Measurement.prototype.setScale = function(scale) {

@@ -7,7 +7,7 @@ Pointer = function(scene, camera, domElement) {
   this.raycaster = new THREE.Raycaster();
 
   this.mouse = new THREE.Vector2();
-  this.clickCallbacks = [];
+  this.clickCallbacks = new KeyStack();
   // pixel difference between mousedown and mouseup for a mouse press
   // to count as a click
   this.clickAllowance = 5;
@@ -54,15 +54,13 @@ Pointer = function(scene, camera, domElement) {
 
   function onMouseUp(e) {
     if (!_this.active) return;
-    if (_this.clickCallbacks.length==0 || !_this.intersection) return;
+    if (_this.clickCallbacks.empty() || !_this.intersection) return;
 
     _this.cursor.material.color.set(_this.cursorColor);
     clickLocation.x -= e.clientX;
     clickLocation.y -= e.clientY;
     if (clickLocation.length()<_this.clickAllowance && _this.intersection) {
-      for (var i=0; i<_this.clickCallbacks.length; i++) {
-        _this.clickCallbacks[i](_this.intersection);
-      }
+      _this.clickCallbacks.callEachWithArg(_this.intersection);
       _this.intersection = null;
     }
   }
@@ -74,12 +72,11 @@ Pointer.prototype.setScale = function(scale) {
 }
 
 Pointer.prototype.addClickCallback = function(callback) {
-  this.clickCallbacks.push(callback);
-  return this.clickCallbacks.length - 1;
+  return this.clickCallbacks.add(callback);
 }
 
 Pointer.prototype.removeClickCallback = function(idx) {
-  this.clickCallbacks.splice(idx,1);
+  this.clickCallbacks.remove(idx);
 }
 
 Pointer.prototype.update = function() {

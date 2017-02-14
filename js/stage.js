@@ -147,18 +147,9 @@ Stage.prototype.startMeasurement = function(type) {
   if (this.model) this.measurement.activate(type);
 }
 Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
-Stage.prototype.mAngle = function() {
-  if (this.measurement.active) this.measurement.deactivate();
-  if (this.model) this.measurement.activate("angle");
-}
-Stage.prototype.mRadius = function() {
-  if (this.measurement.active) this.measurement.deactivate();
-  if (this.model) this.measurement.activate("radius");
-}
-Stage.prototype.mArcLength = function() {
-  if (this.measurement.active) this.measurement.deactivate();
-  if (this.model) this.measurement.activate("arcLength");
-}
+Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
+Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
+Stage.prototype.mArcLength = function() { this.startMeasurement("arcLength"); }
 Stage.prototype.mDeactivate = function() { if (this.model) this.measurement.deactivate(); }
 
 Stage.prototype.toggleFloor = function() {
@@ -350,7 +341,7 @@ Stage.prototype.displayMesh = function(success) {
   }
   this.model.render(this.scene, "plain");
   this.cameraToModel();
-  this.measurement.setScale(this.model.getMinSize() * 0.4);
+  this.measurement.setScale(this.model.getMaxSize() * 0.4);
 }
 
 Stage.prototype.cameraToModel = function() {
