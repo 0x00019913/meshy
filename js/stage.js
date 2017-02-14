@@ -50,7 +50,7 @@ Stage.prototype.generateUI = function() {
   this.zTranslation = 0;
   translateFolder.add(this, "zTranslation");
   translateFolder.add(this, "translateZ");
-  var rotateFolder = transformFolder.addFolder("Rotation");
+  var rotateFolder = transformFolder.addFolder("Rotate");
   this.xRotation = 0;
   rotateFolder.add(this, "xRotation");
   rotateFolder.add(this, "rotateX");
