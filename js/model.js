@@ -5,6 +5,9 @@ function Model() {
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
+  this.filename = "";
+  // total size of the buffer in bytes
+  this.byteSize = 0;
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
@@ -95,7 +98,6 @@ Model.prototype.getCOMz = function() {
 }
 
 Model.prototype.translate = function(axis, amount) {
-  console.log("translate", axis, amount);
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.translate(axis, amount);
@@ -323,7 +325,67 @@ Model.prototype.renderSlicedModel = function(scene) {
   scene.add(this.slicedMesh);
 }
 
+Model.prototype.save = function() {
+  var array = new ArrayBuffer(this.byteSize);
+  var offset = 0;
+  var dv = new DataView(array);
+  var isLittleEndian = this.isLittleEndian;
+
+  // I can't figure out a better way of transferring the header bytes to the
+  // new array than by using the DataView API and copying them one by one
+  var dvHeader = new DataView(this.header);
+  for (offset=0; offset<80; offset++) {
+    var ch = dvHeader.getUint8(offset);
+    dv.setUint8(offset, ch);
+  }
+
+  dv.setUint32(offset, this.count, isLittleEndian);
+  offset += 4;
+  for (var tri=0; tri<this.count; tri++) {
+    var triangle = this.triangles[tri];
+
+    setVector3(dv, offset, triangle.normal, isLittleEndian);
+    offset += 12;
+
+    for (var vert=0; vert<3; vert++) {
+      setVector3(dv, offset, triangle.vertices[vert], isLittleEndian);
+      offset += 12;
+    }
+
+    dv.setUint8(offset, 0);
+    dv.setUint8(offset+1, 0);
+
+    offset += 2;
+  }
+
+  var blob = new Blob([dv]);
+  var a = document.createElement("a");
+
+  if (window.navigator.msSaveOrOpenBlob) { // IE :(
+    window.navigator.msSaveOrOpenBlob(blob, this.filename);
+  }
+  else {
+    var url = URL.createObjectURL(blob);
+    a.href = url;
+    a.download = this.filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    });
+  }
+
+  function setVector3(dv, offset, vector, isLittleEndian) {
+    dv.setFloat32(offset, vector.x, isLittleEndian);
+    dv.setFloat32(offset+4, vector.y, isLittleEndian);
+    dv.setFloat32(offset+8, vector.z, isLittleEndian);
+  }
+}
+
 Model.prototype.upload = function(file, callback) {
+  this.filename = file.name;
+  this.byteSize = file.size;
   var _this = this;
 
   fr = new FileReader();
@@ -340,7 +402,8 @@ Model.prototype.upload = function(file, callback) {
   fr.readAsArrayBuffer(file);
 
   var parseArray = function(array) {
-    // mimicking http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
+    // mimicking
+    // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
     _this.header = array.slice(0, 80); // store header
 
     var dv = new DataView(array, 80);

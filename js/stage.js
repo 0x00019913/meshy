@@ -33,7 +33,8 @@ Stage = function() {
 
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
-  this.gui.add(this, 'upload');
+  this.gui.add(this, "upload");
+  this.gui.add(this, "save");
 
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
@@ -308,7 +309,7 @@ Stage.prototype.initFloor = function() {
 
 Stage.prototype.upload = function() {
   if (this.model) {
-    console.log("A model already exists");
+    console.log("A model already exists.");
     return;
   }
 
@@ -322,6 +323,15 @@ Stage.prototype.handleFile = function(file) {
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.upload(file, this.displayMesh.bind(this));
 };
+
+Stage.prototype.save = function() {
+  if (!this.model) {
+    console.log("No model exists.");
+    return;
+  }
+
+  this.model.save();
+}
 
 Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks uploading
