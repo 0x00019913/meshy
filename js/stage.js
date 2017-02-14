@@ -39,28 +39,28 @@ Stage.prototype.generateUI = function() {
   settingsFolder.add(this, "toggleFloor");
   settingsFolder.add(this, "toggleAxisWidget");
   settingsFolder.add(this, "isLittleEndian");
-  var transformationFolder = this.gui.addFolder("Transformation");
-  var translationFolder = transformationFolder.addFolder("Translation");
+  var transformFolder = this.gui.addFolder("Transform");
+  var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
-  translationFolder.add(this, "xTranslation");
-  translationFolder.add(this, "translateX");
+  translateFolder.add(this, "xTranslation");
+  translateFolder.add(this, "translateX");
   this.yTranslation = 0;
-  translationFolder.add(this, "yTranslation");
-  translationFolder.add(this, "translateY");
+  translateFolder.add(this, "yTranslation");
+  translateFolder.add(this, "translateY");
   this.zTranslation = 0;
-  translationFolder.add(this, "zTranslation");
-  translationFolder.add(this, "translateZ");
-  var rotationFolder = transformationFolder.addFolder("Rotation");
+  translateFolder.add(this, "zTranslation");
+  translateFolder.add(this, "translateZ");
+  var rotateFolder = transformFolder.addFolder("Rotation");
   this.xRotation = 0;
-  rotationFolder.add(this, "xRotation");
-  rotationFolder.add(this, "rotateX");
+  rotateFolder.add(this, "xRotation");
+  rotateFolder.add(this, "rotateX");
   this.yRotation = 0;
-  rotationFolder.add(this, "yRotation");
-  rotationFolder.add(this, "rotateY");
+  rotateFolder.add(this, "yRotation");
+  rotateFolder.add(this, "rotateY");
   this.zRotation = 0;
-  rotationFolder.add(this, "zRotation");
-  rotationFolder.add(this, "rotateZ");
-  var scaleFolder = transformationFolder.addFolder("Scale");
+  rotateFolder.add(this, "zRotation");
+  rotateFolder.add(this, "rotateZ");
+  var scaleFolder = transformFolder.addFolder("Scale");
   this.xScale = 1;
   scaleFolder.add(this, "xScale", 0);
   scaleFolder.add(this, "scaleX");
@@ -70,11 +70,14 @@ Stage.prototype.generateUI = function() {
   this.zScale = 1;
   scaleFolder.add(this, "zScale", 0);
   scaleFolder.add(this, "scaleZ");
-  var floorFolder = transformationFolder.addFolder("Floor");
+  this.allScale = 1;
+  scaleFolder.add(this, "allScale", 0);
+  scaleFolder.add(this, "scaleAll");
+  var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
   floorFolder.add(this, "floorZ");
-  var centerFolder = transformationFolder.addFolder("Center");
+  var centerFolder = transformFolder.addFolder("Center");
   centerFolder.add(this, "centerAll");
   centerFolder.add(this, "centerX");
   centerFolder.add(this, "centerY");
@@ -132,6 +135,8 @@ Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotatio
 Stage.prototype.scaleX = function() { this.transform("scale","x",this.xScale); }
 Stage.prototype.scaleY = function() { this.transform("scale","y",this.yScale); }
 Stage.prototype.scaleZ = function() { this.transform("scale","z",this.zScale); }
+Stage.prototype.scaleAll = function() {
+  this.transform("scale","all",[this.allScale, this.allScale, this.allScale]); }
 Stage.prototype.floorX = function() { this.transform("floor","x",null); }
 Stage.prototype.floorY = function() { this.transform("floor","y",null); }
 Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
@@ -199,6 +204,7 @@ Stage.prototype.initViewport = function() {
     );
 
     _this.measurement = new Measurement(_this.scene, _this.camera, _this.container);
+    _this.measurement.setOutput(_this.infoBox);
 
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);

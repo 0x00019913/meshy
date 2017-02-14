@@ -68,7 +68,6 @@ Measurement = function(scene, camera, domElement) {
 }
 
 Measurement.prototype.activate = function(type) {
-  console.log("activate");
   if (this.active) return;
   this.active = true;
 
@@ -109,6 +108,8 @@ Measurement.prototype.deactivate = function() {
 
   this.pointer.removeClickCallback(this.callbackIdx);
   this.pointer.active = false;
+
+  this.output.hideMeasurementOutput();
 }
 
 // accepts an intersection object returned by THREE.Raycaster
@@ -155,18 +156,18 @@ Measurement.prototype.onClick = function(intersection) {
     var v3 = this.markers[this.markerIdx].position;
     switch(this.type) {
       case "segmentLength":
-        result = new THREE.Vector3().subVectors(v1,v2).length();
+        result = { length: new THREE.Vector3().subVectors(v1,v2).length() };
         break;
       case "angle":
         var d1 = v2.clone().sub(v1).normalize();
         var d2 = v2.clone().sub(v3).normalize();
-        result = Math.acos(d1.dot(d2)) * 180 / Math.PI;
+        result = { angle: Math.acos(d1.dot(d2)) * 180 / Math.PI };
         break;
       case "radius":
         var circle = this.calculateCircle(v1, v2, v3);
         if (!circle) console.log("Error: couldn't calculate circle.");
         this.setCircleConnector(circle);
-        result = circle.r;
+        result = { radius: circle.r, circumference: circle.r*Math.PI*2 };
         break;
       case "arcLength":
         var circle = this.calculateCircle(v1, v2, v3);
@@ -177,11 +178,11 @@ Measurement.prototype.onClick = function(intersection) {
         var dc3 = circle.center.clone().sub(v3).normalize();
         var theta12 = Math.acos(dc1.dot(dc2));
         var theta23 = Math.acos(dc2.dot(dc3));
-        var result = circle.r * (theta12+theta23);
+        var result = { arcLength: circle.r * (theta12+theta23) };
         break;
     }
 
-    console.log(result);
+    this.showOutput(result);
   }
 
   this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
@@ -260,5 +261,18 @@ Measurement.prototype.setScale = function(scale) {
   this.pointer.setScale(scale);
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].scale.set(scale, scale, scale);
+  }
+}
+
+Measurement.prototype.setOutput = function(output) {
+  this.output = output;
+}
+
+Measurement.prototype.showOutput = function(measurement) {
+  if (this.output) {
+    this.output.showMeasurement(measurement);
+  }
+  else {
+    console.log(measurement);
   }
 }

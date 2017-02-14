@@ -42,8 +42,12 @@ InfoBox = function() {
   document.body.appendChild(this.box);
 
   this.infoList = document.createElement("ul");
-  this.styleUL();
+  this.styleInfoList();
   this.box.appendChild(this.infoList);
+
+  this.measurementList = document.createElement("ul");
+  this.styleMeasurementList();
+  this.box.appendChild(this.measurementList);
 
   this.items = [];
 
@@ -111,6 +115,38 @@ InfoBox.prototype.createLine = function(title) {
   this.infoList.appendChild(li);
 
   return liValue;
+}
+
+// can be more monolithic than the general format because the measurement
+// is displayed at once and completely replaced on update
+InfoBox.prototype.showMeasurement = function(measurement) {
+  this.showMeasurementOutput();
+  var li = document.createElement("li");
+  this.styleLI(li);
+  var liTitle = document.createElement("span");
+  this.styleLITitle(liTitle);
+  liTitle.textContent = "Measurement:";
+  li.appendChild(liTitle);
+  this.measurementList.appendChild(li);
+
+  for (var key in measurement) {
+    li = document.createElement("li");
+    this.styleLI(li);
+
+    liTitle = document.createElement("span");
+    this.styleLITitle(liTitle);
+    liTitle.textContent = key;
+
+    li.appendChild(liTitle);
+
+    var liValue = document.createElement("span");
+    this.styleLIValue(liValue);
+    liValue.textContent = this.formatNumber(measurement[key]);
+
+    li.appendChild(liValue);
+
+    this.measurementList.appendChild(li);
+  }
 }
 
 InfoBox.prototype.update = function() {
@@ -193,11 +229,31 @@ InfoBox.prototype.styleBox = function() {
   this.box.style.textShadow = "0 -1px 0 #111";
 }
 
-InfoBox.prototype.styleUL = function() {
+InfoBox.prototype.styleInfoList = function() {
   this.infoList.style.width = "100%";
   this.infoList.style.height = "auto";
   this.infoList.style.margin = "0";
   this.infoList.style.padding = "0";
+}
+
+InfoBox.prototype.styleMeasurementList = function() {
+  this.measurementList.style.boxSizing = "border-box";
+  this.measurementList.style.display = "none";
+  this.measurementList.style.width = "100%";
+  this.measurementList.style.height = "auto";
+  this.measurementList.style.margin = "0";
+  this.measurementList.style.padding = "0";
+  this.measurementList.style.border = "1px solid #8adeff"
+}
+InfoBox.prototype.hideMeasurementOutput = function() {
+  this.measurementList.style.display = "none";
+  // clear the measurement box
+  this.measurementList.textContent = "";
+}
+InfoBox.prototype.showMeasurementOutput = function() {
+  this.measurementList.style.display = "block";
+  // clear the measurement box
+  this.measurementList.textContent = "";
 }
 
 InfoBox.prototype.styleLI = function(listItem) {
