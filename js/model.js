@@ -1,6 +1,8 @@
 function Model() {
   // internal geometry
   this.triangles = [];
+  this.vertices = [];
+  this.vertexNormals = [];
   this.count = 0;
   //store header to export back out identically
   this.header = null;
@@ -352,6 +354,8 @@ Model.prototype.save = function() {
       offset += 12;
     }
 
+    // the "attribute byte count" should be set to 0 according to
+    // https://en.wikipedia.org/wiki/STL_(file_format)
     dv.setUint8(offset, 0);
     dv.setUint8(offset+1, 0);
 
@@ -386,53 +390,156 @@ Model.prototype.save = function() {
 Model.prototype.upload = function(file, callback) {
   this.filename = file.name;
   this.byteSize = file.size;
-  var _this = this;
+  var nameComponents = file.name.split(".");
+  this.format = nameComponents[nameComponents.length-1].toLowerCase();
 
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
     try {
-      parseArray(fr.result);
+      parseResult(fr.result);
       success = true;
     } catch(e) {
-      console.log("error uploading");
+      console.log("error uploading: ", e);
     }
     callback(success);
   };
-  fr.readAsArrayBuffer(file);
+  if (this.format=="stl") fr.readAsArrayBuffer(file);
+  else if (this.format=="obj") fr.readAsText(file);
 
-  var parseArray = function(array) {
-    // mimicking
-    // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
-    _this.header = array.slice(0, 80); // store header
+  var _this = this;
 
-    var dv = new DataView(array, 80);
-    var isLittleEndian = _this.isLittleEndian;
+  var parseResult = function(result) {
+    if (_this.format=="stl") {
+      // mimicking
+      // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
+      _this.header = result.slice(0, 80); // store header
 
-    var offset = 4;
-    var n = dv.getUint32(0, isLittleEndian);
-    for (var tri=0; tri<n; tri++) {
-      var triangle = new Triangle();
+      var dv = new DataView(result, 80);
+      var isLittleEndian = _this.isLittleEndian;
 
-      triangle.setNormal(getVector3(dv, offset, isLittleEndian));
-      offset += 12;
+      var offset = 4;
+      var n = dv.getUint32(0, isLittleEndian);
+      for (var tri=0; tri<n; tri++) {
+        var triangle = new Triangle();
 
-      for (var vert=0; vert<3; vert++) {
-        triangle.addVertex(getVector3(dv, offset, isLittleEndian));
+        triangle.setNormal(getVector3(dv, offset, isLittleEndian));
         offset += 12;
+
+        for (var vert=0; vert<3; vert++) {
+          triangle.addVertex(getVector3(dv, offset, isLittleEndian));
+          offset += 12;
+        }
+
+        // ignore "attribute byte count" (2 bytes)
+        offset += 2;
+        _this.add(triangle);
       }
 
-      // ignore "attribute byte count" (2 bytes)
-      offset += 2;
-      _this.add(triangle);
+      function getVector3(dv, offset, isLittleEndian) {
+        return new THREE.Vector3(
+          dv.getFloat32(offset, isLittleEndian),
+          dv.getFloat32(offset+4, isLittleEndian),
+          dv.getFloat32(offset+8, isLittleEndian)
+        );
+      }
     }
+    else if (_this.format=="obj") {
+      _this.count = 0;
+      var len = result.length;
+      var hasVertNormals = false;
+      var i = 0;
+      console.log(result);
+      while (i<len) {
+        var ch = result[i];
+        // if comment, skip to next line
+        if (ch=='#') {
+          skipToNextLine();
+        }
+        // if vertex, get vertex; relevant flags are 'v' and 'vn'
+        else if (ch=='v') {
+          i++;
+          ch = result[i];
+          // if vertex coords
+          if (ch==' ') {
+            i++;
+            var vertex = getVector3();
+            _this.vertices.push(vertex);
+          }
+          else if (ch=='n') {
+            i++;
+            var normal = getVector3().normalize();
+            _this.vertexNormals.push(normal);
+          }
+          // line could start with vt or vp; ignore these
+          else {
+            skipToNextLine();
+          }
+        }
+        else if (ch=='f') {
+          i++;
+          hasVertNormals = (_this.vertices.length==_this.vertexNormals.length);
+          var triangle = getTriangle();
+          _this.add(triangle);
+        }
+        // ignore other line starting flags
+        else {
+          skipToNextLine();
+        }
+      }
 
-    function getVector3(dv, offset, isLittleEndian) {
-      return new THREE.Vector3(
-        dv.getFloat32(offset, isLittleEndian),
-        dv.getFloat32(offset+4, isLittleEndian),
-        dv.getFloat32(offset+8, isLittleEndian)
-      );
+      // finds the next instance of char c and puts the index after it;
+      // optionally calls a function fn on each character (intended use
+      // case is accumulating every character the function sees)
+      function skipChars(cs, fn) {
+        do {
+          if (fn) fn(result[i]);
+          i++;
+        } while (!charInStr(result[i], cs) && i<len);
+        i++;
+      }
+      function skipToNextLine() { skipChars('\n'); }
+      function charInStr(c, s) { return s.indexOf(result[i])>-1; }
+      function getVector3() {
+        var vector = new THREE.Vector3();
+        // read off three numbers
+        for (var j=0; j<3; j++) {
+          var num = "";
+          skipChars(' \n', function(c) { num+=c; })
+          vector.setComponent(j, parseFloat(num));
+          num = "";
+        }
+        return vector;
+      }
+      function getTriangle() {
+        var triangle = new Triangle();
+        var indices = [];
+        for (var j=0; j<3; j++) {
+          var idx = "";
+          skipChars(' \n', function(c) { idx+=c; });
+          var slashPos = idx.indexOf('/');
+          if (slashPos>-1) idx = idx.slice(0,slashPos);
+          idx--; // OBJ indices are 1-based, plus this turns idx (string) to int
+          triangle.addVertex(_this.vertices[idx]);
+          indices.push(idx);
+        }
+        // average vertex normals (if available) or calculate via x-product
+        var normal = new THREE.Vector3();
+        if (hasVertNormals) {
+          for (var j=0; j<3; j++) normal.add(_this.normals[indices[j]]);
+        }
+        else {
+          var d01 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[1]);
+          var d02 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[2]);
+          normal.crossVectors(d01, d02);
+        }
+        normal.normalize();
+        triangle.setNormal(normal);
+        return triangle;
+      }
+    }
+    else {
+      console.log("The "+_this.format+" format is not supported.");
     }
   }
 }
