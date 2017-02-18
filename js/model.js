@@ -546,10 +546,10 @@ Model.prototype.upload = function(file, callback) {
           }
         }
         else if (ch=='f') {
-          i++;
+          i++; i++;
           hasVertNormals = (vertices.length==vertexNormals.length);
-          var triangle = getTriangle();
-          _this.add(triangle);
+          var triangles = getTriangles();
+          for (var tri=0; tri<triangles.length; tri++) _this.add(triangles[tri]);
         }
         // ignore other line starting flags
         else {
@@ -580,31 +580,60 @@ Model.prototype.upload = function(file, callback) {
         }
         return vector;
       }
-      function getTriangle() {
-        var triangle = new Triangle();
-        var indices = [];
-        for (var j=0; j<3; j++) {
-          var idx = "";
-          skipChars(' \n', function(c) { idx+=c; });
-          var slashPos = idx.indexOf('/');
-          if (slashPos>-1) idx = idx.slice(0,slashPos);
-          idx--; // OBJ indices are 1-based, plus this turns idx (string) to int
-          triangle.addVertex(vertices[idx]);
-          indices.push(idx);
+      function getTriangles() {
+        var triangles = [];
+        // array of 3-element arrays indicating the vertex indices for each tri
+        var triIndices = [];
+
+        var idxString = "";
+        // take entire line of indices till newline
+        skipChars('\n', function(c) { idxString+=c; });
+        // split line of vertex indices, trim off any '/'-delimited UVs/normals
+        var polyIndices = idxString.split(' ');
+        polyIndices = polyIndices.map(function(s) {
+          var slashIdx = s.indexOf('/');
+          return slashIdx==-1 ? (s-1) : (s.substr(0, slashIdx))-1;
+        });
+
+        // if the face is a tri, just one set of 3 indices
+        if (polyIndices.length==3) {
+          triIndices.push(polyIndices);
         }
-        // average vertex normals (if available) or calculate via x-product
-        var normal = new THREE.Vector3();
-        if (hasVertNormals) {
-          for (var j=0; j<3; j++) normal.add(_this.normals[indices[j]]);
+        // if a quad, need to triangulate - pick closest corners to make new edge
+        else if (polyIndices.length==4) {
+          var v = new THREE.Vector3();
+          var d02 = v.subVectors(vertices[polyIndices[0]], vertices[polyIndices[2]]).length();
+          var d13 = v.subVectors(vertices[polyIndices[1]], vertices[polyIndices[3]]).length();
+          if (d02<d13) {
+            triIndices.push([polyIndices[0],polyIndices[1],polyIndices[2]]);
+            triIndices.push([polyIndices[0],polyIndices[2],polyIndices[3]]);
+          }
+          else {
+            triIndices.push([polyIndices[0],polyIndices[1],polyIndices[3]]);
+            triIndices.push([polyIndices[3],polyIndices[1],polyIndices[2]]);
+          }
         }
-        else {
-          var d01 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[1]);
-          var d02 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[2]);
-          normal.crossVectors(d01, d02);
+        for (var tri=0; tri<triIndices.length; tri++) {
+          triangles.push(new Triangle());
+          var triangle = triangles[tri];
+          for (var j=0; j<3; j++) {
+            triangle.addVertex(vertices[triIndices[tri][j]].clone());  
+          }
+
+          // average vertex normals (if available) or calculate via x-product
+          var normal = new THREE.Vector3();
+          if (hasVertNormals) {
+            for (var j=0; j<3; j++) normal.add(vertexNormals[triIndices[tri][j]]);
+          }
+          else {
+            var d01 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[1]);
+            var d02 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[2]);
+            normal.crossVectors(d01, d02);
+          }
+          normal.normalize();
+          triangle.setNormal(normal);
         }
-        normal.normalize();
-        triangle.setNormal(normal);
-        return triangle;
+        return triangles;
       }
     }
   }
