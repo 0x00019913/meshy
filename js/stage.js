@@ -34,7 +34,10 @@ Stage = function() {
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "upload");
-  this.gui.add(this, "save");
+
+  var saveFolder = this.gui.addFolder("Export");
+  saveFolder.add(this, "exportOBJ");
+  saveFolder.add(this, "exportSTL");
 
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
@@ -124,6 +127,9 @@ Stage.prototype.transform = function(op, axis, amount) {
   this.undoStack.push(inv);
   transform.apply();
 }
+
+Stage.prototype.exportOBJ = function() { this.save("obj"); }
+Stage.prototype.exportSTL = function() { this.save("stl"); }
 
 Stage.prototype.undo = function() { this.undoStack.undo(); }
 
@@ -324,13 +330,13 @@ Stage.prototype.handleFile = function(file) {
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
-Stage.prototype.save = function() {
+Stage.prototype.save = function(format) {
   if (!this.model) {
     console.log("No model exists.");
     return;
   }
 
-  this.model.save();
+  this.model.save(format);
 }
 
 Stage.prototype.delete = function() {

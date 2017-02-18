@@ -1,15 +1,13 @@
 function Model() {
   // internal geometry
-  this.triangles = [];
-  this.vertices = [];
-  this.vertexNormals = [];
+  this.triangles = []; // the only array required for rendering and calculations
   this.count = 0;
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
   this.filename = "";
   // total size of the buffer in bytes
-  this.byteSize = 0;
+  this.stlSize = 0;
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
@@ -56,6 +54,17 @@ Model.prototype.updateBounds = function(triangle) {
   this.ymax = triangle.ymax>this.ymax ? triangle.ymax : this.ymax;
   this.zmin = triangle.zmin<this.zmin ? triangle.zmin : this.zmin;
   this.zmax = triangle.zmax>this.zmax ? triangle.zmax : this.zmax;
+}
+
+Model.prototype.getBounds = function() {
+  return {
+    xmin: this.xmin,
+    xmax: this.xmax,
+    ymin: this.ymin,
+    ymax: this.ymax,
+    zmin: this.zmin,
+    zmax: this.zmax
+  };
 }
 
 Model.prototype.getCenter = function() {
@@ -277,7 +286,7 @@ Model.prototype.positionTargetPlanes = function(point) {
 Model.prototype.render = function(scene, mode) {
   this.scene = scene;
   if (mode == "plain") {
-    this.renderPlainModel(scene);
+    this.makePlainModel(scene);
     this.currentMesh = this.plainMesh;
   }
   else if (mode == "sliced") {
@@ -289,7 +298,7 @@ Model.prototype.render = function(scene, mode) {
   }
 }
 
-Model.prototype.renderPlainModel = function(scene) {
+Model.prototype.makePlainModel = function(scene) {
   if (this.plainMesh) return;
   /* set up camera, put in model */
   var geo = new THREE.Geometry();
@@ -327,51 +336,111 @@ Model.prototype.renderSlicedModel = function(scene) {
   scene.add(this.slicedMesh);
 }
 
-Model.prototype.save = function() {
-  var array = new ArrayBuffer(this.byteSize);
-  var offset = 0;
-  var dv = new DataView(array);
+Model.prototype.save = function(format) {
   var isLittleEndian = this.isLittleEndian;
+  var _this = this;
+  var blob;
+  var name;
 
-  // I can't figure out a better way of transferring the header bytes to the
-  // new array than by using the DataView API and copying them one by one
-  var dvHeader = new DataView(this.header);
-  for (offset=0; offset<80; offset++) {
-    var ch = dvHeader.getUint8(offset);
-    dv.setUint8(offset, ch);
-  }
-
-  dv.setUint32(offset, this.count, isLittleEndian);
-  offset += 4;
-  for (var tri=0; tri<this.count; tri++) {
-    var triangle = this.triangles[tri];
-
-    setVector3(dv, offset, triangle.normal, isLittleEndian);
-    offset += 12;
-
-    for (var vert=0; vert<3; vert++) {
-      setVector3(dv, offset, triangle.vertices[vert], isLittleEndian);
-      offset += 12;
+  if (format=="stl") {
+    // this isn't set if we imported a non-STL format
+    if (!this.stlSize) this.stlSize = 84 + 50 * this.count;
+    var array = new ArrayBuffer(this.stlSize);
+    var offset = 0;
+    var dv = new DataView(array);
+    // I can't figure out a better way of transferring the header bytes to the
+    // new array than by using the DataView API and copying them one by one
+    if (!this.header) this.header = new ArrayBuffer(80);
+    var dvHeader = new DataView(this.header);
+    for (offset=0; offset<80; offset++) {
+      var ch = dvHeader.getUint8(offset);
+      dv.setUint8(offset, ch);
     }
 
-    // the "attribute byte count" should be set to 0 according to
-    // https://en.wikipedia.org/wiki/STL_(file_format)
-    dv.setUint8(offset, 0);
-    dv.setUint8(offset+1, 0);
+    dv.setUint32(offset, this.count, isLittleEndian);
+    offset += 4;
+    for (var tri=0; tri<this.count; tri++) {
+      var triangle = this.triangles[tri];
 
-    offset += 2;
+      setVector3(dv, offset, triangle.normal, isLittleEndian);
+      offset += 12;
+
+      for (var vert=0; vert<3; vert++) {
+        setVector3(dv, offset, triangle.vertices[vert], isLittleEndian);
+        offset += 12;
+      }
+
+      // the "attribute byte count" should be set to 0 according to
+      // https://en.wikipedia.org/wiki/STL_(file_format)
+      dv.setUint8(offset, 0);
+      dv.setUint8(offset+1, 0);
+
+      offset += 2;
+    }
+
+    function setVector3(dv, offset, vector, isLittleEndian) {
+      dv.setFloat32(offset, vector.x, isLittleEndian);
+      dv.setFloat32(offset+4, vector.y, isLittleEndian);
+      dv.setFloat32(offset+8, vector.z, isLittleEndian);
+    }
+
+    blob = new Blob([dv]);
+    name = this.filename+".stl";
+  }
+  else if (format=="obj") {
+    var fullOut = "";
+    var comment = "";
+    var verticesOut = "";
+    var facesOut = "";
+
+    var vertices = [];
+    var arrayBuilder = new Vector3ArrayBuilder(8, this.getBounds(), vertices);
+
+    // go through the faces, simultaneously building vertices
+    for (var tri=0; tri<this.count; tri++) {
+      var line = "f";
+      var triangle = this.triangles[tri];
+      for (var vert=0; vert<3; vert++) {
+        var vertex = triangle.vertices[vert];
+        var idx = arrayBuilder.vIdx(vertex);
+        line += " " + (idx+1);
+      }
+      line += "\n";
+      facesOut += line;
+    }
+
+    for (var vert=0; vert<vertices.length; vert++) {
+      var line = "v";
+      var vertex = vertices[vert];
+      for (var comp=0; comp<3; comp++) line += " " + vertex.getComponent(comp).toFixed(6);
+      line += "\n";
+      verticesOut += line;
+    }
+
+    // comment and construct the output
+    fullOut = "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
+    fullOut += "# NB: this file only stores faces and vertex positions. \n";
+    fullOut += "# vertices: \n";
+    fullOut += verticesOut;
+    fullOut += "# faces: \n";
+    fullOut += facesOut;
+
+    blob = new Blob([fullOut], { type: 'text/plain' });
+    name = this.filename+".obj";
+  }
+  else {
+    console.log("Error: exporting format '"+format+"' is not supported.");
+    return;
   }
 
-  var blob = new Blob([dv]);
   var a = document.createElement("a");
-
   if (window.navigator.msSaveOrOpenBlob) { // IE :(
-    window.navigator.msSaveOrOpenBlob(blob, this.filename);
+    window.navigator.msSaveOrOpenBlob(blob, name);
   }
   else {
     var url = URL.createObjectURL(blob);
     a.href = url;
-    a.download = this.filename;
+    a.download = name;
     document.body.appendChild(a);
     a.click();
     setTimeout(function() {
@@ -379,19 +448,12 @@ Model.prototype.save = function() {
       window.URL.revokeObjectURL(url);
     });
   }
-
-  function setVector3(dv, offset, vector, isLittleEndian) {
-    dv.setFloat32(offset, vector.x, isLittleEndian);
-    dv.setFloat32(offset+4, vector.y, isLittleEndian);
-    dv.setFloat32(offset+8, vector.z, isLittleEndian);
-  }
 }
 
 Model.prototype.upload = function(file, callback) {
-  this.filename = file.name;
-  this.byteSize = file.size;
-  var nameComponents = file.name.split(".");
-  this.format = nameComponents[nameComponents.length-1].toLowerCase();
+  var fSplit = splitFilename(file.name);
+  this.filename = fSplit.name;
+  this.format = fSplit.extension;
 
   fr = new FileReader();
   fr.onload = function() {
@@ -406,11 +468,17 @@ Model.prototype.upload = function(file, callback) {
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
   else if (this.format=="obj") fr.readAsText(file);
+  else {
+    var error = "Error: format '"+this.format+"' is not supported.";
+    console.log(error);
+    callback(false);
+  }
 
   var _this = this;
 
   var parseResult = function(result) {
     if (_this.format=="stl") {
+      this.stlSize = file.size;
       // mimicking
       // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
       _this.header = result.slice(0, 80); // store header
@@ -448,8 +516,9 @@ Model.prototype.upload = function(file, callback) {
       _this.count = 0;
       var len = result.length;
       var hasVertNormals = false;
+      var vertices = [];
+      var vertexNormals = [];
       var i = 0;
-      console.log(result);
       while (i<len) {
         var ch = result[i];
         // if comment, skip to next line
@@ -464,12 +533,12 @@ Model.prototype.upload = function(file, callback) {
           if (ch==' ') {
             i++;
             var vertex = getVector3();
-            _this.vertices.push(vertex);
+            vertices.push(vertex);
           }
           else if (ch=='n') {
             i++;
             var normal = getVector3().normalize();
-            _this.vertexNormals.push(normal);
+            vertexNormals.push(normal);
           }
           // line could start with vt or vp; ignore these
           else {
@@ -478,7 +547,7 @@ Model.prototype.upload = function(file, callback) {
         }
         else if (ch=='f') {
           i++;
-          hasVertNormals = (_this.vertices.length==_this.vertexNormals.length);
+          hasVertNormals = (vertices.length==vertexNormals.length);
           var triangle = getTriangle();
           _this.add(triangle);
         }
@@ -520,7 +589,7 @@ Model.prototype.upload = function(file, callback) {
           var slashPos = idx.indexOf('/');
           if (slashPos>-1) idx = idx.slice(0,slashPos);
           idx--; // OBJ indices are 1-based, plus this turns idx (string) to int
-          triangle.addVertex(_this.vertices[idx]);
+          triangle.addVertex(vertices[idx]);
           indices.push(idx);
         }
         // average vertex normals (if available) or calculate via x-product
@@ -538,13 +607,11 @@ Model.prototype.upload = function(file, callback) {
         return triangle;
       }
     }
-    else {
-      console.log("The "+_this.format+" format is not supported.");
-    }
   }
 }
 
 Model.prototype.deleteGeometry = function() {
+  if (!this.scene) return;
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];
     if (child.name=="model" || child.name=="targetPlane") {

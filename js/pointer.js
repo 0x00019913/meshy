@@ -66,6 +66,15 @@ Pointer = function(scene, camera, domElement) {
   }
 }
 
+Pointer.prototype.activate = function() {
+  this.active = true;
+}
+
+Pointer.prototype.deactivate = function() {
+  this.active = false;
+  this.cursor.visible = false;
+}
+
 Pointer.prototype.setScale = function(scale) {
   this.scale = scale;
   this.cursor.scale.set(scale, scale, scale);
