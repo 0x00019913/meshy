@@ -1,6 +1,13 @@
 body, html {
   padding: 0;
   margin: 0;
+  overflow: hidden;
+}
+
+p {
+  font-family: 'Open Sans', sans-serif;
+  font-size: 13px;
+  color: #dddddd;
 }
 
 #uploadbox {
@@ -30,6 +37,7 @@ body, html {
 }
 
 #titlebox {
+  z-index: 10;
   width: 90px;
   padding: 0;
   margin-left: -45px;
@@ -50,14 +58,24 @@ body, html {
   font-family: 'Crete Round', sans-serif;
   font-size: 20px;
   color: #dddddd;
-  padding: 5px;
+  padding: 5px 5px 0 5px;
   line-height: 100%;
   display: block;
   text-align: center;
 }
-#titlebox img {
+
+#titleChevron {
+  height: 24px;
+  width: 24px;
   margin-left: 33px;
   display: block;
+  transition: background-image 300ms ease;
+}
+.down {
+  background-image: url("../img/chevron_down.png");
+}
+.up {
+  background-image: url("../img/chevron_up.png");
 }
 
 #infobox {
@@ -71,6 +89,34 @@ body, html {
 
 #infobox ul {
 
+}
+
+#intro {
+  z-index: 5;
+  position: absolute;
+  top: 0;
+  left: 50%;
+  margin-left: -350px;
+  background-color: rgba(0, 0, 0, .2);
+  padding: 0 30px;
+  width: 640px;
+  height: 100%;
+  overflow-y: auto;
+  line-height: 150%;
+  transition: visibility 300ms, opacity 300ms ease, margin-top 300ms ease;
+  -webkit-transition: visibility 300ms, opacity 300ms ease, margin-top 300ms ease;
+}
+
+#intro.active {
+  visibility: visible;
+  margin-top: 0;
+  opacity: 1;
+}
+
+#intro.inactive {
+  visibility: hidden;
+  margin-top: -50px;
+  opacity: 0;
 }
 
 #container {

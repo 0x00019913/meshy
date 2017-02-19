@@ -2,7 +2,7 @@
   <head>
     <title>Meshy Index</title>
     <link rel="stylesheet" type="text/css" href="css/style.css">
-    <link href="https://fonts.googleapis.com/css?family=Crete+Round|Poiret+One" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Crete+Round|Open+Sans" rel="stylesheet">
 
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
@@ -12,7 +12,30 @@
     <input type="file" id="file" onchange="stage.handleFile(this.files[0])">
     <div id="titlebox">
       <span>meshy</span>
-      <img src="img/chevron.png" />
+      <div id="titleChevron" class="down"></div>
+    </div>
+    <div id="intro" class="inactive">
+      <p>This is Meshy.</p>
+
+      <p><b>Motivation:</b></p>
+
+      <p>I have, more than once, found myself in need of a simple (and free and accessible) tool for performing measurements and calculations on digital meshes (standard use case is 3D printing, e.g., jewelry). Existing tools struck me as bothersome and aesthetically meh, hence this project.</p>
+
+      <p><b>Features:</b> (under development, will add more)</p>
+
+      <p>OBJ and STL imports/exports; calculation of surface area, volume, center of mass (with a position indicator widget); translations, rotations, scaling, floor, center; measurement of segment length, segment angle, circle radius and circumference, arc length.</p>
+
+      <p><b>Limitations:</b></p>
+
+      <p>Only tested in Chrome and Firefox. Will work in the most recent versions. Only one model at a time; delete the current model to upload a new one. Only actions under the "Transform" tab are undoable. Not mobile-enabled and probably never will be. Can't change the mesh material (yet). File size limits depend on your system and browser; I think it's best to stay under 50MB. If the page hangs, the file's too big.</p>
+
+      <p><b>Bugs:</b></p>
+
+      <p>Probably. :( See the console (F12 key in Chrome and Firefox) for specifics of an error. Please email any relevant information to 0x00019913@gmail.com if interested in further development. Merci beaucoup in advance. :D</p>
+
+      <p><b>TODO:</b></p>
+
+      <p>Calculating cross-sectional area in any axis (should be easy), mesh decimation, mesh repair, mesh slicing visualization. Presently, the internal data repersentation is a triangle soup where the vertex objects are not shared between faces (originally, I only imported STLs and this is how they're structured); I think the memory and time performance can be improved by a factor of 3-ish by feeding the representation off an array of unique vertices and keeping a two-way reference that points from vertices to the faces that contain them (necessary because each triangle needs to keep track of its bounds and other data, which factors into a lot of optimization). An added advantage would be that this natively corresponds to both STL and OBJ representations.</p>
     </div>
     <div id="container"></div>
     <div id="axes"></div>
