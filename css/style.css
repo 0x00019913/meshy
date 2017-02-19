@@ -30,8 +30,9 @@ body, html {
 }
 
 #titlebox {
+  width: 90px;
   padding: 0;
-  margin: 0;
+  margin-left: -45px;
   position: absolute;
   left: 50%;
   top: 0;
@@ -41,18 +42,22 @@ body, html {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: default;
+  text-align: center;
 }
 
 #titlebox span {
-  position: relative;
-  left: -50%;
+  width: 80px;
   font-family: 'Crete Round', sans-serif;
   font-size: 20px;
   color: #dddddd;
   padding: 5px;
-  margin: 0;
   line-height: 100%;
-  display: inline-block;
+  display: block;
+  text-align: center;
+}
+#titlebox img {
+  margin-left: 33px;
+  display: block;
 }
 
 #infobox {
