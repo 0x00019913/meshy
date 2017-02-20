@@ -1,4 +1,6 @@
-function Transform(op, axis, amount, model) {
+function Transform(op, axis, amount, model, printout) {
+  this.printout = printout ? printout : console;
+
   if (!model) {
     this.op = "noop";
     this.reason = "Model doesn't exist."
@@ -85,7 +87,7 @@ Transform.prototype = {
   apply: function() {
     switch (this.op) {
       case "noop":
-        console.log("Error: no-op. Reason: ", this.reason);
+        this.printout.log("error: no-op; reason: ", this.reason);
         return;
       case "translate":
         if (this.axis=="all") {
@@ -127,7 +129,7 @@ Transform.prototype = {
 
   /* Intended pattern for dynamic updates (not using because updating in
       real time in WebGL is slow for large meshes):
-    // in UI setup
+    // in UI setup using dat.gui
     this.xOffset = 0;
     this.xOffsetPrev = this.xOffset;
     translationFolder.add(this, "xOffset", -50, 50).onChange(this.translateXDynamic.bind(this).onFinishChange(this.endTranslateXDynamic.bind(this));
@@ -164,7 +166,8 @@ Transform.prototype = {
 
 }
 
-function UndoStack() {
+function UndoStack(printout) {
+  this.printout = printout ? printout : console;
   // stack of inverse transformations
   this.history = []
 }
@@ -174,7 +177,7 @@ UndoStack.prototype = {
 
   undo: function() {
     if (this.history.length==0) {
-      console.log("No more undo history available.");
+      this.printout.warn("No undo history available.");
       return;
     }
     var inv = this.history.pop();

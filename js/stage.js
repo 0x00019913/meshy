@@ -23,9 +23,10 @@ Stage = function() {
   this.renderer = null;
   this.axisWidget = null;
   this.measurement = null;
+  this.printout = new Printout();
 
   // undo stack
-  this.undoStack = new UndoStack();
+  this.undoStack = new UndoStack(this.printout);
 
   // UI
   this.generateUI();
@@ -34,6 +35,7 @@ Stage = function() {
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "upload");
+  this.gui.add(this, "undo");
 
   var saveFolder = this.gui.addFolder("Export");
   saveFolder.add(this, "exportOBJ");
@@ -100,7 +102,6 @@ Stage.prototype.generateUI = function() {
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
-  this.gui.add(this, "undo");
   this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
@@ -122,7 +123,7 @@ Stage.prototype.updateUI = function() {
 }
 
 Stage.prototype.transform = function(op, axis, amount) {
-  var transform = new Transform(op, axis, amount, this.model);
+  var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
   this.undoStack.push(inv);
   transform.apply();
@@ -210,7 +211,7 @@ Stage.prototype.initViewport = function() {
       }
     );
 
-    _this.measurement = new Measurement(_this.scene, _this.camera, _this.container);
+    _this.measurement = new Measurement(_this.scene, _this.camera, _this.container, _this.printout);
     _this.measurement.setOutput(_this.infoBox);
 
     var pointLight = new THREE.PointLight(0xffffff, 3);
@@ -315,7 +316,7 @@ Stage.prototype.initFloor = function() {
 
 Stage.prototype.upload = function() {
   if (this.model) {
-    console.log("A model already exists.");
+    this.printout.warn("A model is already loaded; delete the current model to upload a new one.");
     return;
   }
 
@@ -325,14 +326,14 @@ Stage.prototype.upload = function() {
 }
 
 Stage.prototype.handleFile = function(file) {
-  this.model = new Model();
+  this.model = new Model(this.printout);
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
 Stage.prototype.save = function(format) {
   if (!this.model) {
-    console.log("No model exists.");
+    this.printout.warn("No model to save.");
     return;
   }
 
@@ -343,17 +344,19 @@ Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks uploading
   // a model with the same name twice in a row
   this.fileInput.value = "";
-  this.measurement.deactivate();
 
+  this.measurement.deactivate();
   if (this.model) {
     this.model.deleteGeometry();
   }
   else {
-    console.log("No model to delete.");
+    this.printout.warn("No model to delete.");
     return;
   }
   this.model = null;
   this.undoStack.clear();
+
+  this.printout.log("Model deleted.");
 }
 
 Stage.prototype.displayMesh = function(success) {
@@ -368,7 +371,7 @@ Stage.prototype.displayMesh = function(success) {
 
 Stage.prototype.cameraToModel = function() {
   if (!this.model) {
-    console.log("No model.");
+    this.printout.warn("No model to align camera.");
     return;
   }
   var center = this.model.getCenter();

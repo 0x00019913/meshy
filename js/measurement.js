@@ -1,7 +1,8 @@
-Measurement = function(scene, camera, domElement) {
+Measurement = function(scene, camera, domElement, printout) {
   this.type = null;
   this.measurementPoints = 0;
   this.pointer = new Pointer(scene, camera, domElement);
+  this.printout = printout ? printout : console;
   this.scene = scene;
   this.active = false;
 
@@ -165,13 +166,13 @@ Measurement.prototype.onClick = function(intersection) {
         break;
       case "radius":
         var circle = this.calculateCircle(v1, v2, v3);
-        if (!circle) console.log("Error: couldn't calculate circle.");
+        if (!circle) this.printout.error("couldn't calculate circle, try again");
         this.setCircleConnector(circle);
         result = { radius: circle.r, circumference: circle.r*Math.PI*2 };
         break;
       case "arcLength":
         var circle = this.calculateCircle(v1, v2, v3);
-        if (!circle) console.log("Error: couldn't calculate circle.");
+        if (!circle) this.printout.log("couldn't calculate circle, try again");
         this.setCircleConnector(circle);
         var dc1 = circle.center.clone().sub(v1).normalize();
         var dc2 = circle.center.clone().sub(v2).normalize();
@@ -238,7 +239,7 @@ Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   // Picking a random one doesn't make sense, and, as they should be almost
   // identical, the mean should be very close to the right answer (and, given
   // many measurements, should equal the right answer on average).
-  if (centers.length==0) console.log("Error: couldn't calculate center, try again.");
+  if (centers.length==0) this.printout.error("couldn't calculate center, try again");
   else if (centers.length==1) center = centers[0];
   else if (centers.length==2) center = centers[0].add(centers[1]).multiplyScalar(1/2);
   else if (centers.length==3) center =
@@ -273,6 +274,6 @@ Measurement.prototype.showOutput = function(measurement) {
     this.output.showMeasurement(measurement);
   }
   else {
-    console.log(measurement);
+    this.printout.log(measurement);
   }
 }

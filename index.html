@@ -35,14 +35,14 @@
 
       <p><b>TODO:</b></p>
 
-      <p>Manually resizing the floor, calculating cross-sectional area in any axis (should be easy), mesh decimation, mesh repair, mesh slicing visualization. Presently, the internal data repersentation is a triangle soup where the vertex objects are not shared between faces (originally, I only imported STLs and this is how they're structured); I think the memory and time performance can be improved by a factor of 3-ish by feeding the representation off an array of unique vertices and keeping a two-way reference that points from vertices to the faces that contain them (necessary because, while it suffices to transform each vertex to apply a transformation, each triangle needs to keep track of its bounds and other data, which factors into a lot of optimization). An added advantage would be that this natively corresponds to both STL and OBJ representations. I've already set up an efficient way of doing this, it would just require a lot of rewriting.</p>
+      <p>Manually resizing the floor, calculating cross-sectional area in any axis (should be easy), mesh decimation, mesh repair, mesh slicing visualization. Presently, the internal data representation is a triangle soup where the vertex objects are not shared between faces (originally, I only imported STLs and this is how they're structured); I think the memory and time performance can be improved by a factor of 3-ish by feeding the representation off an array of unique vertices and keeping a two-way reference that points from vertices to the faces that contain them (necessary because, while it suffices to transform each vertex to apply a transformation, each triangle needs to keep track of its bounds and other data, which factors into a lot of optimization). An added advantage would be that this natively corresponds to both STL and OBJ representations. I've already set up an efficient way of doing this, it would just require a lot of rewriting.</p>
     </div>
     <div id="container"></div>
-    <div id="axes"></div>
 
     <script type="text/javascript" src='js/dat.gui.min.js'></script>
     <script src="js/three.min.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/printout.js"></script>
     <script src="js/vector3ArrayBuilder.js"></script>
     <script src="js/triangle.js"></script>
     <script src="js/model.js"></script>

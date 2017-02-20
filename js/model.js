@@ -1,4 +1,4 @@
-function Model() {
+function Model(printout) {
   // internal geometry
   this.triangles = []; // the only array required for rendering and calculations
   this.count = 0;
@@ -27,6 +27,7 @@ function Model() {
   this.plainMesh = null;
   this.slicedMesh = null;
   this.scene = null;
+  this.printout = printout ? printout : console;
   // three orthogonal planes that intersect at the center of the mesh
   this.targetPlanes = null;
   this.showCenterOfMass = false;
@@ -109,6 +110,7 @@ Model.prototype.getCOMz = function() {
 }
 
 Model.prototype.translate = function(axis, amount) {
+  this.printout.log("translation by "+amount+" units on "+axis+" axis");
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.translate(axis, amount);
@@ -129,6 +131,7 @@ Model.prototype.translate = function(axis, amount) {
 }
 
 Model.prototype.rotate = function(axis, amount) {
+  this.printout.log("rotation by "+amount+" degrees about "+axis+" axis");
   this.resetBounds();
   amount = amount*Math.PI/180.0;
   for (var i=0; i<this.count; i++) {
@@ -155,6 +158,7 @@ Model.prototype.axes = {
 }
 
 Model.prototype.scale = function (axis, amount) {
+  this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
     tri.scale(axis, amount);
@@ -178,6 +182,7 @@ Model.prototype.scale = function (axis, amount) {
 
 Model.prototype.toggleWireframe = function() {
   this.wireframe = !this.wireframe;
+  this.printout.log("wireframe is " + (this.wireframe ? "on" : "off"));
   if (this.plainMesh) {
     this.plainMesh.material.wireframe = this.wireframe;
   }
@@ -220,6 +225,7 @@ Model.prototype.calcCenterOfMass = function() {
 Model.prototype.toggleCenterOfMass = function() {
   this.calcCenterOfMass();
   this.showCenterOfMass = !this.showCenterOfMass;
+  this.printout.log("COM indicator is "+(this.showCenterOfMass ? "on" : "off"));
   var visible = this.showCenterOfMass;
   this.positionTargetPlanes(this.centerOfMass);
   this.scene.traverse(function(o) {
@@ -429,7 +435,7 @@ Model.prototype.save = function(format) {
     name = this.filename+".obj";
   }
   else {
-    console.log("Error: exporting format '"+format+"' is not supported.");
+    this.printout.error("Exporting format '"+format+"' is not supported.");
     return;
   }
 
@@ -448,6 +454,7 @@ Model.prototype.save = function(format) {
       window.URL.revokeObjectURL(url);
     });
   }
+  this.printout.log("Saved file '" + this.filename + "' as " + format.toUpperCase());
 }
 
 Model.prototype.upload = function(file, callback) {
@@ -455,26 +462,27 @@ Model.prototype.upload = function(file, callback) {
   this.filename = fSplit.name;
   this.format = fSplit.extension;
 
+  var _this = this;
+
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
     try {
       parseResult(fr.result);
       success = true;
+      _this.printout.log("Uploaded file: " + file.name);
     } catch(e) {
-      console.log("error uploading: ", e);
+      _this.printout.error("Error uploading: " + e);
     }
     callback(success);
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
   else if (this.format=="obj") fr.readAsText(file);
   else {
-    var error = "Error: format '"+this.format+"' is not supported.";
-    console.log(error);
+    var error = "Format '"+this.format+"' is not supported.";
+    this.printout.error(error);
     callback(false);
   }
-
-  var _this = this;
 
   var parseResult = function(result) {
     if (_this.format=="stl") {
@@ -617,7 +625,7 @@ Model.prototype.upload = function(file, callback) {
           triangles.push(new Triangle());
           var triangle = triangles[tri];
           for (var j=0; j<3; j++) {
-            triangle.addVertex(vertices[triIndices[tri][j]].clone());  
+            triangle.addVertex(vertices[triIndices[tri][j]].clone());
           }
 
           // average vertex normals (if available) or calculate via x-product
