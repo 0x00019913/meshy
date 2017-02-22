@@ -169,7 +169,7 @@ Transform.prototype = {
 function UndoStack(printout) {
   this.printout = printout ? printout : console;
   // stack of inverse transformations
-  this.history = []
+  this.history = [];
 }
 
 UndoStack.prototype = {

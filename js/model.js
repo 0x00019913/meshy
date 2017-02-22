@@ -1,4 +1,4 @@
-function Model(printout) {
+function Model(scene, camera, container, printout, infoOutput) {
   // internal geometry
   this.triangles = []; // the only array required for rendering and calculations
   this.count = 0;
@@ -26,11 +26,17 @@ function Model(printout) {
   this.currentMesh = null;
   this.plainMesh = null;
   this.slicedMesh = null;
-  this.scene = null;
+  this.scene = scene;
+  this.camera = camera;
+  this.container = container;
+  this.infoOutput = infoOutput;
   this.printout = printout ? printout : console;
   // three orthogonal planes that intersect at the center of the mesh
   this.targetPlanes = null;
   this.showCenterOfMass = false;
+
+  this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
+  this.measurement.setOutput(this.infoOutput);
 }
 
 Model.prototype.add = function(triangle) {
@@ -97,15 +103,15 @@ Model.prototype.getMinSize = function() {
   return Math.min(size[0], Math.min(size[1], size[2]));
 }
 Model.prototype.getCOMx = function() {
-  if (this.centerOfMass) return this.centerOfMass[0];
+  if (this.centerOfMass) return this.centerOfMass.x;
   return null;
 }
 Model.prototype.getCOMy = function() {
-  if (this.centerOfMass) return this.centerOfMass[1];
+  if (this.centerOfMass) return this.centerOfMass.y;
   return null;
 }
 Model.prototype.getCOMz = function() {
-  if (this.centerOfMass) return this.centerOfMass[2];
+  if (this.centerOfMass) return this.centerOfMass.z;
   return null;
 }
 
@@ -116,18 +122,18 @@ Model.prototype.translate = function(axis, amount) {
     tri.translate(axis, amount);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.plainMesh.geometry.normalsNeedUpdate = true;
   //transform bounds
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
 
   if (this.centerOfMass) {
     // transform center of mass
-    var vector3COM = new THREE.Vector3();
-    vector3COM.fromArray(this.centerOfMass);
-    vector3COM[axis] += amount;
-    this.centerOfMass = vector3COM.toArray();
-    this.positionTargetPlanes(this.centerOfMass);
+    this.centerOfMass[axis] += amount;
+    this.positionTargetPlanes(this.centerOfMass.toArray());
   }
+
+  this.measurement.translate(axis, amount);
 }
 
 Model.prototype.rotate = function(axis, amount) {
@@ -143,12 +149,11 @@ Model.prototype.rotate = function(axis, amount) {
   this.plainMesh.geometry.normalsNeedUpdate = true;
   if (this.centerOfMass) {
     // transform center of mass
-    var vector3COM = new THREE.Vector3();
-    vector3COM.fromArray(this.centerOfMass);
-    vector3COM.applyAxisAngle(this.axes[axis],amount);
-    this.centerOfMass = vector3COM.toArray();
-    this.positionTargetPlanes(this.centerOfMass);
+    this.centerOfMass.applyAxisAngle(this.axes[axis],amount);
+    this.positionTargetPlanes(this.centerOfMass.toArray());
   }
+
+  this.measurement.rotate(axis, amount);
 }
 // for turning "x" etc. into a normalized Vector3 along axis
 Model.prototype.axes = {
@@ -166,18 +171,18 @@ Model.prototype.scale = function (axis, amount) {
     tri.volume = null;
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.plainMesh.geometry.normalsNeedUpdate = true;
   this.surfaceArea = null;
   this.volume = null;
   this[axis+"min"] *= amount;
   this[axis+"max"] *= amount;
   if (this.centerOfMass) {
     // transform center of mass
-    var vector3COM = new THREE.Vector3();
-    vector3COM.fromArray(this.centerOfMass);
-    vector3COM[axis] *= amount;
-    this.centerOfMass = vector3COM.toArray();
-    this.positionTargetPlanes(this.centerOfMass);
+    this.centerOfMass[axis] *= amount;
+    this.positionTargetPlanes(this.centerOfMass.toArray());
   }
+
+  this.measurement.scale(axis, amount);
 }
 
 Model.prototype.toggleWireframe = function() {
@@ -219,7 +224,8 @@ Model.prototype.calcCenterOfMass = function() {
     center[2] += ((verts[0].z + verts[1].z + verts[2].z) / 4) * triVolume;
   }
   this.volume = modelVolume;
-  this.centerOfMass = center.map(function(x) {return x/modelVolume});
+  this.centerOfMass = new THREE.Vector3();
+  this.centerOfMass.fromArray(center).divideScalar(modelVolume);
 }
 
 Model.prototype.toggleCenterOfMass = function() {
@@ -227,7 +233,7 @@ Model.prototype.toggleCenterOfMass = function() {
   this.showCenterOfMass = !this.showCenterOfMass;
   this.printout.log("COM indicator is "+(this.showCenterOfMass ? "on" : "off"));
   var visible = this.showCenterOfMass;
-  this.positionTargetPlanes(this.centerOfMass);
+  this.positionTargetPlanes(this.centerOfMass.toArray());
   this.scene.traverse(function(o) {
     if (o.name == "targetPlane") o.visible = visible;
   });
@@ -251,6 +257,7 @@ Model.prototype.generateTargetPlanes = function() {
   for (var i=0; i<planeMeshes.length; i++) {
     planeMeshes[i].name = "targetPlane";
     planeMeshes[i].visible = false;
+    planeMeshes[i].frustumCulled = false;
     this.scene.add(planeMeshes[i]);
   }
 }
@@ -291,6 +298,8 @@ Model.prototype.positionTargetPlanes = function(point) {
 
 Model.prototype.render = function(scene, mode) {
   this.scene = scene;
+  this.measurement.setScale(this.getMaxSize() * 0.4);
+
   if (mode == "plain") {
     this.makePlainModel(scene);
     this.currentMesh = this.plainMesh;
@@ -342,11 +351,11 @@ Model.prototype.renderSlicedModel = function(scene) {
   scene.add(this.slicedMesh);
 }
 
-Model.prototype.save = function(format) {
+Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
   var _this = this;
   var blob;
-  var name;
+  var fname;
 
   if (format=="stl") {
     // this isn't set if we imported a non-STL format
@@ -391,7 +400,7 @@ Model.prototype.save = function(format) {
     }
 
     blob = new Blob([dv]);
-    name = this.filename+".stl";
+    fname = name+".stl";
   }
   else if (format=="obj") {
     var fullOut = "";
@@ -432,7 +441,7 @@ Model.prototype.save = function(format) {
     fullOut += facesOut;
 
     blob = new Blob([fullOut], { type: 'text/plain' });
-    name = this.filename+".obj";
+    fname = name+".obj";
   }
   else {
     this.printout.error("Exporting format '"+format+"' is not supported.");
@@ -441,12 +450,12 @@ Model.prototype.save = function(format) {
 
   var a = document.createElement("a");
   if (window.navigator.msSaveOrOpenBlob) { // IE :(
-    window.navigator.msSaveOrOpenBlob(blob, name);
+    window.navigator.msSaveOrOpenBlob(blob, fname);
   }
   else {
     var url = URL.createObjectURL(blob);
     a.href = url;
-    a.download = name;
+    a.download = fname;
     document.body.appendChild(a);
     a.click();
     setTimeout(function() {
@@ -454,7 +463,7 @@ Model.prototype.save = function(format) {
       window.URL.revokeObjectURL(url);
     });
   }
-  this.printout.log("Saved file '" + this.filename + "' as " + format.toUpperCase());
+  this.printout.log("Saved file '" + fname + "' as " + format.toUpperCase());
 }
 
 Model.prototype.upload = function(file, callback) {
@@ -647,7 +656,8 @@ Model.prototype.upload = function(file, callback) {
   }
 }
 
-Model.prototype.deleteGeometry = function() {
+Model.prototype.dispose = function() {
+  this.measurement.deactivate();
   if (!this.scene) return;
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];

@@ -22,7 +22,6 @@ Stage = function() {
   this.scene = null;
   this.renderer = null;
   this.axisWidget = null;
-  this.measurement = null;
   this.printout = new Printout();
 
   // undo stack
@@ -37,9 +36,11 @@ Stage.prototype.generateUI = function() {
   this.gui.add(this, "upload");
   this.gui.add(this, "undo");
 
-  var saveFolder = this.gui.addFolder("Export");
-  saveFolder.add(this, "exportOBJ");
-  saveFolder.add(this, "exportSTL");
+  var exportFolder = this.gui.addFolder("Export");
+  this.filename = "meshy";
+  this.filenameController = exportFolder.add(this, "filename");
+  exportFolder.add(this, "exportOBJ");
+  exportFolder.add(this, "exportSTL");
 
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
@@ -119,7 +120,9 @@ Stage.prototype.generateUI = function() {
   this.initFloor();
 }
 
+// anything that needs to be refreshed by hand (not in every frame)
 Stage.prototype.updateUI = function() {
+  this.filenameController.updateDisplay();
 }
 
 Stage.prototype.transform = function(op, axis, amount) {
@@ -129,8 +132,8 @@ Stage.prototype.transform = function(op, axis, amount) {
   transform.apply();
 }
 
-Stage.prototype.exportOBJ = function() { this.save("obj"); }
-Stage.prototype.exportSTL = function() { this.save("stl"); }
+Stage.prototype.exportOBJ = function() { this.export("obj"); }
+Stage.prototype.exportSTL = function() { this.export("stl"); }
 
 Stage.prototype.undo = function() { this.undoStack.undo(); }
 
@@ -155,15 +158,16 @@ Stage.prototype.centerZ = function() { this.transform("center","z",null); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
 Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
-Stage.prototype.startMeasurement = function(type) {
-  if (this.measurement.active) this.measurement.deactivate();
-  if (this.model) this.measurement.activate(type);
-}
 Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
 Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
 Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
 Stage.prototype.mArcLength = function() { this.startMeasurement("arcLength"); }
-Stage.prototype.mDeactivate = function() { if (this.model) this.measurement.deactivate(); }
+Stage.prototype.startMeasurement = function(type) {
+  if (this.model) this.model.measurement.activate(type);
+}
+Stage.prototype.mDeactivate = function() {
+  if (this.model) this.model.measurement.deactivate();
+}
 
 Stage.prototype.toggleFloor = function() {
   this.floorVisible = !this.floorVisible;
@@ -210,9 +214,6 @@ Stage.prototype.initViewport = function() {
         theta: 5*Math.PI/12
       }
     );
-
-    _this.measurement = new Measurement(_this.scene, _this.camera, _this.container, _this.printout);
-    _this.measurement.setOutput(_this.infoBox);
 
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
@@ -314,6 +315,7 @@ Stage.prototype.initFloor = function() {
   this.scene.add(lineTertiary);
 }
 
+// interface for the button in the gui
 Stage.prototype.upload = function() {
   if (this.model) {
     this.printout.warn("A model is already loaded; delete the current model to upload a new one.");
@@ -325,19 +327,20 @@ Stage.prototype.upload = function() {
   }
 }
 
+// called from HTML when the upload button is clicked
 Stage.prototype.handleFile = function(file) {
-  this.model = new Model(this.printout);
+  this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
-Stage.prototype.save = function(format) {
+Stage.prototype.export = function(format) {
   if (!this.model) {
-    this.printout.warn("No model to save.");
+    this.printout.warn("No model to export.");
     return;
   }
 
-  this.model.save(format);
+  this.model.export(format, this.filename);
 }
 
 Stage.prototype.delete = function() {
@@ -345,9 +348,8 @@ Stage.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
-  this.measurement.deactivate();
   if (this.model) {
-    this.model.deleteGeometry();
+    this.model.dispose();
   }
   else {
     this.printout.warn("No model to delete.");
@@ -366,7 +368,8 @@ Stage.prototype.displayMesh = function(success) {
   }
   this.model.render(this.scene, "plain");
   this.cameraToModel();
-  this.measurement.setScale(this.model.getMaxSize() * 0.4);
+  this.filename = this.model.filename;
+  this.updateUI();
 }
 
 Stage.prototype.cameraToModel = function() {

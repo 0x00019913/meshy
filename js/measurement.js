@@ -69,7 +69,7 @@ Measurement = function(scene, camera, domElement, printout) {
 }
 
 Measurement.prototype.activate = function(type) {
-  if (this.active) return;
+  if (this.active) this.deactivate();
   this.active = true;
 
   if (type=="segmentLength") this.measurementPoints = 2;
@@ -263,6 +263,18 @@ Measurement.prototype.setScale = function(scale) {
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].scale.set(scale, scale, scale);
   }
+}
+
+Measurement.prototype.translate = function(axis, amount) {
+
+}
+
+Measurement.prototype.rotate = function(axis, amount) {
+
+}
+
+Measurement.prototype.scale = function(axis, amount) {
+
 }
 
 Measurement.prototype.setOutput = function(output) {

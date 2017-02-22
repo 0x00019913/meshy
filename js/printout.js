@@ -63,6 +63,6 @@ Printout.prototype.styleContainer = function() {
   this.container.style.userSelect = "none";
 
   this.container.style.color = "#eee";
-  this.container.style.font = "12px Lucida Grande, sans-serif";
+  this.container.style.font = "11px Lucida Grande, sans-serif";
   this.container.style.textShadow = "0 -1px 0 #111";
 }
