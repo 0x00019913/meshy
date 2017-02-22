@@ -47,16 +47,16 @@ Pointer = function(scene, camera, domElement) {
   function onMouseDown(e) {
     if (!_this.active) return;
 
-    _this.cursor.material.color.set(_this.cursorColorDown);
+    if (_this.intersection) _this.cursor.material.color.set(_this.cursorColorDown);
     clickLocation.x = e.clientX;
     clickLocation.y = e.clientY;
   }
 
   function onMouseUp(e) {
     if (!_this.active) return;
+    _this.cursor.material.color.set(_this.cursorColor);
     if (_this.clickCallbacks.empty() || !_this.intersection) return;
 
-    _this.cursor.material.color.set(_this.cursorColor);
     clickLocation.x -= e.clientX;
     clickLocation.y -= e.clientY;
     if (clickLocation.length()<_this.clickAllowance && _this.intersection) {
