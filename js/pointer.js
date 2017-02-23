@@ -118,7 +118,3 @@ Pointer.prototype.update = function() {
     this.intersection = null;
   }
 }
-
-Pointer.prototype.resetRaycaster = function() {
-  this.raycaster = new THREE.Raycaster();
-}

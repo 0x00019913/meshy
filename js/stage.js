@@ -163,10 +163,16 @@ Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
 Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
 Stage.prototype.mArcLength = function() { this.startMeasurement("arcLength"); }
 Stage.prototype.startMeasurement = function(type) {
-  if (this.model) this.model.measurement.activate(type);
+  if (this.model) {
+    this.printout.log("Measurement activated.");
+    this.model.measurement.activate(type);
+  }
 }
 Stage.prototype.mDeactivate = function() {
-  if (this.model) this.model.measurement.deactivate();
+  if (this.model) {
+    this.printout.log("Measurement deactivated.");
+    this.model.measurement.deactivate();
+  }
 }
 
 Stage.prototype.toggleFloor = function() {

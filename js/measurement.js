@@ -151,6 +151,16 @@ Measurement.prototype.onClick = function(intersection) {
     }
   }
 
+  this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
+
+  this.calculateMeasurement();
+}
+
+// this.markerIdx is the upcoming marker index, not the one that was just placed
+Measurement.prototype.calculateMeasurement = function() {
+  var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
+  var prevprevMarkerIdx =
+    (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
   var result = 0;
   if (this.activeMarkers==this.measurementPoints) {
     var v1 = this.markers[prevprevMarkerIdx].position;
@@ -161,8 +171,8 @@ Measurement.prototype.onClick = function(intersection) {
         result = { length: new THREE.Vector3().subVectors(v1,v2).length() };
         break;
       case "angle":
-        var d1 = v2.clone().sub(v1).normalize();
-        var d2 = v2.clone().sub(v3).normalize();
+        var d1 = v1.clone().sub(v2).normalize();
+        var d2 = v1.clone().sub(v3).normalize();
         result = { angle: Math.acos(d1.dot(d2)) * 180 / Math.PI };
         break;
       case "radius":
@@ -178,16 +188,14 @@ Measurement.prototype.onClick = function(intersection) {
         var dc1 = circle.center.clone().sub(v1).normalize();
         var dc2 = circle.center.clone().sub(v2).normalize();
         var dc3 = circle.center.clone().sub(v3).normalize();
+        var theta31 = Math.acos(dc3.dot(dc1));
         var theta12 = Math.acos(dc1.dot(dc2));
-        var theta23 = Math.acos(dc2.dot(dc3));
-        var result = { arcLength: circle.r * (theta12+theta23) };
+        var result = { arcLength: circle.r * (theta31+theta12) };
         break;
     }
 
     this.showOutput(result);
   }
-
-  this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
 }
 
 Measurement.prototype.isLinearMeasurement = function() {
@@ -267,6 +275,8 @@ Measurement.prototype.setScale = function(scale) {
 }
 
 Measurement.prototype.translate = function(axis, amount) {
+  if (!this.active) return;
+
   // translate markers
   for (var i=0; i<this.markers.length; i++) {
     var marker = this.markers[i];
@@ -291,16 +301,61 @@ Measurement.prototype.translate = function(axis, amount) {
       if (connector.visible) connector.position[axis] += amount;
     }
   }
-
-  this.pointer.resetRaycaster();
 }
 
 Measurement.prototype.rotate = function(axis, amount) {
+  if (!this.active) return;
 
+  // rotate markers
+  var axisVector = axisToVector3Map[axis];
+  for (var i=0; i<this.markers.length; i++) {
+    var marker = this.markers[i];
+    if (marker.visible) marker.position.applyAxisAngle(axisVector, amount);
+  }
+
+  // rotate line conectors if linear measurement
+  if (this.isLinearMeasurement()) {
+    for (var i=0; i<this.lineConnectors.length; i++) {
+      var connector = this.lineConnectors[i];
+      if (connector.visible) {
+        connector.geometry.vertices[0].applyAxisAngle(axisVector, amount);
+        connector.geometry.vertices[1].applyAxisAngle(axisVector, amount);
+        connector.geometry.verticesNeedUpdate = true;
+      }
+    }
+  }
+  // else, rotate circle connectors
+  else {
+    for (var i=0; i<this.circleConnectors.length; i++) {
+      var connector = this.circleConnectors[i];
+      if (connector.visible) connector.position.applyAxisAngle(axisVector, amount);
+    }
+  }
 }
 
 Measurement.prototype.scale = function(axis, amount) {
+  if (!this.active) return;
 
+  // scale markers
+  var axisVector = axisToVector3Map[axis];
+  for (var i=0; i<this.markers.length; i++) {
+    var marker = this.markers[i];
+    if (marker.visible) marker.position[axis] *= amount;
+  }
+
+  // scale line conectors if linear measurement
+  if (this.isLinearMeasurement()) {
+    for (var i=0; i<this.lineConnectors.length; i++) {
+      var connector = this.lineConnectors[i];
+      if (connector.visible) {
+        connector.geometry.vertices[0][axis] *= amount;
+        connector.geometry.vertices[1][axis] *= amount;
+        connector.geometry.verticesNeedUpdate = true;
+      }
+    }
+  }
+  // don't need to rotate circle connectors because scaling requires recalculating it
+  this.calculateMeasurement();
 }
 
 Measurement.prototype.setOutput = function(output) {
