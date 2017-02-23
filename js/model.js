@@ -123,6 +123,8 @@ Model.prototype.translate = function(axis, amount) {
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
+  this.plainMesh.geometry.boundingSphere = null;
+  this.plainMesh.geometry.boundingBox = null;
   //transform bounds
   this[axis+"min"] += amount;
   this[axis+"max"] += amount;
@@ -147,19 +149,15 @@ Model.prototype.rotate = function(axis, amount) {
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
+  this.plainMesh.geometry.boundingSphere = null;
+  this.plainMesh.geometry.boundingBox = null;
   if (this.centerOfMass) {
     // transform center of mass
-    this.centerOfMass.applyAxisAngle(this.axes[axis],amount);
+    this.centerOfMass.applyAxisAngle(axisToVector3Map[axis],amount);
     this.positionTargetPlanes(this.centerOfMass.toArray());
   }
 
   this.measurement.rotate(axis, amount);
-}
-// for turning "x" etc. into a normalized Vector3 along axis
-Model.prototype.axes = {
-  x: new THREE.Vector3(1,0,0),
-  y: new THREE.Vector3(0,1,0),
-  z: new THREE.Vector3(0,0,1),
 }
 
 Model.prototype.scale = function (axis, amount) {
@@ -172,6 +170,8 @@ Model.prototype.scale = function (axis, amount) {
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
+  this.plainMesh.geometry.boundingSphere = null;
+  this.plainMesh.geometry.boundingBox = null;
   this.surfaceArea = null;
   this.volume = null;
   this[axis+"min"] *= amount;

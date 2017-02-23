@@ -13,3 +13,10 @@ function splitFilename(fullName) {
     };
   }
 }
+
+// for turning "x" etc. into a normalized Vector3 along axis
+axisToVector3Map = {
+  x: new THREE.Vector3(1,0,0),
+  y: new THREE.Vector3(0,1,0),
+  z: new THREE.Vector3(0,0,1),
+}

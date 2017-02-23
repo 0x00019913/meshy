@@ -90,7 +90,7 @@ Pointer.prototype.removeClickCallback = function(idx) {
 
 Pointer.prototype.update = function() {
   this.raycaster.setFromCamera(this.mouse, this.camera);
-  var intersects = this.raycaster.intersectObjects(this.scene.children);
+  var intersects = this.raycaster.intersectObjects(this.scene.children, true);
   var intersectsMesh = false;
 
   // position cursor at surface plus (surface normal times this factor);
@@ -117,4 +117,8 @@ Pointer.prototype.update = function() {
     this.cursor.visible = false;
     this.intersection = null;
   }
+}
+
+Pointer.prototype.resetRaycaster = function() {
+  this.raycaster = new THREE.Raycaster();
 }

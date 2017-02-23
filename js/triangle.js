@@ -59,7 +59,7 @@ Triangle.prototype.translate = function(axis, amount) {
 
 Triangle.prototype.rotate = function(axis, amount) {
   this.resetBounds();
-  var axisVector = this.axes[axis];
+  var axisVector = axisToVector3Map[axis];
   for (var i=0; i<3; i++) {
     var vertex = this.vertices[i];
     vertex.applyAxisAngle(axisVector, amount);
@@ -98,13 +98,6 @@ Triangle.prototype.calcSignedVolume = function() {
   volume += (-v1.x*v3.y*v2.z - v2.x*v1.y*v3.z + v1.x*v2.y*v3.z);
   this.signedVolume = sign * Math.abs(volume/6.0);
   return this.signedVolume;
-}
-
-// for turning "x" etc. into a normalized Vector3 along axis
-Triangle.prototype.axes = {
-  x: new THREE.Vector3(1,0,0),
-  y: new THREE.Vector3(0,1,0),
-  z: new THREE.Vector3(0,0,1),
 }
 
 // calculate endpoints of segment formed by the intersection of this triangle

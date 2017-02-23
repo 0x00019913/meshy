@@ -35,14 +35,14 @@ Measurement = function(scene, camera, domElement, printout) {
   var lineConnectorMat = new THREE.LineBasicMaterial({color: this.connectorColor});
   var lineConnector1 = new THREE.LineSegments(lineConnector1Geo, lineConnectorMat);
   var lineConnector2 = new THREE.LineSegments(lineConnector2Geo, lineConnectorMat);
-  lineConnector1.name = "connector";
-  lineConnector2.name = "connector"
-  lineConnector1.visible = false;
-  lineConnector2.visible = false;
   // need at most two connectors at the moment
   this.lineConnectors = [lineConnector1, lineConnector2];
   for (var i=0; i<this.lineConnectors.length; i++) {
-    this.scene.add(this.lineConnectors[i]);
+    var connector = this.lineConnectors[i];
+    connector.name = "connector";
+    connector.visible = false;
+    connector.frustumCulled = false;
+    this.scene.add(connector);
   }
 
   var r = 1;
@@ -58,13 +58,14 @@ Measurement = function(scene, camera, domElement, printout) {
       0));
   }
   var circleConnector = new THREE.Line(circleConnectorGeo, circleConnectorMat);
-  circleConnector.name = "connector";
-  circleConnector.visible = false;
   // should only need one ever, but putting it in an array for consistency
   this.circleConnectors = [circleConnector];
-
   for (var i=0; i<this.circleConnectors.length; i++) {
-    this.scene.add(this.circleConnectors[i]);
+    var connector = this.circleConnectors[i];
+    connector.name = "connector";
+    connector.visible = false;
+    connector.frustumCulled = false;
+    this.scene.add(connector);
   }
 }
 
@@ -266,7 +267,32 @@ Measurement.prototype.setScale = function(scale) {
 }
 
 Measurement.prototype.translate = function(axis, amount) {
+  // translate markers
+  for (var i=0; i<this.markers.length; i++) {
+    var marker = this.markers[i];
+    if (marker.visible) marker.position[axis] += amount;
+  }
 
+  // translate line conectors if linear measurement
+  if (this.isLinearMeasurement()) {
+    for (var i=0; i<this.lineConnectors.length; i++) {
+      var connector = this.lineConnectors[i];
+      if (connector.visible) {
+        connector.geometry.vertices[0][axis] += amount;
+        connector.geometry.vertices[1][axis] += amount;
+        connector.geometry.verticesNeedUpdate = true;
+      }
+    }
+  }
+  // else, translate circle connectors
+  else {
+    for (var i=0; i<this.circleConnectors.length; i++) {
+      var connector = this.circleConnectors[i];
+      if (connector.visible) connector.position[axis] += amount;
+    }
+  }
+
+  this.pointer.resetRaycaster();
 }
 
 Measurement.prototype.rotate = function(axis, amount) {
