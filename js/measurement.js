@@ -328,7 +328,15 @@ Measurement.prototype.rotate = function(axis, amount) {
   else {
     for (var i=0; i<this.circleConnectors.length; i++) {
       var connector = this.circleConnectors[i];
-      if (connector.visible) connector.position.applyAxisAngle(axisVector, amount);
+      if (connector.visible) {
+        connector.position.applyAxisAngle(axisVector, amount);
+        // can't use .rotateOnAxis b/c that rotates the circle in object space,
+        // where its axes are arbitrarily oriented; need to get its up direction
+        // in world space, rotate that appropriately, then .lookat position+that
+        var worldDir = connector.getWorldDirection();
+        worldDir.applyAxisAngle(axisVector, amount);
+        connector.lookAt(connector.position.clone().add(worldDir));
+      }
     }
   }
 }
