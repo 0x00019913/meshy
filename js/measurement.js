@@ -4,7 +4,7 @@
    description:
     Represents a manual measurement on the model. Displays markers
     where a user clicks on the model and connects them appropriately.
-    Measured values are shown in a special sector of the InfoBox.
+    Measured values are shown in whatever is set as the output.
     Uses the Pointer class to get the intersection point. Interaction
     occurs by passing the .onClick function to the pointer, which calls
     the .onClick upon clicking the model.

@@ -1,3 +1,20 @@
+/* model.js
+   classes:
+    Model
+   description:
+    Represents a discrete model corresponding to one loaded OBJ or STL
+    file. Has transformation functions, associated bounds that are
+    recalculated on transformation, methods to do calculations, methods
+    to upload and export.
+    Call .dispose() before leaving the instance to be cleaned up so that
+    the geometry added to the scene can be properly deleted.
+*/
+
+/* Constructor - Initialize with a THREE.Scene, a THREE.Camera, an
+   HTML element containing the viewport, a printout source (can be an
+   instance of Printout, or console by default), and an output for
+   measurements.
+*/
 function Model(scene, camera, container, printout, infoOutput) {
   // internal geometry
   this.triangles = [];
@@ -38,12 +55,14 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.measurement.setOutput(this.infoOutput);
 }
 
+// Add a Triangle instance to the model.
 Model.prototype.add = function(triangle) {
   this.triangles.push(triangle);
   this.count++;
   this.updateBoundsT(triangle);
 }
 
+// All bounds to Infinity.
 Model.prototype.resetBounds = function() {
   this.xmin = Infinity;
   this.xmax = -Infinity;
@@ -53,6 +72,7 @@ Model.prototype.resetBounds = function() {
   this.zmax = -Infinity;
 }
 
+// Update the bounds with a new triangle.
 Model.prototype.updateBoundsT = function(triangle) {
   this.xmin = triangle.xmin<this.xmin ? triangle.xmin : this.xmin;
   this.xmax = triangle.xmax>this.xmax ? triangle.xmax : this.xmax;
@@ -62,6 +82,7 @@ Model.prototype.updateBoundsT = function(triangle) {
   this.zmax = triangle.zmax>this.zmax ? triangle.zmax : this.zmax;
 }
 
+// Update bounds with a new vertex.
 Model.prototype.updateBoundsV = function(v) {
   this.xmin = v.x<this.xmin ? v.x : this.xmin;
   this.xmax = v.x>this.xmax ? v.x : this.xmax;
@@ -71,6 +92,7 @@ Model.prototype.updateBoundsV = function(v) {
   this.zmax = v.z>this.zmax ? v.z : this.zmax;
 }
 
+// Get the bounds as one object.
 Model.prototype.getBounds = function() {
   return {
     xmin: this.xmin,
@@ -82,6 +104,7 @@ Model.prototype.getBounds = function() {
   };
 }
 
+// Get a list representing the coords of the center.
 Model.prototype.getCenter = function() {
   return [
     this.getCenterx(),
@@ -89,9 +112,11 @@ Model.prototype.getCenter = function() {
     this.getCenterz()
   ];
 }
+// Get individual coords of the center.
 Model.prototype.getCenterx = function() { return (this.xmax+this.xmin)/2; }
 Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
 Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
+// Get a list representing the size of the model in every direction.
 Model.prototype.getSize = function() {
   return [
     this.getSizex(),
@@ -99,17 +124,21 @@ Model.prototype.getSize = function() {
     this.getSizez()
   ];
 }
+// Get individual sizes of the model.
 Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
 Model.prototype.getSizey = function() { return (this.ymax-this.ymin); }
 Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
+// Largest dimension of the model.
 Model.prototype.getMaxSize = function() {
   var size = this.getSize();
   return Math.max(size[0], Math.max(size[1], size[2]));
 }
+// Smallest dimension of the model.
 Model.prototype.getMinSize = function() {
   var size = this.getSize();
   return Math.min(size[0], Math.min(size[1], size[2]));
 }
+// Individual center of mass coords.
 Model.prototype.getCOMx = function() {
   if (this.centerOfMass) return this.centerOfMass.x;
   return null;
@@ -123,6 +152,7 @@ Model.prototype.getCOMz = function() {
   return null;
 }
 
+// Translate the model on axis ("x"/"y"/"z") by amount.
 Model.prototype.translate = function(axis, amount) {
   this.printout.log("translation by "+amount+" units on "+axis+" axis");
   for (var i=0; i<this.vertices.length; i++) {
@@ -145,6 +175,7 @@ Model.prototype.translate = function(axis, amount) {
   this.measurement.translate(axis, amount);
 }
 
+// Rotate the model on axis ("x"/"y"/"z") by "amount" degrees.
 Model.prototype.rotate = function(axis, amount) {
   this.printout.log("rotation by "+amount+" degrees about "+axis+" axis");
   this.resetBounds();
@@ -171,6 +202,7 @@ Model.prototype.rotate = function(axis, amount) {
   this.measurement.rotate(axis, amount);
 }
 
+// Scale the model on axis ("x"/"y"/"z") by amount.
 Model.prototype.scale = function (axis, amount) {
   this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
   for (var i=0; i<this.vertices.length; i++) {
@@ -198,6 +230,7 @@ Model.prototype.scale = function (axis, amount) {
   this.measurement.scale(axis, amount);
 }
 
+// Toggle wireframe.
 Model.prototype.toggleWireframe = function() {
   this.wireframe = !this.wireframe;
   this.printout.log("wireframe is " + (this.wireframe ? "on" : "off"));
@@ -206,6 +239,7 @@ Model.prototype.toggleWireframe = function() {
   }
 }
 
+// Calculate surface area.
 Model.prototype.calcSurfaceArea = function() {
   this.surfaceArea = 0;
   for (var i=0; i<this.count; i++) {
@@ -215,6 +249,7 @@ Model.prototype.calcSurfaceArea = function() {
   return this.surfaceArea;
 }
 
+// Calculate volume.
 Model.prototype.calcVolume = function() {
   this.volume = 0;
   for (var i=0; i<this.count; i++) {
@@ -223,6 +258,7 @@ Model.prototype.calcVolume = function() {
   }
 }
 
+// Calculate center of mass.
 Model.prototype.calcCenterOfMass = function() {
   if (this.centerOfMass) return this.centerOfMass;
   var modelVolume = 0, triVolume = 0;
@@ -242,6 +278,8 @@ Model.prototype.calcCenterOfMass = function() {
   this.centerOfMass.fromArray(center).divideScalar(modelVolume);
 }
 
+// Toggle the COM indicator. If the COM hasn't been calculated, then
+// calculate it.
 Model.prototype.toggleCenterOfMass = function() {
   this.calcCenterOfMass();
   this.showCenterOfMass = !this.showCenterOfMass;
@@ -253,6 +291,7 @@ Model.prototype.toggleCenterOfMass = function() {
   });
 }
 
+// Create the target planes forming the COM indicator.
 Model.prototype.generateTargetPlanes = function() {
   var size = 1;
   this.targetPlanes = [
@@ -276,6 +315,7 @@ Model.prototype.generateTargetPlanes = function() {
   }
 }
 
+// Position the COM indicator.
 Model.prototype.positionTargetPlanes = function(point) {
   if (!this.targetPlanes) this.generateTargetPlanes();
 
@@ -310,6 +350,7 @@ Model.prototype.positionTargetPlanes = function(point) {
   this.targetPlanes[2].verticesNeedUpdate = true;
 }
 
+// Render the THREE mesh; currently, only the "plain" mode is supported.
 Model.prototype.render = function(scene, mode) {
   this.scene = scene;
   this.measurement.setScale(this.getMaxSize() * 0.4);
@@ -327,6 +368,7 @@ Model.prototype.render = function(scene, mode) {
   }
 }
 
+// Create the plain mesh (as opposed to another display mode).
 Model.prototype.makePlainModel = function(scene) {
   if (this.plainMesh) return;
   /* set up camera, put in model */
@@ -346,25 +388,7 @@ Model.prototype.makePlainModel = function(scene) {
   scene.add(this.plainMesh);
 }
 
-/* renders line segments in the "set" argument */
-Model.prototype.renderSlicedModel = function(scene) {
-  this.segmentLists = this.slice();
-  var geo = new THREE.Geometry();
-  for (var i=0; i<this.segmentLists.length; i++) {
-    for (var j=0; j<this.segmentLists[i].length; j++) {
-      geo.vertices.push(this.segmentLists[i][j][0]);
-      geo.vertices.push(this.segmentLists[i][j][1]);
-    }
-  }
-  var mat = new THREE.LineBasicMaterial({
-    color: 0x0,
-    linewidth: 1
-  });
-  this.slicedMesh = new THREE.LineSegments(geo, mat);
-  this.slicedMesh.name = "model";
-  scene.add(this.slicedMesh);
-}
-
+// Generate file output representing the model and save it.
 Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
   var blob;
@@ -471,6 +495,7 @@ Model.prototype.export = function(format, name) {
   this.printout.log("Saved file '" + fname + "' as " + format.toUpperCase());
 }
 
+// Import a model from an STL or OBJ file (any capitalization).
 Model.prototype.upload = function(file, callback) {
   var fSplit = splitFilename(file.name);
   this.filename = fSplit.name;
@@ -691,6 +716,9 @@ Model.prototype.upload = function(file, callback) {
   }
 }
 
+// Turn off the measurement and delete the THREE.Mesh because these
+// wouldn't be automatically disposed of when the Model instance
+// disappears.
 Model.prototype.dispose = function() {
   this.measurement.deactivate();
   if (!this.scene) return;
@@ -703,6 +731,28 @@ Model.prototype.dispose = function() {
 
 }
 
+// CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS.
+
+// UNUSED, make this workable later.
+Model.prototype.renderSlicedModel = function(scene) {
+  this.segmentLists = this.slice();
+  var geo = new THREE.Geometry();
+  for (var i=0; i<this.segmentLists.length; i++) {
+    for (var j=0; j<this.segmentLists[i].length; j++) {
+      geo.vertices.push(this.segmentLists[i][j][0]);
+      geo.vertices.push(this.segmentLists[i][j][1]);
+    }
+  }
+  var mat = new THREE.LineBasicMaterial({
+    color: 0x0,
+    linewidth: 1
+  });
+  this.slicedMesh = new THREE.LineSegments(geo, mat);
+  this.slicedMesh.name = "model";
+  scene.add(this.slicedMesh);
+}
+
+// UNUSED.
 Model.prototype.buildSliceLists = function() {
   // slice thickness
   this.delta = (this.ymax-this.ymin)/this.numSlices;
@@ -725,6 +775,7 @@ Model.prototype.buildSliceLists = function() {
   return sliceLists;
 }
 
+// UNUSED.
 Model.prototype.slice = function() {
   var sliceLists = this.buildSliceLists();
   var sweepList = [];

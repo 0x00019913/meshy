@@ -1,3 +1,7 @@
+/*
+  Some utilities.
+*/
+
 function splitFilename(fullName) {
   var idx = fullName.lastIndexOf('.');
   if (idx==-1) {
