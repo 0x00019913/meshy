@@ -506,13 +506,13 @@ Model.prototype.upload = function(file, callback) {
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
-    //try {
+    try {
       parseResult(fr.result);
       success = true;
       _this.printout.log("Uploaded file: " + file.name);
-    /*} catch(e) {
+    } catch(e) {
       _this.printout.error("Error uploading: " + e);
-    }*/
+    }
     callback(success);
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
@@ -728,7 +728,6 @@ Model.prototype.dispose = function() {
       this.scene.remove(child);
     }
   }
-
 }
 
 // CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS.
