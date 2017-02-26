@@ -1,3 +1,16 @@
+/* pointer.js
+   classes:
+    Pointer
+   description:
+    Handles detecting the intersection of the mouse cursor with the model,
+    displaying the circle cursor on top of the model, calls any callbacks upon
+    clicking the mouse.
+    Turn on with .activate(), turn off with .deactivate();
+*/
+
+/* Constructor - initialize with a THREE.Scene, THREE.Camera, and the HTML
+   element containing the WebGL viewport with the geometry.
+*/
 Pointer = function(scene, camera, domElement) {
   this.scene = scene;
   this.camera = camera;
@@ -66,28 +79,35 @@ Pointer = function(scene, camera, domElement) {
   }
 }
 
+// Obvious.
 Pointer.prototype.activate = function() {
   this.active = true;
 }
 
+// Deactivate and hide the cursor.
 Pointer.prototype.deactivate = function() {
   this.active = false;
   this.cursor.visible = false;
 }
 
+// Set the cursor scale.
 Pointer.prototype.setScale = function(scale) {
   this.scale = scale;
   this.cursor.scale.set(scale, scale, scale);
 }
 
+// Adds a callback function to the callback stack; these are called by
+// clicking the mouse.
 Pointer.prototype.addClickCallback = function(callback) {
   return this.clickCallbacks.add(callback);
 }
 
+// Remove a click callback.
 Pointer.prototype.removeClickCallback = function(idx) {
   this.clickCallbacks.remove(idx);
 }
 
+// Check for intersections and reposition cursor if intersecting the model.
 Pointer.prototype.update = function() {
   this.raycaster.setFromCamera(this.mouse, this.camera);
   var intersects = this.raycaster.intersectObjects(this.scene.children, true);
@@ -101,8 +121,9 @@ Pointer.prototype.update = function() {
     if (intersects[i].object.name=="model") {
       this.intersection = intersects[i];
       var normal = intersects[i].face.normal;
-      // intersection point offset slightly from the surface
       var point = intersects[i].point.clone();
+      // intersection point offset slightly from the surface
+      // to be visible on flat surfaces
       point.add(normal.clone().multiplyScalar(offsetFactor));
       this.cursor.position.copy(point);
       this.cursor.lookAt(point.add(normal));

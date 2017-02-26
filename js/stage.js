@@ -1,8 +1,12 @@
-// Main class representing the Meshy viewport.
-// Encompasses:
-//   UI interaction
-//   displayed meshes (imported and floor mesh)
+/* stage.js
+   classes:
+    none
+   description:
+    Main class representing the Meshy viewport. Encompasses UI, handling the
+    model, and controlling the viewport.
+*/
 
+// Constructor.
 Stage = function() {
   // params
   this.floorSize = 50;
@@ -31,6 +35,8 @@ Stage = function() {
   this.generateUI();
 }
 
+// Creates the dat.gui element and the InfoBox, initializes the viewport,
+// initializes floor.
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "upload");
@@ -125,6 +131,8 @@ Stage.prototype.updateUI = function() {
   this.filenameController.updateDisplay();
 }
 
+// Set up an arbitrary transform, create its inverse and push it onto the
+// undo stack, apply the transform.
 Stage.prototype.transform = function(op, axis, amount) {
   var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
@@ -132,6 +140,7 @@ Stage.prototype.transform = function(op, axis, amount) {
   transform.apply();
 }
 
+// Functions corresponding to buttons in the dat.gui.
 Stage.prototype.exportOBJ = function() { this.export("obj"); }
 Stage.prototype.exportSTL = function() { this.export("stl"); }
 
@@ -194,6 +203,8 @@ Stage.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
 }
 
+// Initialize the viewport, set up everything with WebGL including the
+// axis widget.
 Stage.prototype.initViewport = function() {
   var width, height;
   var _this = this;
@@ -269,6 +280,7 @@ Stage.prototype.initViewport = function() {
   }
 }
 
+// Create the floor.
 Stage.prototype.initFloor = function() {
   var size = this.floorSize;
 
@@ -321,7 +333,7 @@ Stage.prototype.initFloor = function() {
   this.scene.add(lineTertiary);
 }
 
-// interface for the button in the gui
+// Interface for the dat.gui button.
 Stage.prototype.upload = function() {
   if (this.model) {
     this.printout.warn("A model is already loaded; delete the current model to upload a new one.");
@@ -333,13 +345,15 @@ Stage.prototype.upload = function() {
   }
 }
 
-// called from HTML when the upload button is clicked
+// Called from HTML when the upload button is clicked. Creates the Model
+// instance and tells it to load the geometry.
 Stage.prototype.handleFile = function(file) {
   this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
+// Interface for the dat.gui button. Saves the model.
 Stage.prototype.export = function(format) {
   if (!this.model) {
     this.printout.warn("No model to export.");
@@ -349,6 +363,8 @@ Stage.prototype.export = function(format) {
   this.model.export(format, this.filename);
 }
 
+// Interface for the dat.gui button. Completely removes the model and resets
+// everything to a clean state.
 Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks uploading
   // a model with the same name twice in a row
@@ -367,6 +383,7 @@ Stage.prototype.delete = function() {
   this.printout.log("Model deleted.");
 }
 
+// Callback passed to model.upload; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success) {
   if (!success) {
     this.model = null;
@@ -378,6 +395,7 @@ Stage.prototype.displayMesh = function(success) {
   this.updateUI();
 }
 
+// Reposition the camera to look at the model.
 Stage.prototype.cameraToModel = function() {
   if (!this.model) {
     this.printout.warn("No model to align camera.");

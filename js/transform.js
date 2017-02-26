@@ -1,3 +1,16 @@
+/* transform.js
+   classes:
+    Transform
+    UndoStack
+   description:
+    A class representing a transformation. Has a reference to a model and can
+    apply the appropriate transformation with .apply(). Has a method to generate
+    an inverse transformation, which can be pushed onto an instance of
+    UndoStack.
+*/
+
+// Constructor - transformation type, axis, amount, model object, and a printout
+// to output messages for the user.
 function Transform(op, axis, amount, model, printout) {
   this.printout = printout ? printout : console;
 
@@ -60,6 +73,7 @@ function Transform(op, axis, amount, model, printout) {
 Transform.prototype = {
   constructor: Transform,
 
+  // Creates and returns an inverse transform.
   makeInverse: function() {
     if (this.op=="noop") {
       return null;
@@ -86,6 +100,7 @@ Transform.prototype = {
     return inv;
   },
 
+  // applies the transform
   apply: function() {
     switch (this.op) {
       case "noop":
@@ -129,6 +144,11 @@ Transform.prototype = {
     }
   },
 
+  // The following are for transforming geometry dynamically (as opposed to
+  // pressing a button to perform a discrete transformation), but I decided
+  // to not use it because WebGL is weighty enough without moving hundreds of
+  // thousands of vertices in real time.
+
   /* Intended pattern for dynamic updates (not using because updating in
       real time in WebGL is slow for large meshes):
     // in UI setup using dat.gui
@@ -168,6 +188,7 @@ Transform.prototype = {
 
 }
 
+// Constructor - initialized with a printout object.
 function UndoStack(printout) {
   this.printout = printout ? printout : console;
   // stack of inverse transformations
@@ -177,6 +198,7 @@ function UndoStack(printout) {
 UndoStack.prototype = {
   constructor: UndoStack,
 
+  // Pop the most recent inverse transform and apply it.
   undo: function() {
     if (this.history.length==0) {
       this.printout.warn("No undo history available.");
@@ -186,10 +208,12 @@ UndoStack.prototype = {
     inv.apply();
   },
 
+  // Put a new inverse transform onto the stack.
   push: function(inv) {
     if (inv) this.history.push(inv);
   },
 
+  // Clear the stack.
   clear: function() {
     this.history = [];
   }

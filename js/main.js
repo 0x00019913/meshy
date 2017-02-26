@@ -1,5 +1,6 @@
 var stage = new Stage();
 
+// Make the intro menu interactive.
 var introVisible = false;
 var intro = document.getElementById('intro');
 var titleChevron = document.getElementById('titleChevron');

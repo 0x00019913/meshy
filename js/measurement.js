@@ -112,7 +112,7 @@ Measurement.prototype.activate = function(type) {
   this.markerIdx = 0;
   this.connectorIdx = 0;
 
-  this.pointer.active = true;
+  this.pointer.activate();
   // store a place on the pointer's list of callbacks so that we can remove it later
   this.callbackIdx = this.pointer.addClickCallback(this.onClick.bind(this));
 }
@@ -134,7 +134,7 @@ Measurement.prototype.deactivate = function() {
   }
 
   this.pointer.removeClickCallback(this.callbackIdx);
-  this.pointer.active = false;
+  this.pointer.deactivate();
 
   this.output.hideMeasurementOutput();
 }
@@ -399,10 +399,8 @@ Measurement.prototype.scale = function(axis, amount) {
       }
     }
   }
-  // don't need to scale circle connectors because scaling requires recalculating it
-  else {
-    this.calculateMeasurement();
-  }
+  // recalculate all measurements, including placing circle connector if needed
+  this.calculateMeasurement();
 }
 
 // Use to set the measurement output.

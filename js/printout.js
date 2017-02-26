@@ -1,3 +1,15 @@
+/* printout.js
+   classes:
+    Printout
+   description:
+    An on-screen console for printing messages for the user.
+    Automatically inserts the HTML element.
+    API emulates the console - methods are log, warn, and error.
+*/
+
+/* Constructor - initialize w/ the max number of lines that can be on the
+   screen, default is 6.
+*/
 function Printout(maxCount) {
   this.count = 0;
   this.maxCount = maxCount ? maxCount : 6;
@@ -10,23 +22,27 @@ function Printout(maxCount) {
   document.body.appendChild(this.container);
 }
 
+// Print white text.
 Printout.prototype.log = function(str) {
   var entry = this.makeEntry(str);
   this.printLine(entry);
 }
 
+// Print yellow text.
 Printout.prototype.warn = function(str) {
   var entry = this.makeEntry(str);
   entry.style.color = "#ffcc00";
   this.printLine(entry);
 }
 
+// Print red text.
 Printout.prototype.error = function(str) {
   var entry = this.makeEntry(str);
   entry.style.color = "#ff3333";
   this.printLine(entry);
 }
 
+// Put down a line in the printout.
 Printout.prototype.printLine = function(entry) {
   var children = this.container.children;
   if (this.count>=this.maxCount) {
@@ -45,6 +61,7 @@ Printout.prototype.printLine = function(entry) {
   }
 }
 
+// Create and style a span to contain a new line.
 Printout.prototype.makeEntry = function(str) {
   var entry = document.createElement('span');
   entry.style.display = "block";
@@ -53,6 +70,7 @@ Printout.prototype.makeEntry = function(str) {
   return entry;
 }
 
+// Style the container.
 Printout.prototype.styleContainer = function() {
   this.container.style.maxHeight = (this.maxCount*16) + "px";
   this.container.style.position = "absolute";

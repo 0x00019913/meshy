@@ -228,6 +228,8 @@ Model.prototype.scale = function (axis, amount) {
   }
 
   this.measurement.scale(axis, amount);
+  // sets the scale for measurement markers and the cursor
+  this.measurement.setScale(this.getMaxSize() * 0.4);
 }
 
 // Toggle wireframe.

@@ -24,3 +24,18 @@ axisToVector3Map = {
   y: new THREE.Vector3(0,1,0),
   z: new THREE.Vector3(0,0,1),
 }
+
+isArray = function(item) {
+  return (Object.prototype.toString.call(item) === '[object Array]');
+}
+
+isString = function(item) {
+  return (typeof item === 'string' || item instanceof String);
+}
+
+isNumber = function(item) {
+  return (typeof item === 'number');
+}
+isFunction = function(item) {
+  return (typeof item === 'function');
+}
