@@ -128,7 +128,7 @@ Stage.prototype.updateUI = function() {
 Stage.prototype.transform = function(op, axis, amount) {
   var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
-  this.undoStack.push(inv);
+  if (inv) this.undoStack.push(inv);
   transform.apply();
 }
 

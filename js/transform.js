@@ -3,7 +3,7 @@ function Transform(op, axis, amount, model, printout) {
 
   if (!model) {
     this.op = "noop";
-    this.reason = "Model doesn't exist."
+    this.reason = "Model doesn't exist.";
     return this;
   }
   this.model = model;
@@ -43,7 +43,7 @@ function Transform(op, axis, amount, model, printout) {
       var isBadScale = amount<=0 || (amount.length && (amount[0]<=0 || amount[1]<=0 || amount[2]<=0));
       if (isBadScale) {
         this.op = "noop";
-        this.reason = "Cannot scale to 0 or negative numbers: " + amount;
+        this.reason = "Cannot scale by 0 or negative numbers: " + amount;
         return this;
       }
       this.op = "scale";
@@ -61,7 +61,9 @@ Transform.prototype = {
   constructor: Transform,
 
   makeInverse: function() {
-    if (this.op=="noop") return null;
+    if (this.op=="noop") {
+      return null;
+    }
     var amount;
     if (this.op=="scale") {
       if (this.axis=="all") {
@@ -87,7 +89,7 @@ Transform.prototype = {
   apply: function() {
     switch (this.op) {
       case "noop":
-        this.printout.log("error: no-op; reason: ", this.reason);
+        this.printout.warn(this.reason);
         return;
       case "translate":
         if (this.axis=="all") {

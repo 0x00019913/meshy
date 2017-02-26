@@ -25,9 +25,10 @@ function Vector3ArrayBuilder(n, bounds, vertices) {
 }
 
 // 1. takes THREE.Vector3 v,
-// 2. pushes it onto the vertices array if it's not there already,
+// 2. checks if v exists in the vertices array; if so, returns its index,
+// 2. else, pushes it onto the vertices array,
 // 3. returns index i s.t. vertices[i] equals v
-Vector3ArrayBuilder.prototype.vIdx = function(v) {
+Vector3ArrayBuilder.prototype.idx = function(v) {
   var bucket = this.hashMap;
   var xi = this.xIdx(v);
   if (bucket[xi]===undefined) bucket[xi] = [];

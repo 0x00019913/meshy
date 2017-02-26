@@ -1,13 +1,12 @@
 function Model(scene, camera, container, printout, infoOutput) {
   // internal geometry
-  this.triangles = []; // the only array required for rendering and calculations
-  this.count = 0;
+  this.triangles = [];
+  this.vertices = [];
+  this.count = 0; // count of faces; used more often than count of vertices
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
   this.filename = "";
-  // total size of the buffer in bytes
-  this.stlSize = 0;
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
@@ -42,7 +41,7 @@ function Model(scene, camera, container, printout, infoOutput) {
 Model.prototype.add = function(triangle) {
   this.triangles.push(triangle);
   this.count++;
-  this.updateBounds(triangle);
+  this.updateBoundsT(triangle);
 }
 
 Model.prototype.resetBounds = function() {
@@ -54,13 +53,22 @@ Model.prototype.resetBounds = function() {
   this.zmax = -Infinity;
 }
 
-Model.prototype.updateBounds = function(triangle) {
+Model.prototype.updateBoundsT = function(triangle) {
   this.xmin = triangle.xmin<this.xmin ? triangle.xmin : this.xmin;
   this.xmax = triangle.xmax>this.xmax ? triangle.xmax : this.xmax;
   this.ymin = triangle.ymin<this.ymin ? triangle.ymin : this.ymin;
   this.ymax = triangle.ymax>this.ymax ? triangle.ymax : this.ymax;
   this.zmin = triangle.zmin<this.zmin ? triangle.zmin : this.zmin;
   this.zmax = triangle.zmax>this.zmax ? triangle.zmax : this.zmax;
+}
+
+Model.prototype.updateBoundsV = function(v) {
+  this.xmin = v.x<this.xmin ? v.x : this.xmin;
+  this.xmax = v.x>this.xmax ? v.x : this.xmax;
+  this.ymin = v.y<this.ymin ? v.y : this.ymin;
+  this.ymax = v.y>this.ymax ? v.y : this.ymax;
+  this.zmin = v.z<this.zmin ? v.z : this.zmin;
+  this.zmax = v.z>this.zmax ? v.z : this.zmax;
 }
 
 Model.prototype.getBounds = function() {
@@ -117,9 +125,8 @@ Model.prototype.getCOMz = function() {
 
 Model.prototype.translate = function(axis, amount) {
   this.printout.log("translation by "+amount+" units on "+axis+" axis");
-  for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    tri.translate(axis, amount);
+  for (var i=0; i<this.vertices.length; i++) {
+    this.vertices[i][axis] += amount;
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -132,7 +139,7 @@ Model.prototype.translate = function(axis, amount) {
   if (this.centerOfMass) {
     // transform center of mass
     this.centerOfMass[axis] += amount;
-    this.positionTargetPlanes(this.centerOfMass.toArray());
+    this.positionTargetPlanes(this.centerOfMass);
   }
 
   this.measurement.translate(axis, amount);
@@ -142,10 +149,14 @@ Model.prototype.rotate = function(axis, amount) {
   this.printout.log("rotation by "+amount+" degrees about "+axis+" axis");
   this.resetBounds();
   amount = amount*Math.PI/180.0;
+  var axisVector = axisToVector3Map[axis];
+  for (var i=0; i<this.vertices.length; i++) {
+    var vertex = this.vertices[i];
+    vertex.applyAxisAngle(axisVector, amount);
+    this.updateBoundsV(vertex);
+  }
   for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    tri.rotate(axis, amount);
-    this.updateBounds(tri);
+    this.triangles[i].normal.applyAxisAngle(axisVector, amount);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -154,7 +165,7 @@ Model.prototype.rotate = function(axis, amount) {
   if (this.centerOfMass) {
     // transform center of mass
     this.centerOfMass.applyAxisAngle(axisToVector3Map[axis],amount);
-    this.positionTargetPlanes(this.centerOfMass.toArray());
+    this.positionTargetPlanes(this.centerOfMass);
   }
 
   this.measurement.rotate(axis, amount);
@@ -162,11 +173,13 @@ Model.prototype.rotate = function(axis, amount) {
 
 Model.prototype.scale = function (axis, amount) {
   this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
+  for (var i=0; i<this.vertices.length; i++) {
+    this.vertices[i][axis] *= amount;
+  }
   for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    tri.scale(axis, amount);
-    tri.surfaceArea = null;
-    tri.volume = null;
+    var triangle = this.triangles[i];
+    triangle.surfaceArea = null;
+    triangle.signedVolume = null;
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -179,7 +192,7 @@ Model.prototype.scale = function (axis, amount) {
   if (this.centerOfMass) {
     // transform center of mass
     this.centerOfMass[axis] *= amount;
-    this.positionTargetPlanes(this.centerOfMass.toArray());
+    this.positionTargetPlanes(this.centerOfMass);
   }
 
   this.measurement.scale(axis, amount);
@@ -216,7 +229,8 @@ Model.prototype.calcCenterOfMass = function() {
   var center = [0,0,0];
   for (var i=0; i<this.count; i++) {
     var tri = this.triangles[i];
-    var verts = tri.vertices;
+    var verts = [];
+    for (var j=0; j<3; j++) verts.push(this.vertices[tri.indices[j]]);
     triVolume = tri.calcSignedVolume();
     modelVolume += triVolume;
     center[0] += ((verts[0].x + verts[1].x + verts[2].x) / 4) * triVolume;
@@ -233,7 +247,7 @@ Model.prototype.toggleCenterOfMass = function() {
   this.showCenterOfMass = !this.showCenterOfMass;
   this.printout.log("COM indicator is "+(this.showCenterOfMass ? "on" : "off"));
   var visible = this.showCenterOfMass;
-  this.positionTargetPlanes(this.centerOfMass.toArray());
+  this.positionTargetPlanes(this.centerOfMass);
   this.scene.traverse(function(o) {
     if (o.name == "targetPlane") o.visible = visible;
   });
@@ -276,20 +290,20 @@ Model.prototype.positionTargetPlanes = function(point) {
   var ymin = this.ymin-size[1], ymax = this.ymax+size[1];
   var zmin = this.zmin-size[2], zmax = this.zmax+size[2];
 
-  vX[0].set(point[0], ymin, zmin);
-  vX[1].set(point[0], ymin, zmax);
-  vX[2].set(point[0], ymax, zmin);
-  vX[3].set(point[0], ymax, zmax);
+  vX[0].set(point.x, ymin, zmin);
+  vX[1].set(point.x, ymin, zmax);
+  vX[2].set(point.x, ymax, zmin);
+  vX[3].set(point.x, ymax, zmax);
 
-  vY[0].set(xmin, point[1], zmin);
-  vY[1].set(xmin, point[1], zmax);
-  vY[2].set(xmax, point[1], zmin);
-  vY[3].set(xmax, point[1], zmax);
+  vY[0].set(xmin, point.y, zmin);
+  vY[1].set(xmin, point.y, zmax);
+  vY[2].set(xmax, point.y, zmin);
+  vY[3].set(xmax, point.y, zmax);
 
-  vZ[0].set(xmin, ymin, point[2]);
-  vZ[1].set(xmin, ymax, point[2]);
-  vZ[2].set(xmax, ymin, point[2]);
-  vZ[3].set(xmax, ymax, point[2]);
+  vZ[0].set(xmin, ymin, point.z);
+  vZ[1].set(xmin, ymax, point.z);
+  vZ[2].set(xmax, ymin, point.z);
+  vZ[3].set(xmax, ymax, point.z);
 
   this.targetPlanes[0].verticesNeedUpdate = true;
   this.targetPlanes[1].verticesNeedUpdate = true;
@@ -319,7 +333,7 @@ Model.prototype.makePlainModel = function(scene) {
   var geo = new THREE.Geometry();
   for (var i=0; i<this.count; i++) {
     for (j=0; j<3; j++) {
-      geo.vertices.push(this.triangles[i].vertices[j]);
+      geo.vertices.push(this.vertices[this.triangles[i].indices[j]]);
     }
     geo.faces.push(new THREE.Face3(i*3, i*3+1, i*3+2, this.triangles[i].normal));
   }
@@ -353,14 +367,13 @@ Model.prototype.renderSlicedModel = function(scene) {
 
 Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
-  var _this = this;
   var blob;
   var fname;
 
   if (format=="stl") {
     // this isn't set if we imported a non-STL format
-    if (!this.stlSize) this.stlSize = 84 + 50 * this.count;
-    var array = new ArrayBuffer(this.stlSize);
+    var stlSize = 84 + 50 * this.count;
+    var array = new ArrayBuffer(stlSize);
     var offset = 0;
     var dv = new DataView(array);
     // I can't figure out a better way of transferring the header bytes to the
@@ -381,7 +394,7 @@ Model.prototype.export = function(format, name) {
       offset += 12;
 
       for (var vert=0; vert<3; vert++) {
-        setVector3(dv, offset, triangle.vertices[vert], isLittleEndian);
+        setVector3(dv, offset, this.vertices[triangle.indices[vert]], isLittleEndian);
         offset += 12;
       }
 
@@ -403,44 +416,36 @@ Model.prototype.export = function(format, name) {
     fname = name+".stl";
   }
   else if (format=="obj") {
-    var fullOut = "";
-    var comment = "";
-    var verticesOut = "";
-    var facesOut = "";
+    var out = "";
 
-    var vertices = [];
-    var arrayBuilder = new Vector3ArrayBuilder(8, this.getBounds(), vertices);
+    out =  "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
+    out += "# NB: this file only stores faces and vertex positions. \n";
+    out += "# number vertices: " + this.vertices.length + "\n";
+    out += "# number triangles: " + this.triangles.length + "\n";
+    out += "#\n";
+    out += "# vertices: \n";
 
-    // go through the faces, simultaneously building vertices
+    // write the list of vertices
+    for (var vert=0; vert<this.vertices.length; vert++) {
+      var line = "v";
+      var vertex = this.vertices[vert];
+      for (var comp=0; comp<3; comp++) line += " " + vertex.getComponent(comp).toFixed(6);
+      line += "\n";
+      out += line;
+    }
+
+    out += "# faces: \n";
     for (var tri=0; tri<this.count; tri++) {
       var line = "f";
       var triangle = this.triangles[tri];
       for (var vert=0; vert<3; vert++) {
-        var vertex = triangle.vertices[vert];
-        var idx = arrayBuilder.vIdx(vertex);
-        line += " " + (idx+1);
+        line += " " + (triangle.indices[vert]+1);
       }
       line += "\n";
-      facesOut += line;
+      out += line;
     }
 
-    for (var vert=0; vert<vertices.length; vert++) {
-      var line = "v";
-      var vertex = vertices[vert];
-      for (var comp=0; comp<3; comp++) line += " " + vertex.getComponent(comp).toFixed(6);
-      line += "\n";
-      verticesOut += line;
-    }
-
-    // comment and construct the output
-    fullOut = "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
-    fullOut += "# NB: this file only stores faces and vertex positions. \n";
-    fullOut += "# vertices: \n";
-    fullOut += verticesOut;
-    fullOut += "# faces: \n";
-    fullOut += facesOut;
-
-    blob = new Blob([fullOut], { type: 'text/plain' });
+    blob = new Blob([out], { type: 'text/plain' });
     fname = name+".obj";
   }
   else {
@@ -476,13 +481,13 @@ Model.prototype.upload = function(file, callback) {
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
-    try {
+    //try {
       parseResult(fr.result);
       success = true;
       _this.printout.log("Uploaded file: " + file.name);
-    } catch(e) {
+    /*} catch(e) {
       _this.printout.error("Error uploading: " + e);
-    }
+    }*/
     callback(success);
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
@@ -495,24 +500,42 @@ Model.prototype.upload = function(file, callback) {
 
   var parseResult = function(result) {
     if (_this.format=="stl") {
-      this.stlSize = file.size;
       // mimicking
       // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
-      _this.header = result.slice(0, 80); // store header
+      _this.header = result.slice(0, 80); // store STL header
 
       var dv = new DataView(result, 80);
       var isLittleEndian = _this.isLittleEndian;
 
-      var offset = 4;
       var n = dv.getUint32(0, isLittleEndian);
+
+      // First pass: only get model bounds. Need this for the hash table thingy
+      // used by Vector3ArrayBuilder to make a list of unique vertices.
+      var offset = 16; // offset 4 bytes for n and 12 bytes for first normal
       for (var tri=0; tri<n; tri++) {
-        var triangle = new Triangle();
+        for (var vert=0; vert<3; vert++) {
+          _this.updateBoundsV(getVector3(dv, offset, isLittleEndian));
+          offset += 12;
+        }
+        // ignore "attribute byte count" (2 bytes) and next normal (12 bytes)
+        offset += 14;
+      }
+
+      // Second pass: use Vector3ArrayBuilder to fill this.vertices with unique
+      // vertices. Build the array of triangles with these.
+      offset = 4;
+      _this.vertices = [];
+      var builder = new Vector3ArrayBuilder(8, _this.getBounds(), _this.vertices);
+
+      for (var tri=0; tri<n; tri++) {
+        var triangle = new Triangle(_this.vertices);
 
         triangle.setNormal(getVector3(dv, offset, isLittleEndian));
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
-          triangle.addVertex(getVector3(dv, offset, isLittleEndian));
+          var idx = builder.idx(getVector3(dv, offset, isLittleEndian))
+          triangle.addVertex(idx);
           offset += 12;
         }
 
@@ -531,9 +554,9 @@ Model.prototype.upload = function(file, callback) {
     }
     else if (_this.format=="obj") {
       _this.count = 0;
+      _this.vertices = [];
       var len = result.length;
       var hasVertNormals = false;
-      var vertices = [];
       var vertexNormals = [];
       var i = 0;
       while (i<len) {
@@ -550,7 +573,7 @@ Model.prototype.upload = function(file, callback) {
           if (ch==' ') {
             i++;
             var vertex = getVector3();
-            vertices.push(vertex);
+            _this.vertices.push(vertex);
           }
           else if (ch=='n') {
             i++;
@@ -564,7 +587,7 @@ Model.prototype.upload = function(file, callback) {
         }
         else if (ch=='f') {
           i++; i++;
-          hasVertNormals = (vertices.length==vertexNormals.length);
+          hasVertNormals = (_this.vertices.length==vertexNormals.length);
           var triangles = getTriangles();
           for (var tri=0; tri<triangles.length; tri++) _this.add(triangles[tri]);
         }
@@ -619,8 +642,14 @@ Model.prototype.upload = function(file, callback) {
         // if a quad, need to triangulate - pick closest corners to make new edge
         else if (polyIndices.length==4) {
           var v = new THREE.Vector3();
-          var d02 = v.subVectors(vertices[polyIndices[0]], vertices[polyIndices[2]]).length();
-          var d13 = v.subVectors(vertices[polyIndices[1]], vertices[polyIndices[3]]).length();
+          var d02 = v.subVectors(
+            _this.vertices[polyIndices[0]],
+            _this.vertices[polyIndices[2]]
+          ).length();
+          var d13 = v.subVectors(
+            _this.vertices[polyIndices[1]],
+            _this.vertices[polyIndices[3]]
+          ).length();
           if (d02<d13) {
             triIndices.push([polyIndices[0],polyIndices[1],polyIndices[2]]);
             triIndices.push([polyIndices[0],polyIndices[2],polyIndices[3]]);
@@ -631,10 +660,10 @@ Model.prototype.upload = function(file, callback) {
           }
         }
         for (var tri=0; tri<triIndices.length; tri++) {
-          triangles.push(new Triangle());
+          triangles.push(new Triangle(_this.vertices));
           var triangle = triangles[tri];
           for (var j=0; j<3; j++) {
-            triangle.addVertex(vertices[triIndices[tri][j]].clone());
+            triangle.addVertex(triIndices[tri][j]);
           }
 
           // average vertex normals (if available) or calculate via x-product
@@ -643,8 +672,14 @@ Model.prototype.upload = function(file, callback) {
             for (var j=0; j<3; j++) normal.add(vertexNormals[triIndices[tri][j]]);
           }
           else {
-            var d01 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[1]);
-            var d02 = new THREE.Vector3().subVectors(triangle.vertices[0], triangle.vertices[2]);
+            var d01 = new THREE.Vector3().subVectors(
+              _this.vertices[triangle.indices[0]],
+              _this.vertices[triangle.indices[1]]
+            );
+            var d02 = new THREE.Vector3().subVectors(
+              _this.vertices[triangle.indices[0]],
+              _this.vertices[triangle.indices[2]]
+            );
             normal.crossVectors(d01, d02);
           }
           normal.normalize();

@@ -32,7 +32,9 @@ Measurement = function(scene, camera, domElement, printout) {
   lineConnector1Geo.vertices.push(new THREE.Vector3());
   lineConnector1Geo.vertices.push(new THREE.Vector3());
   var lineConnector2Geo = lineConnector1Geo.clone();
-  var lineConnectorMat = new THREE.LineBasicMaterial({color: this.connectorColor});
+  var lineConnectorMat = new THREE.LineBasicMaterial({
+    color: this.connectorColor
+  });
   var lineConnector1 = new THREE.LineSegments(lineConnector1Geo, lineConnectorMat);
   var lineConnector2 = new THREE.LineSegments(lineConnector2Geo, lineConnectorMat);
   // need at most two connectors at the moment
@@ -48,7 +50,9 @@ Measurement = function(scene, camera, domElement, printout) {
   var r = 1;
   var circleConnectorSegments = 64;
   var circleConnectorGeo = new THREE.Geometry();
-  var circleConnectorMat = new THREE.LineBasicMaterial({color: this.connectorColor});
+  var circleConnectorMat = new THREE.LineBasicMaterial({
+    color: this.connectorColor
+  });
   var thetaIncrement = 2 * Math.PI / circleConnectorSegments;
   for (var i=0; i<=circleConnectorSegments; i++) {
     var theta = i * thetaIncrement;
@@ -329,6 +333,7 @@ Measurement.prototype.rotate = function(axis, amount) {
     for (var i=0; i<this.circleConnectors.length; i++) {
       var connector = this.circleConnectors[i];
       if (connector.visible) {
+        // rotate circle's position
         connector.position.applyAxisAngle(axisVector, amount);
         // can't use .rotateOnAxis b/c that rotates the circle in object space,
         // where its axes are arbitrarily oriented; need to get its up direction

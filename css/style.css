@@ -121,3 +121,12 @@ p {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+
+#printout {
+  cursor: default;
+  user-select: none;
+  -ms-user-select: none;
+  -moz-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
