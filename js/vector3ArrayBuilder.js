@@ -1,9 +1,25 @@
-// Builds an array of unique vertices. Presence in the array is tested by a hash
-// map that partitions the space within the given bounds into an n-by-n-by-n
-// grid of sectors; each sector is a list of vertices located in it, organized
-// as a { vector, idx } object, where "vector" is a reference to the vector (for
-// equality comparisons) and "idx" is the index in the "vertices" array.
+/*
+  vector3ArrayBuilder.js
+   classes:
+    Vector3ArrayBuilder
+   description:
+    Builds an array of unique vertices. Presence in the array is tested
+    by a hash map that partitions the space within the given bounds into
+    an n-by-n-by-n grid of sectors; each sector is a list of vertices
+    located in it, organized as a { vector, idx } object, where "vector"
+    is a reference to the vector (for equality comparisons) and "idx" is
+    the index in the "vertices" array.
+    It's a major inconvenience that we need to know the bounds first -
+    ideally, we'd just start this thing up and give it arbitrary geometry.
+    Present me doesn't know a better solution, though; maybe future me
+    will figure out something better.
+*/
 
+/* Constructor - initialize with the number of sectors in one dimension,
+   the bounds of the model (an object: { xmin:...,xmax:..., etc }), and
+   the array of vertices which thing will fill out. The array needn't be
+  empty at the start.
+*/
 function Vector3ArrayBuilder(n, bounds, vertices) {
   this.n = n;
   this.xmin = bounds.xmin;
@@ -24,10 +40,12 @@ function Vector3ArrayBuilder(n, bounds, vertices) {
   this.hashMap = [];
 }
 
-// 1. takes THREE.Vector3 v,
-// 2. checks if v exists in the vertices array; if so, returns its index,
-// 2. else, pushes it onto the vertices array,
-// 3. returns index i s.t. vertices[i] equals v
+/* Main method:
+   1. takes THREE.Vector3 v,
+   2. checks if v exists in the vertices array; if so, returns its index,
+   2. else, pushes it onto the vertices array,
+   3. returns index i s.t. vertices[i] equals v
+*/
 Vector3ArrayBuilder.prototype.idx = function(v) {
   var bucket = this.hashMap;
   var xi = this.xIdx(v);
@@ -54,6 +72,8 @@ Vector3ArrayBuilder.prototype.idx = function(v) {
   return idx;
 }
 
+// Calculate the index of a vector in the grid:
+
 // returns x-index in the hash map
 Vector3ArrayBuilder.prototype.xIdx = function(v) {
   return Math.floor((v.x-this.xmin)/this.dx);
@@ -66,6 +86,9 @@ Vector3ArrayBuilder.prototype.yIdx = function(v) {
 Vector3ArrayBuilder.prototype.zIdx = function(v) {
   return Math.floor((v.z-this.zmin)/this.dz);
 }
+
+// Equality comparisons:
+
 // tests for equality between scalars
 Vector3ArrayBuilder.prototype.sEqual = function(a, b) {
   return (Math.abs(a-b) < this.epsilon);

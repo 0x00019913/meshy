@@ -1,3 +1,16 @@
+/* triangle.js
+   classes:
+    Triangle
+   description:
+    Represents a face in triangulated geometry. Initialize with a prepared list
+    of vertices, or at least one that will contain the necessary vertices at the
+    time of adding them.
+    Add vertex indices with .addVertex. Three indices per face.
+    Has methods for recalculating bounds plus calculating surface area and
+    signed volume.
+*/
+
+// Constructor - initialize with a list of vertices for the entire model.
 function Triangle(vertices) {
   this.vertices = vertices;
   this.indices = [];
@@ -8,6 +21,8 @@ function Triangle(vertices) {
   this.signedVolume = null;
 }
 
+// Add a new index idx and update the bounds based on this.vertices[idx], the
+// corresponding vertex object.
 Triangle.prototype.addVertex = function(idx) {
   if (this.count>=3) {
     console.log("ERROR: tried to push a fourth vertex onto a triangle");
@@ -29,6 +44,7 @@ Triangle.prototype.addVertex = function(idx) {
   }
 };
 
+// All bounds to Inifinity.
 Triangle.prototype.resetBounds = function() {
   this.xmin = Infinity;
   this.xmax = -Infinity;
@@ -37,6 +53,8 @@ Triangle.prototype.resetBounds = function() {
   this.zmin = Infinity;
   this.zmax = -Infinity;
 }
+
+// Update bounds with the addition of a new vertex.
 Triangle.prototype.updateBoundsV = function(vertex) {
   this.xmin = vertex.x<this.xmin ? vertex.x : this.xmin;
   this.xmax = vertex.x>this.xmax ? vertex.x : this.xmax;
@@ -45,6 +63,7 @@ Triangle.prototype.updateBoundsV = function(vertex) {
   this.zmin = vertex.z<this.zmin ? vertex.z : this.zmin;
   this.zmax = vertex.z>this.zmax ? vertex.z : this.zmax;
 }
+// Recalculate all bounds.
 Triangle.prototype.updateBounds = function() {
   this.resetBounds();
   for (var i=0; i<3; i++) {
@@ -52,38 +71,10 @@ Triangle.prototype.updateBounds = function() {
   }
 }
 
+// Set the normal.
 Triangle.prototype.setNormal = function(normal) {
   this.normal = normal;
 };
-
-/*Triangle.prototype.translate = function(axis, amount) {
-  for (var i=0; i<3; i++) {
-    var vertex = this.vertices[i];
-    vertex[axis] += amount;
-  }
-  this[axis+"min"] += amount;
-  this[axis+"max"] += amount;
-}
-
-Triangle.prototype.rotate = function(axis, amount) {
-  this.resetBounds();
-  var axisVector = axisToVector3Map[axis];
-  for (var i=0; i<3; i++) {
-    var vertex = this.vertices[i];
-    vertex.applyAxisAngle(axisVector, amount);
-    this.updateBounds(vertex);
-  }
-  this.normal.applyAxisAngle(axisVector, amount);
-}
-
-Triangle.prototype.scale = function(axis, amount) {
-  for (var i=0; i<3; i++) {
-    var vertex = this.vertices[i];
-    vertex[axis] *= amount;
-  }
-  this[axis+"min"] *= amount;
-  this[axis+"max"] *= amount;
-}*/
 
 // Calculate triangle area via cross-product.
 Triangle.prototype.calcSurfaceArea = function() {
@@ -113,7 +104,7 @@ Triangle.prototype.calcSignedVolume = function() {
 }
 
 // Calculate endpoints of segment formed by the intersection of this triangle
-// and a plane normal to the y-axis.
+// and a plane normal to the y-axis. Used for slicing.
 // TODO: generalize to any axis
 Triangle.prototype.yIntersection = function(planePos) {
   var segment = [];

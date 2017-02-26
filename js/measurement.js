@@ -1,3 +1,22 @@
+/* measurement.js
+   classes:
+    Measurement
+   description:
+    Represents a manual measurement on the model. Displays markers
+    where a user clicks on the model and connects them appropriately.
+    Measured values are shown in a special sector of the InfoBox.
+    Uses the Pointer class to get the intersection point. Interaction
+    occurs by passing the .onClick function to the pointer, which calls
+    the .onClick upon clicking the model.
+    Turn on with .activate(type) where type is a string (see the
+    function for the available types).
+    Turn off with .deactivate().
+*/
+
+/* Constructor - initialize with a THREE.Scene, a THREE.Camera, an HTML
+   element (needed to initialize the Pointer instance) and a Printout
+   object to print messages on-screen.
+*/
 Measurement = function(scene, camera, domElement, printout) {
   this.type = null;
   this.measurementPoints = 0;
@@ -73,6 +92,7 @@ Measurement = function(scene, camera, domElement, printout) {
   }
 }
 
+// turn on a given type of measurement
 Measurement.prototype.activate = function(type) {
   if (this.active) this.deactivate();
   this.active = true;
@@ -97,6 +117,7 @@ Measurement.prototype.activate = function(type) {
   this.callbackIdx = this.pointer.addClickCallback(this.onClick.bind(this));
 }
 
+// deactivate and clear all drawn elements off the screen
 Measurement.prototype.deactivate = function() {
   if (!this.active) return;
   this.active = false;
@@ -160,7 +181,9 @@ Measurement.prototype.onClick = function(intersection) {
   this.calculateMeasurement();
 }
 
-// this.markerIdx is the upcoming marker index, not the one that was just placed
+// Called when a marker has been placed.
+// NB: this.markerIdx is the upcoming marker index, not the one that was
+// just placed.
 Measurement.prototype.calculateMeasurement = function() {
   var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
   var prevprevMarkerIdx =
@@ -202,10 +225,14 @@ Measurement.prototype.calculateMeasurement = function() {
   }
 }
 
+// If linear measurement (segments, not circles), can put down connectors
+// between consecutive markers.
 Measurement.prototype.isLinearMeasurement = function() {
   return this.type=="segmentLength" || this.type=="angle";
 }
 
+// Three vertices in R3 uniquely specify a circle; calculate this circle
+// and return its parameters.
 Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   // vectors from v1/2 to v2: d32 = v3-v2, d12 = v1-v2
   var d32 = v3.clone().sub(v2);
@@ -263,6 +290,7 @@ Measurement.prototype.calculateCircle = function(v1, v2, v3) {
   return { center: center, r: r, n: n};
 }
 
+// Put down the circle connector with the given parameters.
 Measurement.prototype.setCircleConnector = function(circle) {
   var connector = this.circleConnectors[0];
   connector.position.copy(circle.center);
@@ -271,6 +299,7 @@ Measurement.prototype.setCircleConnector = function(circle) {
   connector.visible = true;
 }
 
+// Set the size of the markers.
 Measurement.prototype.setScale = function(scale) {
   this.pointer.setScale(scale);
   for (var i=0; i<this.markers.length; i++) {
@@ -278,6 +307,7 @@ Measurement.prototype.setScale = function(scale) {
   }
 }
 
+// Translate the markers and the connectors.
 Measurement.prototype.translate = function(axis, amount) {
   if (!this.active) return;
 
@@ -307,6 +337,7 @@ Measurement.prototype.translate = function(axis, amount) {
   }
 }
 
+// Rotate the markers and the connectors.
 Measurement.prototype.rotate = function(axis, amount) {
   if (!this.active) return;
 
@@ -346,6 +377,7 @@ Measurement.prototype.rotate = function(axis, amount) {
   }
 }
 
+// Scale the markers and recalculate the connectors.
 Measurement.prototype.scale = function(axis, amount) {
   if (!this.active) return;
 
@@ -367,14 +399,18 @@ Measurement.prototype.scale = function(axis, amount) {
       }
     }
   }
-  // don't need to rotate circle connectors because scaling requires recalculating it
-  this.calculateMeasurement();
+  // don't need to scale circle connectors because scaling requires recalculating it
+  else {
+    this.calculateMeasurement();
+  }
 }
 
+// Use to set the measurement output.
 Measurement.prototype.setOutput = function(output) {
   this.output = output;
 }
 
+// Print a measurement to the output.
 Measurement.prototype.showOutput = function(measurement) {
   if (this.output) {
     this.output.showMeasurement(measurement);
