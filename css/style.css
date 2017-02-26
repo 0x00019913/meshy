@@ -10,6 +10,11 @@ p {
   color: #dddddd;
 }
 
+a {
+  color: #777777;
+  text-decoration: none;
+}
+
 #uploadbox {
   position: absolute;
   left: 50%;

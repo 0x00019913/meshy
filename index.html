@@ -19,23 +19,31 @@
 
       <p><b>Motivation:</b></p>
 
-      <p>I have, more than once, found myself in need of a simple (and free and accessible) tool for performing measurements, calculations, and simple transformations on digital meshes (standard use case is 3D printing, e.g., jewelry). Existing tools require downloads and strike me as aesthetically meh, hence this project.</p>
+      <p>I have, on more than one occasion, found myself in need of a simple (and free and accessible) tool for performing measurements, calculations, and simple transformations on digital meshes (standard use case is 3D printing, e.g., jewelry). Existing tools predominantly run on the desktop (requiring you to download them) and, moreover, strike me as aesthetically meh, hence this project.</p>
 
       <p><b>Features:</b> (very much under development, will add more)</p>
 
-      <p>OBJ and STL imports/exports; calculation of surface area, volume, center of mass (with a position indicator widget); translations, rotations, scaling, floor, center; measurement of segment length, segment angle, circle radius and circumference, arc length.</p>
+      <p>OBJ and STL imports/exports; calculation of surface area, volume, center of mass (with a position indicator widget); translations, rotations, scaling, floor, center; measurement of segment length, segment angle, circle radius and circumference, arc length. Controls with the mouse (MMB to pan).</p>
+
+      <p><b>Units:</b></p>
+
+      <p>Neither STL nor OBJ files have intrinsic units. I'm told the de facto standard is to interpret one STL unit as 1mm.</p>
 
       <p><b>Limitations:</b></p>
 
-      <p>Only tested in Chrome and Firefox. Will work in the most recent versions. Only one model at a time; delete the current model to upload a new one. Only actions under the "Transform" tab are undoable. Not mobile-enabled and probably never will be. Can't change the mesh material (yet). File size limits depend on your system and browser; I think it's best to stay under 50MB. If the page hangs, the file's too big.</p>
+      <p>Only tested in Chrome and Firefox. Will work in the most recent versions. No n-gons in OBJ files; only tris and quads supported, and imported quads are triangulated. It's wisest to have them triangulated beforehand. Only one model at a time; delete the current model to upload a new one. Only actions under the "Transform" tab are undoable. Not mobile-friendly and probably never will be. Can't change the mesh material (yet). File size limits depend on your system and browser; I think it's best to stay under 50MB. If the page hangs, the file's too big. Or try a different browser. I've been able to import a solid 1.5M polys.</p>
 
       <p><b>Bugs:</b></p>
 
-      <p>Probably. :( See the console (F12 key in Chrome and Firefox) for specifics of an error. Please email any relevant information to 0x00019913@gmail.com if interested in further development. Merci beaucoup in advance. :D</p>
+      <p>Probably. :( See the console (F12 key in Chrome and Firefox) for specifics of an error. Please email any relevant information to 0x00019913@gmail.com or drop an issue <a href="https://github.com/0x00019913/meshy" target="_blank">in the repo</a> if interested in further development. Merci beaucoup in advance. :D</p>
 
       <p><b>TODO:</b></p>
 
-      <p>Manually resizing the floor, calculating cross-sectional area in any axis (should be easy), mesh decimation, mesh repair, mesh slicing visualization.</p>
+      <p>Manually resizing the floor, changing mesh material, calculating cross-sectional area in any axis (should be easy), wall thickness calculation, mesh decimation, mesh repair, mesh slicing visualization.</p>
+
+      <p>Thanks for using!</p>
+
+      <p><3, 0x00019913</p>
     </div>
     <div id="container"></div>
 
