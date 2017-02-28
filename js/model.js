@@ -409,6 +409,13 @@ Model.prototype.makePlainModel = function(scene) {
   scene.add(this.plainMesh);
 }
 
+Model.prototype.getMeshColor = function() {
+  if (this.plainMesh) return this.plainMesh.material.color.getHex();
+}
+Model.prototype.setMeshColor = function(color) {
+  if (this.plainMesh) return this.plainMesh.material.color.set(color);
+}
+
 // Generate file output representing the model and save it.
 Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;

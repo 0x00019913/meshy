@@ -131,6 +131,8 @@ Stage.prototype.generateUI = function() {
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
+  this.meshColor = "#ffffff";
+  this.meshColorController = displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
   this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
@@ -151,6 +153,10 @@ Stage.prototype.generateUI = function() {
 // anything that needs to be refreshed by hand (not in every frame)
 Stage.prototype.updateUI = function() {
   this.filenameController.updateDisplay();
+  if (this.mesh) {
+    this.meshColor = this.mesh.getMeshColor();
+    this.meshColorController.updateDisplay();
+  }
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -253,6 +259,9 @@ Stage.prototype.toggleWireframe = function() {
 }
 Stage.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
+}
+Stage.prototype.setMeshColor = function() {
+  if (this.model) this.model.setMeshColor(this.meshColor);
 }
 
 // Initialize the viewport, set up everything with WebGL including the
@@ -444,6 +453,7 @@ Stage.prototype.displayMesh = function(success) {
   this.model.render(this.scene, "plain");
   this.cameraToModel();
   this.filename = this.model.filename;
+  this.setMeshColor();
   this.updateUI();
 }
 
