@@ -100,7 +100,6 @@ Measurement.prototype.activate = function(type) {
   if (type=="segmentLength") this.measurementPoints = 2;
   else if (type=="angle") this.measurementPoints = 3;
   else if (type=="radius") this.measurementPoints = 3;
-  else if (type=="arcLength") this.measurementPoints = 3;
   else {
     this.type = null;
     return;
@@ -122,6 +121,7 @@ Measurement.prototype.deactivate = function() {
   if (!this.active) return;
   this.active = false;
   this.type = null;
+  this.currentMeasurement = null;
 
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].visible = false;
@@ -206,23 +206,30 @@ Measurement.prototype.calculateMeasurement = function() {
         var circle = this.calculateCircle(v1, v2, v3);
         if (!circle) this.printout.error("couldn't calculate circle, try again");
         this.setCircleConnector(circle);
-        result = { radius: circle.r, circumference: circle.r*Math.PI*2 };
-        break;
-      case "arcLength":
-        var circle = this.calculateCircle(v1, v2, v3);
-        if (!circle) this.printout.log("couldn't calculate circle, try again");
-        this.setCircleConnector(circle);
         var dc1 = circle.center.clone().sub(v1).normalize();
         var dc2 = circle.center.clone().sub(v2).normalize();
         var dc3 = circle.center.clone().sub(v3).normalize();
         var theta31 = Math.acos(dc3.dot(dc1));
         var theta12 = Math.acos(dc1.dot(dc2));
-        var result = { arcLength: circle.r * (theta31+theta12) };
+        result = {
+          radius: circle.r,
+          diameter: circle.r*2,
+          circumference: circle.r*Math.PI*2,
+          arcLength: circle.r * (theta31+theta12)
+        };
         break;
     }
 
+    this.currentMeasurement = result;
     this.showOutput(result);
   }
+}
+
+Measurement.prototype.getMeasuredValue = function(type) {
+  if (this.currentMeasurement && (type in this.currentMeasurement)) {
+    return this.currentMeasurement[type];
+  }
+  return null;
 }
 
 // If linear measurement (segments, not circles), can put down connectors

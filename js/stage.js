@@ -1,6 +1,6 @@
 /* stage.js
    classes:
-    none
+    Stage
    description:
     Main class representing the Meshy viewport. Encompasses UI, handling the
     model, and controlling the viewport.
@@ -74,18 +74,41 @@ Stage.prototype.generateUI = function() {
   rotateFolder.add(this, "zRotation");
   rotateFolder.add(this, "rotateZ");
   var scaleFolder = transformFolder.addFolder("Scale");
+  var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
   this.xScale = 1;
-  scaleFolder.add(this, "xScale", 0);
-  scaleFolder.add(this, "scaleX");
+  scaleByFactorFolder.add(this, "xScale", 0);
+  scaleByFactorFolder.add(this, "scaleX");
   this.yScale = 1;
-  scaleFolder.add(this, "yScale", 0);
-  scaleFolder.add(this, "scaleY");
+  scaleByFactorFolder.add(this, "yScale", 0);
+  scaleByFactorFolder.add(this, "scaleY");
   this.zScale = 1;
-  scaleFolder.add(this, "zScale", 0);
-  scaleFolder.add(this, "scaleZ");
+  scaleByFactorFolder.add(this, "zScale", 0);
+  scaleByFactorFolder.add(this, "scaleZ");
   this.allScale = 1;
-  scaleFolder.add(this, "allScale", 0);
-  scaleFolder.add(this, "scaleAll");
+  scaleByFactorFolder.add(this, "allScale", 0);
+  scaleByFactorFolder.add(this, "scaleAll");
+  var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
+  this.scaleOnAllAxes = false;
+  scaleToSizeFolder.add(this, "scaleOnAllAxes");
+  this.newXSize = 1;
+  scaleToSizeFolder.add(this, "newXSize", 0);
+  scaleToSizeFolder.add(this, "scaleToXSize");
+  this.newYSize = 1;
+  scaleToSizeFolder.add(this, "newYSize", 0);
+  scaleToSizeFolder.add(this, "scaleToYSize");
+  this.newZSize = 1;
+  scaleToSizeFolder.add(this, "newZSize", 0);
+  scaleToSizeFolder.add(this, "scaleToZSize");
+  var scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
+  this.newSegmentLength = 1;
+  scaleToMeasurementFolder.add(this, "newSegmentLength", 0);
+  scaleToMeasurementFolder.add(this, "scaleToLengthMeasurement");
+  this.newRadiusValue = 1;
+  scaleToMeasurementFolder.add(this, "newRadiusValue", 0);
+  scaleToMeasurementFolder.add(this, "scaleToRadiusMeasurement");
+  this.newDiameterValue = 1;
+  scaleToMeasurementFolder.add(this, "newDiameterValue", 0);
+  scaleToMeasurementFolder.add(this, "scaleToDiameterMeasurement");
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -103,7 +126,6 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mSegmentLength");
   measurementFolder.add(this, "mAngle");
   measurementFolder.add(this, "mRadius");
-  measurementFolder.add(this, "mArcLength");
   measurementFolder.add(this, "mDeactivate");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleCOM");
@@ -157,6 +179,37 @@ Stage.prototype.scaleY = function() { this.transform("scale","y",this.yScale); }
 Stage.prototype.scaleZ = function() { this.transform("scale","z",this.zScale); }
 Stage.prototype.scaleAll = function() {
   this.transform("scale","all",[this.allScale, this.allScale, this.allScale]); }
+Stage.prototype.scaleToXSize = function() { this.scaleToSize("x",this.newXSize); }
+Stage.prototype.scaleToYSize = function() { this.scaleToSize("y",this.newYSize); }
+Stage.prototype.scaleToZSize = function() { this.scaleToSize("z",this.newZSize); }
+Stage.prototype.scaleToSize = function(axis, value) {
+  if (this.model) {
+    var currentSize = this.model["getSize"+axis]();
+    if (currentSize>0) {
+      var ratio = value/currentSize;
+      if (this.scaleOnAllAxes) this.transform("scale","all",[ratio,ratio,ratio]);
+      else this.transform("scale",axis,ratio);
+    }
+    else {
+      this.printout.error("Couldn't get current model size, try again or reload the model.");
+    }
+  }
+}
+Stage.prototype.scaleToLengthMeasurement = function() {
+  this.scaleToMeasurement("length", this.newSegmentLength); }
+Stage.prototype.scaleToRadiusMeasurement = function() {
+  this.scaleToMeasurement("radius", this.newRadiusValue); }
+Stage.prototype.scaleToDiameterMeasurement = function() {
+  this.scaleToMeasurement("diameter", this.newDiameterValue); }
+Stage.prototype.scaleToMeasurement = function(type, value) {
+  if (this.model) {
+    var currentValue = this.model.getMeasuredValue(type, value);
+    if (currentValue) {
+      var ratio = value/currentValue;
+      this.transform("scale","all",[ratio,ratio,ratio]);
+    }
+  }
+}
 Stage.prototype.floorX = function() { this.transform("floor","x",null); }
 Stage.prototype.floorY = function() { this.transform("floor","y",null); }
 Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
@@ -170,7 +223,6 @@ Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcC
 Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
 Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
 Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
-Stage.prototype.mArcLength = function() { this.startMeasurement("arcLength"); }
 Stage.prototype.startMeasurement = function(type) {
   if (this.model) {
     this.printout.log("Measurement activated.");

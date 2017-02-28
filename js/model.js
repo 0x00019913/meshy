@@ -232,6 +232,25 @@ Model.prototype.scale = function (axis, amount) {
   this.measurement.setScale(this.getMaxSize() * 0.4);
 }
 
+// If current measurement has the given "type", return its value.
+Model.prototype.getMeasuredValue = function (type, newValue) {
+  if (this.measurement) {
+    if (this.measurement.active) {
+      var currentValue = this.measurement.getMeasuredValue(type);
+      if (currentValue!==null) {
+        if (currentValue>0) return currentValue;
+        else this.printout.warn("New value can't be 0 or negative.");
+      }
+      else {
+        this.printout.warn("The currently active measurement doesn't contain the attribute '" + type + "'.");
+      }
+    }
+    else {
+      this.printout.warn("Can't scale to " + type + "; no measurement currently active.");
+    }
+  }
+}
+
 // Toggle wireframe.
 Model.prototype.toggleWireframe = function() {
   this.wireframe = !this.wireframe;
