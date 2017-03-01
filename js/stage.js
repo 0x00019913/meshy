@@ -126,6 +126,9 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mSegmentLength");
   measurementFolder.add(this, "mAngle");
   measurementFolder.add(this, "mRadius");
+  measurementFolder.add(this, "mCrossSectionX");
+  measurementFolder.add(this, "mCrossSectionY");
+  measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleCOM");
@@ -229,17 +232,14 @@ Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcC
 Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
 Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
 Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
-Stage.prototype.startMeasurement = function(type) {
-  if (this.model) {
-    this.printout.log("Measurement activated.");
-    this.model.measurement.activate(type);
-  }
+Stage.prototype.mCrossSectionX = function() { this.startMeasurement("crossSection","x"); }
+Stage.prototype.mCrossSectionY = function() { this.startMeasurement("crossSection","y"); }
+Stage.prototype.mCrossSectionZ = function() { this.startMeasurement("crossSection","z"); }
+Stage.prototype.startMeasurement = function(type, param) {
+  if (this.model) this.model.activateMeasurement(type, param);
 }
 Stage.prototype.mDeactivate = function() {
-  if (this.model) {
-    this.printout.log("Measurement deactivated.");
-    this.model.measurement.deactivate();
-  }
+  if (this.model) this.model.deactivateMeasurement();
 }
 
 Stage.prototype.toggleFloor = function() {
@@ -463,9 +463,8 @@ Stage.prototype.cameraToModel = function() {
     this.printout.warn("No model to align camera.");
     return;
   }
-  var center = this.model.getCenter();
   this.controls.update({
-    origin: new THREE.Vector3(center[0],center[1],center[2]),
+    origin: this.model.getCenter(),
     r: this.model.getMaxSize() * 3 // factor of 3 empirically determined
   });
 }

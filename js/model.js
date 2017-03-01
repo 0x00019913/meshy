@@ -20,6 +20,8 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.triangles = [];
   this.vertices = [];
   this.count = 0; // count of faces; used more often than count of vertices
+  // true if transformation has occurred that may require updating triangle bounds
+  this.trianglesDirty = false;
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
@@ -106,11 +108,7 @@ Model.prototype.getBounds = function() {
 
 // Get a list representing the coords of the center.
 Model.prototype.getCenter = function() {
-  return [
-    this.getCenterx(),
-    this.getCentery(),
-    this.getCenterz()
-  ];
+  return new THREE.Vector3(this.getCenterx(), this.getCentery(), this.getCenterz());
 }
 // Get individual coords of the center.
 Model.prototype.getCenterx = function() { return (this.xmax+this.xmin)/2; }
@@ -118,11 +116,7 @@ Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
 Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
 // Get a list representing the size of the model in every direction.
 Model.prototype.getSize = function() {
-  return [
-    this.getSizex(),
-    this.getSizey(),
-    this.getSizez()
-  ];
+  return new THREE.Vector3(this.getSizex(), this.getSizey(), this.getSizez());
 }
 // Get individual sizes of the model.
 Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
@@ -131,12 +125,12 @@ Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
 // Largest dimension of the model.
 Model.prototype.getMaxSize = function() {
   var size = this.getSize();
-  return Math.max(size[0], Math.max(size[1], size[2]));
+  return Math.max(size.x, Math.max(size.y, size.z));
 }
 // Smallest dimension of the model.
 Model.prototype.getMinSize = function() {
   var size = this.getSize();
-  return Math.min(size[0], Math.min(size[1], size[2]));
+  return Math.min(size.x, Math.min(size.y, size.z));
 }
 // Individual center of mass coords.
 Model.prototype.getCOMx = function() {
@@ -158,6 +152,8 @@ Model.prototype.translate = function(axis, amount) {
   for (var i=0; i<this.vertices.length; i++) {
     this.vertices[i][axis] += amount;
   }
+  this.trianglesDirty = true;
+
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
   this.plainMesh.geometry.boundingSphere = null;
@@ -189,6 +185,8 @@ Model.prototype.rotate = function(axis, amount) {
   for (var i=0; i<this.count; i++) {
     this.triangles[i].normal.applyAxisAngle(axisVector, amount);
   }
+  this.trianglesDirty = true;
+
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
   this.plainMesh.geometry.boundingSphere = null;
@@ -199,7 +197,9 @@ Model.prototype.rotate = function(axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
-  this.measurement.rotate(axis, amount);
+  // size argument is necessary for resizing things that aren't rotationally
+  // symmetric
+  this.measurement.rotate(axis, amount, this.getSize());
 }
 
 // Scale the model on axis ("x"/"y"/"z") by amount.
@@ -213,6 +213,8 @@ Model.prototype.scale = function (axis, amount) {
     triangle.surfaceArea = null;
     triangle.signedVolume = null;
   }
+  this.trianglesDirty = true;
+
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
   this.plainMesh.geometry.boundingSphere = null;
@@ -249,6 +251,33 @@ Model.prototype.getMeasuredValue = function (type, newValue) {
       this.printout.warn("Can't scale to " + type + "; no measurement currently active.");
     }
   }
+}
+
+Model.prototype.activateMeasurement = function (type, param) {
+  if (this.measurement) {
+    var activated;
+    // If param supplied, need to pass in extra information in a params object.
+    // If calculating cross-section, the param is an axis; also pass size,
+    // center, and a function to calculate cross-section.
+    if (param) {
+      var params = {};
+      if (type=="crossSection") {
+        params.axis = param;
+        params.size = this.getSize();
+        params.center = this.getCenter();
+        params.fn = this.calcCrossSection.bind(this);
+      }
+
+      activated = this.measurement.activate(type, params);
+    }
+    else {
+      activated = this.measurement.activate(type);
+    }
+    if (activated) return activated;
+  }
+}
+Model.prototype.deactivateMeasurement = function () {
+  if (this.measurement) this.measurement.deactivate();
 }
 
 // Toggle wireframe.
@@ -299,6 +328,33 @@ Model.prototype.calcCenterOfMass = function() {
   this.centerOfMass.fromArray(center).divideScalar(modelVolume);
 }
 
+Model.prototype.calcCrossSection = function(axis, pos) {
+  var crossSectionArea = 0;
+  var segments = [];
+  for (var i=0; i<this.count; i++) {
+    var triangle = this.triangles[i];
+    if (this.trianglesDirty) {
+      triangle.updateBounds();
+    }
+    var segment = triangle.intersection(axis, pos);
+    if (segment && segment.length==2) {
+      segments.push(segment);
+      // Algorithm is like this:
+      // 1. shift segment endpoints down to 0 on axis,
+      // 2. calculate area of the triangle formed by segment and origin,
+      // 3. multiply by sign, accumulate for all triangles
+      segment[0][axis] = 0;
+      segment[1][axis] = 0;
+      var area = segment[0].cross(segment[1]).multiplyScalar(1/2).length();
+      var sign = Math.sign(segment[1].dot(triangle.normal));
+      crossSectionArea += sign * area;
+    }
+  }
+  this.trianglesDirty = false;
+
+  return crossSectionArea;
+}
+
 // Toggle the COM indicator. If the COM hasn't been calculated, then
 // calculate it.
 Model.prototype.toggleCenterOfMass = function() {
@@ -346,10 +402,10 @@ Model.prototype.positionTargetPlanes = function(point) {
   // arrange that the planes protrude from the boundaries of the object
   // by 0.1 times its size
   var extendFactor = 0.1;
-  var size = this.getSize().map(function(x) { return x*=extendFactor; });
-  var xmin = this.xmin-size[0], xmax = this.xmax+size[0];
-  var ymin = this.ymin-size[1], ymax = this.ymax+size[1];
-  var zmin = this.zmin-size[2], zmax = this.zmax+size[2];
+  var size = this.getSize().multiplyScalar(extendFactor);
+  var xmin = this.xmin-size.x, xmax = this.xmax+size.x;
+  var ymin = this.ymin-size.y, ymax = this.ymax+size.y;
+  var zmin = this.zmin-size.z, zmax = this.zmax+size.z;
 
   vX[0].set(point.x, ymin, zmin);
   vX[1].set(point.x, ymin, zmax);

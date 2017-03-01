@@ -43,6 +43,22 @@ Measurement = function(scene, camera, domElement, printout) {
     this.scene.add(this.markers[i]);
   }
 
+  var planeMarkerGeo = new THREE.PlaneGeometry(1,1);
+  var planeMarkerMat = new THREE.MeshStandardMaterial({
+    color: this.markerColors[0],
+    side: THREE.DoubleSide
+  });
+  planeMarkerMat.transparent = true;
+  planeMarkerMat.opacity = 0.5;
+  var planeMarker = new THREE.Mesh(planeMarkerGeo, planeMarkerMat);
+  planeMarker.name = "marker";
+  planeMarker.visible = false;
+  // need at most one, but put in an array for consistency
+  this.planeMarkers = [planeMarker];
+  for (var i=0; i<this.planeMarkers.length; i++) {
+    this.scene.add(this.planeMarkers[i]);
+  }
+
   // because .clone() apparently doesn't clone the underlying geometry even
   // when set to recursive, need to make individual connector geo; .clone() was
   // fine for the markers because we only set the position of the mesh, but
@@ -92,16 +108,30 @@ Measurement = function(scene, camera, domElement, printout) {
   }
 }
 
-// turn on a given type of measurement
-Measurement.prototype.activate = function(type) {
+// Turn on a given type of measurement with params (these are required for
+// cross-section measurements - need to position the target plane and provide
+// a function to calculate the cross-section).
+Measurement.prototype.activate = function(type, params) {
   if (this.active) this.deactivate();
   this.active = true;
 
   if (type=="segmentLength") this.measurementPoints = 2;
   else if (type=="angle") this.measurementPoints = 3;
   else if (type=="radius") this.measurementPoints = 3;
+  else if (type=="crossSection") {
+    if (!params || !params.axis || !params.size || !params.center || !params.fn) {
+      this.type = null;
+      return;
+    }
+    this.measurementPoints = 1;
+    // this.planeParams will henceforth be the source of truth for the plane
+    // marker; update it and call this.setPlaneMarker() to position it.
+    this.planeParams = params;
+    this.setPlaneMarker();
+  }
   else {
     this.type = null;
+
     return;
   }
 
@@ -114,6 +144,9 @@ Measurement.prototype.activate = function(type) {
   this.pointer.activate();
   // store a place on the pointer's list of callbacks so that we can remove it later
   this.callbackIdx = this.pointer.addClickCallback(this.onClick.bind(this));
+
+  if (this.type) this.printout.log("Measurement activated.");
+  return this.type;
 }
 
 // deactivate and clear all drawn elements off the screen
@@ -126,6 +159,9 @@ Measurement.prototype.deactivate = function() {
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].visible = false;
   }
+  for (var i=0; i<this.planeMarkers.length; i++) {
+    this.planeMarkers[i].visible = false;
+  }
   for (var i=0; i<this.lineConnectors.length; i++) {
     this.lineConnectors[i].visible = false;
   }
@@ -137,46 +173,56 @@ Measurement.prototype.deactivate = function() {
   this.pointer.deactivate();
 
   this.output.hideMeasurementOutput();
+
+  this.printout.log("Measurement deactivated.");
 }
 
 // accepts an intersection object returned by THREE.Raycaster
 Measurement.prototype.onClick = function(intersection) {
+  if (!this.type) return;
   var point = intersection.point;
-  var marker = this.markers[this.markerIdx];
-  marker.position.copy(point);
-  var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
-  var prevprevMarkerIdx =
-    (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
-
-  // can reconsolidate but doesn't seem necessary
-  marker.material.color.set(this.markerColors[0]);
-  if (this.measurementPoints>1)
-    this.markers[prevMarkerIdx].material.color.set(this.markerColors[1]);
-  if (this.measurementPoints>2)
-    this.markers[prevprevMarkerIdx].material.color.set(this.markerColors[2]);
-
-  if (this.activeMarkers<this.measurementPoints) {
-    this.activeMarkers++;
+  if (this.isPlanarMeasurement()) {
+    var marker = this.planeMarkers[0];
+    marker.position[this.planeParams.axis] = point[this.planeParams.axis];
     marker.visible = true;
+    this.activeMarkers = 1;
   }
+  else {
+    var marker = this.markers[this.markerIdx];
+    marker.position.copy(point);
+    var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
+    var prevprevMarkerIdx =
+      (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
 
-  // can connect consecutive markers with linear connectors if the
-  // measurement is not circular
-  if (this.isLinearMeasurement()) {
-    if (this.activeMarkers>1) {
-      var connector = this.lineConnectors[this.connectorIdx];
-      var markerPrev = this.markers[prevMarkerIdx];
+    marker.material.color.set(this.markerColors[0]);
+    if (this.measurementPoints>1)
+      this.markers[prevMarkerIdx].material.color.set(this.markerColors[1]);
+    if (this.measurementPoints>2)
+      this.markers[prevprevMarkerIdx].material.color.set(this.markerColors[2]);
 
-      connector.visible = true;
-      connector.geometry.vertices[0].copy(markerPrev.position);
-      connector.geometry.vertices[1].copy(marker.position);
-      connector.geometry.verticesNeedUpdate = true;
-
-      this.connectorIdx = (this.connectorIdx+1)%(this.measurementPoints-1);
+    if (this.activeMarkers<this.measurementPoints) {
+      this.activeMarkers++;
+      marker.visible = true;
     }
-  }
 
-  this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
+    // can connect consecutive markers with linear connectors if the
+    // measurement is not circular
+    if (this.isLinearMeasurement()) {
+      if (this.activeMarkers>1) {
+        var connector = this.lineConnectors[this.connectorIdx];
+        var markerPrev = this.markers[prevMarkerIdx];
+
+        connector.visible = true;
+        connector.geometry.vertices[0].copy(markerPrev.position);
+        connector.geometry.vertices[1].copy(marker.position);
+        connector.geometry.verticesNeedUpdate = true;
+
+        this.connectorIdx = (this.connectorIdx+1)%(this.measurementPoints-1);
+      }
+    }
+
+    this.markerIdx = (this.markerIdx+1)%this.measurementPoints;
+  }
 
   this.calculateMeasurement();
 }
@@ -188,7 +234,7 @@ Measurement.prototype.calculateMeasurement = function() {
   var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
   var prevprevMarkerIdx =
     (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
-  var result = 0;
+  var result;
   if (this.activeMarkers==this.measurementPoints) {
     var v1 = this.markers[prevprevMarkerIdx].position;
     var v2 = this.markers[prevMarkerIdx].position;
@@ -218,6 +264,13 @@ Measurement.prototype.calculateMeasurement = function() {
           arcLength: circle.r * (theta31+theta12)
         };
         break;
+      case "crossSection":
+        var pos = this.planeMarkers[0].position[this.planeParams.axis];
+        this.planeParams.center[this.planeParams.axis] = pos;
+        result = {
+          crossSection: this.planeParams.fn(this.planeParams.axis, pos)
+        };
+        break;
     }
 
     this.currentMeasurement = result;
@@ -236,6 +289,10 @@ Measurement.prototype.getMeasuredValue = function(type) {
 // between consecutive markers.
 Measurement.prototype.isLinearMeasurement = function() {
   return this.type=="segmentLength" || this.type=="angle";
+}
+// If planar measurement, put down plane marker instead of normal markers.
+Measurement.prototype.isPlanarMeasurement = function() {
+  return this.type=="crossSection";
 }
 
 // Three vertices in R3 uniquely specify a circle; calculate this circle
@@ -306,6 +363,30 @@ Measurement.prototype.setCircleConnector = function(circle) {
   connector.visible = true;
 }
 
+Measurement.prototype.setPlaneMarker = function() {
+  var marker = this.planeMarkers[0];
+  marker.position.copy(zeroVector);
+  marker.lookAt(axisToVector3Map[this.planeParams.axis]);
+  marker.position.copy(this.planeParams.center);
+  var size = this.planeParams.size.clone();
+  // want the marker to extrude past the bounds of the model
+  size.multiplyScalar(1.2);
+  // Not obvious and far messier than I'd like, but can't think of a better way:
+  // The .scale attribute scales the plane in its object space. The plane starts
+  // out with its geometry in the xy plane and with z its normal. Having
+  // oriented the model in world space with .lookAt, need to rotate the size
+  // vector into the same orientation and *then* use it to scale. (But, if it's
+  // already aligned with z, don't need to do anything.)
+  if (this.planeParams.axis != "z") {
+    var axisVector = axisToVector3Map[this.planeParams.axis];
+    var rotationAngle = axisToVector3Map["z"].clone().cross(axisVector);
+    // one dimension of the scale goes negative after rotation without this
+    size.y *= -1;
+    size.applyAxisAngle(rotationAngle, Math.PI/2);
+  }
+  marker.scale.copy(size);
+}
+
 // Set the size of the markers.
 Measurement.prototype.setScale = function(scale) {
   this.pointer.setScale(scale);
@@ -318,67 +399,95 @@ Measurement.prototype.setScale = function(scale) {
 Measurement.prototype.translate = function(axis, amount) {
   if (!this.active) return;
 
-  // translate markers
-  for (var i=0; i<this.markers.length; i++) {
-    var marker = this.markers[i];
-    if (marker.visible) marker.position[axis] += amount;
-  }
-
-  // translate line conectors if linear measurement
-  if (this.isLinearMeasurement()) {
-    for (var i=0; i<this.lineConnectors.length; i++) {
-      var connector = this.lineConnectors[i];
-      if (connector.visible) {
-        connector.geometry.vertices[0][axis] += amount;
-        connector.geometry.vertices[1][axis] += amount;
-        connector.geometry.verticesNeedUpdate = true;
-      }
+  // if plane measurement, just translate plane
+  if (this.isPlanarMeasurement()) {
+    for (var i=0; i<this.planeMarkers.length; i++) {
+      this.planeParams.center[axis] += amount;
+      this.setPlaneMarker();
     }
   }
-  // else, translate circle connectors
+  // else, need to translate markers and connectors
   else {
-    for (var i=0; i<this.circleConnectors.length; i++) {
-      var connector = this.circleConnectors[i];
-      if (connector.visible) connector.position[axis] += amount;
+    // translate markers
+    for (var i=0; i<this.markers.length; i++) {
+      var marker = this.markers[i];
+      if (marker.visible) marker.position[axis] += amount;
+    }
+
+    // translate line conectors if linear measurement
+    if (this.isLinearMeasurement()) {
+      for (var i=0; i<this.lineConnectors.length; i++) {
+        var connector = this.lineConnectors[i];
+        if (connector.visible) {
+          connector.geometry.vertices[0][axis] += amount;
+          connector.geometry.vertices[1][axis] += amount;
+          connector.geometry.verticesNeedUpdate = true;
+        }
+      }
+    }
+    // else, translate circle connectors
+    else {
+      for (var i=0; i<this.circleConnectors.length; i++) {
+        var connector = this.circleConnectors[i];
+        if (connector.visible) connector.position[axis] += amount;
+      }
     }
   }
 }
 
 // Rotate the markers and the connectors.
-Measurement.prototype.rotate = function(axis, amount) {
+// The size argument is necessary for resizing the plane marker, which is not
+// rotationally symmetric.
+Measurement.prototype.rotate = function(axis, amount, size) {
   if (!this.active) return;
 
-  // rotate markers
   var axisVector = axisToVector3Map[axis];
-  for (var i=0; i<this.markers.length; i++) {
-    var marker = this.markers[i];
-    if (marker.visible) marker.position.applyAxisAngle(axisVector, amount);
-  }
-
-  // rotate line conectors if linear measurement
-  if (this.isLinearMeasurement()) {
-    for (var i=0; i<this.lineConnectors.length; i++) {
-      var connector = this.lineConnectors[i];
-      if (connector.visible) {
-        connector.geometry.vertices[0].applyAxisAngle(axisVector, amount);
-        connector.geometry.vertices[1].applyAxisAngle(axisVector, amount);
-        connector.geometry.verticesNeedUpdate = true;
-      }
+  if (this.isPlanarMeasurement()) {
+    // If rotating in the same plane as the planar measurement, can just rotate
+    // the plane marker and everything's good.
+    if (this.planeParams && this.planeParams.axis==axis) {
+      this.planeParams.size = size;
+      this.planeParams.center.applyAxisAngle(axisVector, amount);
+      this.setPlaneMarker();
+    }
+    // But, if rotating on a different axis, the plane would be rotated to
+    // have some off-axis normal, so we just deactivate in that case.
+    else {
+      this.deactivate();
     }
   }
-  // else, rotate circle connectors
   else {
-    for (var i=0; i<this.circleConnectors.length; i++) {
-      var connector = this.circleConnectors[i];
-      if (connector.visible) {
-        // rotate circle's position
-        connector.position.applyAxisAngle(axisVector, amount);
-        // can't use .rotateOnAxis b/c that rotates the circle in object space,
-        // where its axes are arbitrarily oriented; need to get its up direction
-        // in world space, rotate that appropriately, then .lookat position+that
-        var worldDir = connector.getWorldDirection();
-        worldDir.applyAxisAngle(axisVector, amount);
-        connector.lookAt(connector.position.clone().add(worldDir));
+    // rotate markers
+    for (var i=0; i<this.markers.length; i++) {
+      var marker = this.markers[i];
+      if (marker.visible) marker.position.applyAxisAngle(axisVector, amount);
+    }
+
+    // rotate line conectors if linear measurement
+    if (this.isLinearMeasurement()) {
+      for (var i=0; i<this.lineConnectors.length; i++) {
+        var connector = this.lineConnectors[i];
+        if (connector.visible) {
+          connector.geometry.vertices[0].applyAxisAngle(axisVector, amount);
+          connector.geometry.vertices[1].applyAxisAngle(axisVector, amount);
+          connector.geometry.verticesNeedUpdate = true;
+        }
+      }
+    }
+    // else, rotate circle connectors
+    else {
+      for (var i=0; i<this.circleConnectors.length; i++) {
+        var connector = this.circleConnectors[i];
+        if (connector.visible) {
+          // rotate circle's position
+          connector.position.applyAxisAngle(axisVector, amount);
+          // can't use .rotateOnAxis b/c that rotates the circle in object space,
+          // where its axes are arbitrarily oriented; need to get its up direction
+          // in world space, rotate that appropriately, then .lookat position+that
+          var worldDir = connector.getWorldDirection();
+          worldDir.applyAxisAngle(axisVector, amount);
+          connector.lookAt(connector.position.clone().add(worldDir));
+        }
       }
     }
   }
@@ -388,21 +497,28 @@ Measurement.prototype.rotate = function(axis, amount) {
 Measurement.prototype.scale = function(axis, amount) {
   if (!this.active) return;
 
-  // scale markers
-  var axisVector = axisToVector3Map[axis];
-  for (var i=0; i<this.markers.length; i++) {
-    var marker = this.markers[i];
-    if (marker.visible) marker.position[axis] *= amount;
+  if (this.isPlanarMeasurement()) {
+    this.planeParams.center[axis] *= amount;
+    this.planeParams.size[axis] *= amount;
+    this.setPlaneMarker();
   }
+  else {
+    // scale markers
+    var axisVector = axisToVector3Map[axis];
+    for (var i=0; i<this.markers.length; i++) {
+      var marker = this.markers[i];
+      if (marker.visible) marker.position[axis] *= amount;
+    }
 
-  // scale line conectors if linear measurement
-  if (this.isLinearMeasurement()) {
-    for (var i=0; i<this.lineConnectors.length; i++) {
-      var connector = this.lineConnectors[i];
-      if (connector.visible) {
-        connector.geometry.vertices[0][axis] *= amount;
-        connector.geometry.vertices[1][axis] *= amount;
-        connector.geometry.verticesNeedUpdate = true;
+    // scale line conectors if linear measurement
+    if (this.isLinearMeasurement()) {
+      for (var i=0; i<this.lineConnectors.length; i++) {
+        var connector = this.lineConnectors[i];
+        if (connector.visible) {
+          connector.geometry.vertices[0][axis] *= amount;
+          connector.geometry.vertices[1][axis] *= amount;
+          connector.geometry.verticesNeedUpdate = true;
+        }
       }
     }
   }

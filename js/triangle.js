@@ -67,7 +67,7 @@ Triangle.prototype.updateBoundsV = function(vertex) {
 Triangle.prototype.updateBounds = function() {
   this.resetBounds();
   for (var i=0; i<3; i++) {
-    this.updateBounds(this.triangles[this.indices[i]]);
+    this.updateBoundsV(this.vertices[this.indices[i]]);
   }
 }
 
@@ -103,23 +103,38 @@ Triangle.prototype.calcSignedVolume = function() {
   return this.signedVolume;
 }
 
-// Calculate endpoints of segment formed by the intersection of this triangle
-// and a plane normal to the y-axis. Used for slicing.
-// TODO: generalize to any axis
-Triangle.prototype.yIntersection = function(planePos) {
+// Calculate the endpoints of the segment formed by the intersection of this
+// triangle and a plane normal to the given axis.
+// Returns an array of two Vector3s in the plane.
+Triangle.prototype.intersection = function(axis, pos) {
+  if (this[axis+"max"]<=pos || this[axis+"min"]>=pos) return [];
   var segment = [];
   for (var i=0; i<3; i++) {
     var v1 = this.vertices[this.indices[i]];
     var v2 = this.vertices[this.indices[(i+1)%3]];
-    if ((v1.y<planePos && v2.y>planePos) || (v1.y>planePos && v2.y<planePos)) {
-      var dy = v2.y-v1.y;
-      if (dy==0) return;
-      var factor = (planePos-v1.y)/dy;
-      var x = v1.x + (v2.x-v1.x)*factor;
-      var z = v1.z + (v2.z-v1.z)*factor;
-      segment.push(new THREE.Vector3(x,planePos,z));
+    if ((v1[axis]<pos && v2[axis]>pos) || (v1[axis]>pos && v2[axis]<pos)) {
+      var d = v2[axis]-v1[axis];
+      if (d==0) return;
+      var factor = (pos-v1[axis])/d;
+      // more efficient to have a bunch of cases than being clever and calculating
+      // the orthogonal axes and building a Vector3 from basis vectors, etc.
+      if (axis=="x") {
+        var y = v1.y + (v2.y-v1.y)*factor;
+        var z = v1.z + (v2.z-v1.z)*factor;
+        segment.push(new THREE.Vector3(pos,y,z));
+      }
+      else if (axis=="y") {
+        var x = v1.x + (v2.x-v1.x)*factor;
+        var z = v1.z + (v2.z-v1.z)*factor;
+        segment.push(new THREE.Vector3(x,pos,z));
+      }
+      else { // axis=="z"
+        var x = v1.x + (v2.x-v1.x)*factor;
+        var y = v1.y + (v2.y-v1.y)*factor;
+        segment.push(new THREE.Vector3(x,y,pos));
+      }
     }
   }
-  if (segment.length!=2) console.log("strange segment length: ", segment);
+  if (segment.length!=2) console.log("Plane-triangle intersection: strange segment length: ", segment);
   return segment;
 }
