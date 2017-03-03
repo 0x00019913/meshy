@@ -100,15 +100,6 @@ Stage.prototype.generateUI = function() {
   scaleToSizeFolder.add(this, "newZSize", 0);
   scaleToSizeFolder.add(this, "scaleToZSize");
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
-  /*this.newSegmentLength = 1;
-  scaleToMeasurementFolder.add(this, "newSegmentLength", 0);
-  scaleToMeasurementFolder.add(this, "scaleToLengthMeasurement");
-  this.newRadiusValue = 1;
-  scaleToMeasurementFolder.add(this, "newRadiusValue", 0);
-  scaleToMeasurementFolder.add(this, "scaleToRadiusMeasurement");
-  this.newDiameterValue = 1;
-  scaleToMeasurementFolder.add(this, "newDiameterValue", 0);
-  scaleToMeasurementFolder.add(this, "scaleToDiameterMeasurement");*/
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -130,6 +121,12 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
+  var specialFolder = this.gui.addFolder("Special");
+  var ringSizeFolder = specialFolder.addFolder("Scale To Ring Size");
+  ringSizeFolder.add(this, "mCircle");
+  this.newRingSize = 0;
+  ringSizeFolder.add(this, "newRingSize", ringSizes);
+  ringSizeFolder.add(this, "scaleToRingSize");
   var displayFolder = this.gui.addFolder("Display");
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
@@ -251,6 +248,24 @@ Stage.prototype.clearScaleToMeasurementFolder = function () {
   var folder = this.scaleToMeasurementFolder;
   for (var i=folder.__controllers.length-1; i>=0; i--) {
     folder.remove(folder.__controllers[i]);
+  }
+}
+Stage.prototype.scaleToRingSize = function() {
+  if (this.model &&
+  this.model.measurement.active &&
+  this.scalableMeasurements.includes("diameter")) {
+    var tmpVal = this.newMeasurementValue;
+    var tmpType = this.measurementToScale;
+
+    this.newMeasurementValue = this.newRingSize;
+    this.measurementToScale = "diameter";
+    this.scaleToMeasurement();
+
+    this.newMeasurementValue = tmpVal;
+    this.measurementToScale = tmpType;
+  }
+  else {
+    this.printout.warn("A circle measurement must be active to scale to ring size.");
   }
 }
 
