@@ -235,22 +235,37 @@ Model.prototype.scale = function (axis, amount) {
 }
 
 // If current measurement has the given "type", return its value.
-Model.prototype.getMeasuredValue = function (type, newValue) {
+Model.prototype.getMeasuredValue = function (type) {
   if (this.measurement) {
     if (this.measurement.active) {
       var currentValue = this.measurement.getMeasuredValue(type);
       if (currentValue!==null) {
         if (currentValue>0) return currentValue;
-        else this.printout.warn("New value can't be 0 or negative.");
+        else {
+          this.printout.warn("New value can't be 0 or negative.");
+          return null;
+        }
       }
       else {
         this.printout.warn("The currently active measurement doesn't contain the attribute '" + type + "'.");
+        return null;
       }
     }
     else {
       this.printout.warn("Can't scale to " + type + "; no measurement currently active.");
+      return null;
     }
   }
+  return null;
+}
+
+// Get an array of names for values that are being measured, as long as it's
+// possible to scale to them.
+Model.prototype.getScalableMeasurements = function() {
+  if (this.measurement && this.measurement.active) {
+    return this.measurement.getScalableMeasurements();
+  }
+  return null;
 }
 
 Model.prototype.activateMeasurement = function (type, param) {

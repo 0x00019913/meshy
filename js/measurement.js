@@ -115,15 +115,25 @@ Measurement.prototype.activate = function(type, params) {
   if (this.active) this.deactivate();
   this.active = true;
 
-  if (type=="segmentLength") this.measurementPoints = 2;
-  else if (type=="angle") this.measurementPoints = 3;
-  else if (type=="radius") this.measurementPoints = 3;
+  if (type=="length") {
+    this.measurementPoints = 2;
+    this.values = { length: null };
+  }
+  else if (type=="angle") {
+    this.measurementPoints = 3;
+    this.values = { angle: null };
+  }
+  else if (type=="circle") {
+    this.measurementPoints = 3;
+    this.values = { radius: null, diameter: null, circumference: null, arcLength: null };
+  }
   else if (type=="crossSection") {
     if (!params || !params.axis || !params.size || !params.center || !params.fn) {
       this.type = null;
       return;
     }
     this.measurementPoints = 1;
+    this.values = { crossSection: null };
     // this.planeParams will henceforth be the source of truth for the plane
     // marker; update it and call this.setPlaneMarker() to position it.
     this.planeParams = params;
@@ -154,7 +164,7 @@ Measurement.prototype.deactivate = function() {
   if (!this.active) return;
   this.active = false;
   this.type = null;
-  this.currentMeasurement = null;
+  this.values = null;
 
   for (var i=0; i<this.markers.length; i++) {
     this.markers[i].visible = false;
@@ -234,21 +244,20 @@ Measurement.prototype.calculateMeasurement = function() {
   var prevMarkerIdx = (this.markerIdx-1+this.measurementPoints)%this.measurementPoints;
   var prevprevMarkerIdx =
     (prevMarkerIdx-1+this.measurementPoints)%this.measurementPoints;
-  var result;
   if (this.activeMarkers==this.measurementPoints) {
     var v1 = this.markers[prevprevMarkerIdx].position;
     var v2 = this.markers[prevMarkerIdx].position;
     var v3 = this.markers[this.markerIdx].position;
     switch(this.type) {
-      case "segmentLength":
-        result = { length: new THREE.Vector3().subVectors(v1,v2).length() };
+      case "length":
+        this.values.length = v1.clone().sub(v2).length();
         break;
       case "angle":
         var d1 = v1.clone().sub(v2).normalize();
         var d2 = v1.clone().sub(v3).normalize();
-        result = { angle: Math.acos(d1.dot(d2)) * 180 / Math.PI };
+        this.values.angle = Math.acos(d1.dot(d2)) * 180 / Math.PI;
         break;
-      case "radius":
+      case "circle":
         var circle = this.calculateCircle(v1, v2, v3);
         if (!circle) this.printout.error("couldn't calculate circle, try again");
         this.setCircleConnector(circle);
@@ -257,30 +266,37 @@ Measurement.prototype.calculateMeasurement = function() {
         var dc3 = circle.center.clone().sub(v3).normalize();
         var theta31 = Math.acos(dc3.dot(dc1));
         var theta12 = Math.acos(dc1.dot(dc2));
-        result = {
-          radius: circle.r,
-          diameter: circle.r*2,
-          circumference: circle.r*Math.PI*2,
-          arcLength: circle.r * (theta31+theta12)
-        };
+        this.values.radius = circle.r;
+        this.values.diameter = circle.r*2;
+        this.values.circumference = circle.r*Math.PI*2;
+        this.values.arcLength = circle.r * (theta31+theta12);
         break;
       case "crossSection":
         var pos = this.planeMarkers[0].position[this.planeParams.axis];
         this.planeParams.center[this.planeParams.axis] = pos;
-        result = {
-          crossSection: this.planeParams.fn(this.planeParams.axis, pos)
-        };
+        this.values.crossSection = this.planeParams.fn(this.planeParams.axis, pos);
         break;
     }
 
-    this.currentMeasurement = result;
-    this.showOutput(result);
+    this.values;
+    this.showOutput();
   }
 }
 
+// If present, return a value that is being measured.
 Measurement.prototype.getMeasuredValue = function(type) {
-  if (this.currentMeasurement && (type in this.currentMeasurement)) {
-    return this.currentMeasurement[type];
+  if (this.values && (type in this.values)) {
+    return this.values[type];
+  }
+  return null;
+}
+
+// For scaling to a measurement, get the current measurements, as long as it's
+// possible to scale to them (e.g., it doesn't work to scale to an angle).
+Measurement.prototype.getScalableMeasurements = function() {
+  if (this.values) {
+    if (this.type=="angle") return [];
+    return Object.keys(this.values);
   }
   return null;
 }
@@ -288,7 +304,7 @@ Measurement.prototype.getMeasuredValue = function(type) {
 // If linear measurement (segments, not circles), can put down connectors
 // between consecutive markers.
 Measurement.prototype.isLinearMeasurement = function() {
-  return this.type=="segmentLength" || this.type=="angle";
+  return this.type=="length" || this.type=="angle";
 }
 // If planar measurement, put down plane marker instead of normal markers.
 Measurement.prototype.isPlanarMeasurement = function() {
@@ -532,11 +548,11 @@ Measurement.prototype.setOutput = function(output) {
 }
 
 // Print a measurement to the output.
-Measurement.prototype.showOutput = function(measurement) {
+Measurement.prototype.showOutput = function() {
   if (this.output) {
-    this.output.showMeasurement(measurement);
+    this.output.showMeasurement(this.values);
   }
   else {
-    this.printout.log(measurement);
+    this.printout.log(this.values);
   }
 }

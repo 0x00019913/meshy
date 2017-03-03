@@ -147,6 +147,9 @@ InfoBox.prototype.showMeasurement = function(measurement) {
   this.measurementList.appendChild(li);
 
   for (var key in measurement) {
+    var value = measurement[key];
+    if (value===undefined || value=== null) break;
+
     li = document.createElement("li");
     this.styleLI(li);
 
@@ -158,11 +161,10 @@ InfoBox.prototype.showMeasurement = function(measurement) {
 
     var liValue = document.createElement("span");
     this.styleLIValue(liValue);
-    if (measurement[key]!==undefined) {
-      liValue.textContent = this.formatNumber(measurement[key]);
-      li.appendChild(liValue);
-      this.measurementList.appendChild(li);
-    }
+
+    liValue.textContent = this.formatNumber(value);
+    li.appendChild(liValue);
+    this.measurementList.appendChild(li);
   }
 }
 // Hide the measurement box.

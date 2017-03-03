@@ -99,8 +99,8 @@ Stage.prototype.generateUI = function() {
   this.newZSize = 1;
   scaleToSizeFolder.add(this, "newZSize", 0);
   scaleToSizeFolder.add(this, "scaleToZSize");
-  var scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
-  this.newSegmentLength = 1;
+  this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
+  /*this.newSegmentLength = 1;
   scaleToMeasurementFolder.add(this, "newSegmentLength", 0);
   scaleToMeasurementFolder.add(this, "scaleToLengthMeasurement");
   this.newRadiusValue = 1;
@@ -108,7 +108,7 @@ Stage.prototype.generateUI = function() {
   scaleToMeasurementFolder.add(this, "scaleToRadiusMeasurement");
   this.newDiameterValue = 1;
   scaleToMeasurementFolder.add(this, "newDiameterValue", 0);
-  scaleToMeasurementFolder.add(this, "scaleToDiameterMeasurement");
+  scaleToMeasurementFolder.add(this, "scaleToDiameterMeasurement");*/
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -123,9 +123,9 @@ Stage.prototype.generateUI = function() {
   calculationFolder.add(this, "calcVolume");
   calculationFolder.add(this, "calcCenterOfMass");
   var measurementFolder = this.gui.addFolder("Measurement");
-  measurementFolder.add(this, "mSegmentLength");
+  measurementFolder.add(this, "mLength");
   measurementFolder.add(this, "mAngle");
-  measurementFolder.add(this, "mRadius");
+  measurementFolder.add(this, "mCircle");
   measurementFolder.add(this, "mCrossSectionX");
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
@@ -156,10 +156,6 @@ Stage.prototype.generateUI = function() {
 // anything that needs to be refreshed by hand (not in every frame)
 Stage.prototype.updateUI = function() {
   this.filenameController.updateDisplay();
-  if (this.mesh) {
-    this.meshColor = this.mesh.getMeshColor();
-    this.meshColorController.updateDisplay();
-  }
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -204,17 +200,12 @@ Stage.prototype.scaleToSize = function(axis, value) {
     }
   }
 }
-Stage.prototype.scaleToLengthMeasurement = function() {
-  this.scaleToMeasurement("length", this.newSegmentLength); }
-Stage.prototype.scaleToRadiusMeasurement = function() {
-  this.scaleToMeasurement("radius", this.newRadiusValue); }
-Stage.prototype.scaleToDiameterMeasurement = function() {
-  this.scaleToMeasurement("diameter", this.newDiameterValue); }
-Stage.prototype.scaleToMeasurement = function(type, value) {
+Stage.prototype.scaleToMeasurement = function() {
   if (this.model) {
-    var currentValue = this.model.getMeasuredValue(type, value);
+    var currentValue = this.model.getMeasuredValue(this.measurementToScale);
     if (currentValue) {
-      var ratio = value/currentValue;
+      var ratio = this.newMeasurementValue/currentValue;
+      if (this.measurementToScale=="crossSection") ratio = Math.sqrt(ratio);
       this.transform("scale","all",[ratio,ratio,ratio]);
     }
   }
@@ -229,17 +220,38 @@ Stage.prototype.centerZ = function() { this.transform("center","z",null); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
 Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
-Stage.prototype.mSegmentLength = function() { this.startMeasurement("segmentLength"); }
+Stage.prototype.mLength = function() { this.startMeasurement("length"); }
 Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
-Stage.prototype.mRadius = function() { this.startMeasurement("radius"); }
+Stage.prototype.mCircle = function() { this.startMeasurement("circle"); }
 Stage.prototype.mCrossSectionX = function() { this.startMeasurement("crossSection","x"); }
 Stage.prototype.mCrossSectionY = function() { this.startMeasurement("crossSection","y"); }
 Stage.prototype.mCrossSectionZ = function() { this.startMeasurement("crossSection","z"); }
 Stage.prototype.startMeasurement = function(type, param) {
-  if (this.model) this.model.activateMeasurement(type, param);
+  if (this.model) {
+    this.model.activateMeasurement(type, param);
+    this.buildScaleToMeasurementFolder();
+  }
 }
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
+  this.clearScaleToMeasurementFolder();
+}
+Stage.prototype.buildScaleToMeasurementFolder = function() {
+  this.clearScaleToMeasurementFolder();
+  if (this.model) this.scalableMeasurements = this.model.getScalableMeasurements();
+  if (this.scalableMeasurements && this.scalableMeasurements.length>0) {
+    this.measurementToScale = this.scalableMeasurements[0];
+    this.newMeasurementValue = 1;
+    this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements);
+    this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0);
+    this.scaleToMeasurementFolder.add(this, "scaleToMeasurement");
+  }
+}
+Stage.prototype.clearScaleToMeasurementFolder = function () {
+  var folder = this.scaleToMeasurementFolder;
+  for (var i=folder.__controllers.length-1; i>=0; i--) {
+    folder.remove(folder.__controllers[i]);
+  }
 }
 
 Stage.prototype.toggleFloor = function() {
