@@ -684,79 +684,53 @@ Model.prototype.upload = function(file, callback) {
       var vertexNormals = [];
       var i = 0;
       while (i<len) {
-        var ch = result[i];
-        // if comment, skip to next line
-        if (ch=='#') {
-          skipToNextLine();
-        }
+        // get a line from the file string
+        var line = getLine();
+        if (line.length==0) continue;
         // if vertex, get vertex; relevant flags are 'v' and 'vn'
-        else if (ch=='v') {
-          i++;
-          ch = result[i];
-          // if vertex coords
-          if (ch==' ') {
-            i++;
-            var vertex = getVector3();
+        if (line[0]=='v') {
+          if (line[1]==' ') {
+            var vertex = getVector3(line.substring(2));
             _this.vertices.push(vertex);
           }
-          else if (ch=='n') {
-            i++;
-            var normal = getVector3().normalize();
+          else if (line[1]=='n') {
+            var normal = getVector3(line.substring(3)).normalize();
             vertexNormals.push(normal);
           }
-          // line could start with vt or vp; ignore these
-          else {
-            skipToNextLine();
-          }
         }
-        else if (ch=='f') {
-          i++; i++;
+        // if face, get face
+        else if (line[0]=='f') {
           hasVertNormals = (_this.vertices.length==vertexNormals.length);
-          var triangles = getTriangles();
+          var triangles = getTriangles(line.substring(2));
           for (var tri=0; tri<triangles.length; tri++) _this.add(triangles[tri]);
-        }
-        // ignore other line starting flags
-        else {
-          skipToNextLine();
         }
       }
 
-      // finds the next instance of char c and puts the index after it;
-      // optionally calls a function fn on each character (intended use
-      // case is accumulating every character the function sees)
-      function skipChars(cs, fn) {
+      function getLine() {
+        var i0 = i, ri;
         do {
-          if (fn) fn(result[i]);
+          ri = result[i];
           i++;
-        } while (!charInStr(result[i], cs) && i<len);
-        i++;
+        } while (ri!='\n' && i<len);
+        return result.substring(i0, i).trim();
       }
-      function skipToNextLine() { skipChars('\n'); }
-      function charInStr(c, s) { return s.indexOf(result[i])>-1; }
-      function getVector3() {
+      function getVector3(s) {
         var vector = new THREE.Vector3();
+        var split = s.split(' ');
         // read off three numbers
-        for (var j=0; j<3; j++) {
-          var num = "";
-          skipChars(' \n', function(c) { num+=c; })
-          vector.setComponent(j, parseFloat(num));
-          num = "";
-        }
+        for (var j=0; j<3; j++) vector.setComponent(j, parseFloat(split[j]));
         return vector;
       }
-      function getTriangles() {
+      function getTriangles(s) {
         var triangles = [];
         // array of 3-element arrays indicating the vertex indices for each tri
         var triIndices = [];
 
-        var idxString = "";
-        // take entire line of indices till newline
-        skipChars('\n', function(c) { idxString+=c; });
         // split line of vertex indices, trim off any '/'-delimited UVs/normals
-        var polyIndices = idxString.split(' ');
-        polyIndices = polyIndices.map(function(s) {
-          var slashIdx = s.indexOf('/');
-          return slashIdx==-1 ? (s-1) : (s.substr(0, slashIdx))-1;
+        var polyIndices = s.split(' ');
+        polyIndices = polyIndices.map(function(st) {
+          var slashIdx = st.indexOf('/');
+          return slashIdx==-1 ? (st-1) : (st.substr(0, slashIdx))-1;
         });
 
         // if the face is a tri, just one set of 3 indices
