@@ -26,6 +26,7 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.header = null;
   this.isLittleEndian = true;
   this.filename = "";
+  this.vertexGridSize = 8;
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
@@ -649,7 +650,7 @@ Model.prototype.upload = function(file, callback) {
       // vertices. Build the array of triangles with these.
       offset = 4;
       _this.vertices = [];
-      var builder = new Vector3ArrayBuilder(8, _this.getBounds(), _this.vertices);
+      var builder = new Vector3ArrayBuilder(this.vertexGridSize, _this.getBounds(), _this.vertices);
 
       for (var tri=0; tri<n; tri++) {
         var triangle = new Triangle(_this.vertices);

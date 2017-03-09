@@ -19,6 +19,7 @@ Stage = function() {
   this.model = null;
   this.fileInput = document.getElementById("file");
   this.isLittleEndian = true;
+  this.vertexGridSize = 8;
 
   // webgl viewport
   this.container = null;
@@ -47,11 +48,12 @@ Stage.prototype.generateUI = function() {
   this.filenameController = exportFolder.add(this, "filename");
   exportFolder.add(this, "exportOBJ");
   exportFolder.add(this, "exportSTL");
-
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
   settingsFolder.add(this, "toggleAxisWidget");
-  settingsFolder.add(this, "isLittleEndian");
+  var technicalFolder = settingsFolder.addFolder("Technical");
+  technicalFolder.add(this, "isLittleEndian");
+  technicalFolder.add(this, "vertexGridSize").onChange(this.setVertexGridSize.bind(this));
   var transformFolder = this.gui.addFolder("Transform");
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
@@ -153,6 +155,11 @@ Stage.prototype.generateUI = function() {
 // anything that needs to be refreshed by hand (not in every frame)
 Stage.prototype.updateUI = function() {
   this.filenameController.updateDisplay();
+}
+
+// used for internal optimization while building a list of unique vertices
+Stage.prototype.setVertexGridSize = function() {
+  if (this.model) this.model.vertexGridSize = this.vertexGridSize;
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -438,6 +445,7 @@ Stage.prototype.upload = function() {
 Stage.prototype.handleFile = function(file) {
   this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
   this.model.isLittleEndian = this.isLittleEndian;
+  this.model.vertexGridSize = this.vertexGridSize;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
