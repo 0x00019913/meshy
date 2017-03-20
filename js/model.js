@@ -26,7 +26,7 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.header = null;
   this.isLittleEndian = true;
   this.filename = "";
-  this.vertexGridSize = 8;
+  this.vertexPrecision = 5;
 
   // calculated stuff
   this.resetBounds(); // sets bounds to Infinity
@@ -634,26 +634,14 @@ Model.prototype.upload = function(file, callback) {
 
       var n = dv.getUint32(0, isLittleEndian);
 
-      // First pass: only get model bounds. Need this for the vertex grid thingy
-      // used by Vector3ArrayBuilder to make a list of unique vertices.
-      var offset = 16; // offset 4 bytes for n and 12 bytes for first normal
-      for (var tri=0; tri<n; tri++) {
-        for (var vert=0; vert<3; vert++) {
-          _this.updateBoundsV(getVector3(dv, offset, isLittleEndian));
-          offset += 12;
-        }
-        // ignore "attribute byte count" (2 bytes) and next normal (12 bytes)
-        offset += 14;
-      }
 
-      // Second pass: use Vector3ArrayBuilder to fill this.vertices with unique
-      // vertices. Build the array of triangles with these.
       offset = 4;
       _this.vertices = [];
-      console.log(this.vertexGridSize);
-      var builder = new Vector3ArrayBuilder(_this.vertexGridSize, _this.getBounds(), _this.vertices);
+      // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
+      // mimics the code found in the THREE.Geometry class
+      var vertexMap = {};
+      var p = Math.pow(10, _this.vertexPrecision);
 
-      var ct = 0;
       for (var tri=0; tri<n; tri++) {
         var triangle = new Triangle(_this.vertices);
 
@@ -661,9 +649,18 @@ Model.prototype.upload = function(file, callback) {
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
-          var idx = builder.idx(getVector3(dv, offset, isLittleEndian))
+          var vertex = getVector3(dv, offset, isLittleEndian);
+          var key = Math.round(vertex.x*p)+'_'+Math.round(vertex.y*p)+'_'+Math.round(vertex.z*p);
+          var idx = -1;
+          if (vertexMap[key]===undefined) {
+            idx = _this.vertices.length;
+            vertexMap[key] = { vertex: vertex, idx: idx };
+            _this.vertices.push(vertex);
+          }
+          else {
+            idx = vertexMap[key].idx;
+          }
           triangle.addVertex(idx);
-          ct++;
           offset += 12;
         }
 
@@ -679,7 +676,6 @@ Model.prototype.upload = function(file, callback) {
           dv.getFloat32(offset+8, isLittleEndian)
         );
       }
-      console.log(ct);
     }
     else if (_this.format=="obj") {
       _this.count = 0;

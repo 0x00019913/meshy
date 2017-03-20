@@ -19,7 +19,7 @@ Stage = function() {
   this.model = null;
   this.fileInput = document.getElementById("file");
   this.isLittleEndian = true;
-  this.vertexGridSize = 8;
+  this.vertexPrecision = 5;
 
   // webgl viewport
   this.container = null;
@@ -53,7 +53,7 @@ Stage.prototype.generateUI = function() {
   settingsFolder.add(this, "toggleAxisWidget");
   var technicalFolder = settingsFolder.addFolder("Technical");
   technicalFolder.add(this, "isLittleEndian");
-  technicalFolder.add(this, "vertexGridSize").onChange(this.setVertexGridSize.bind(this));
+  technicalFolder.add(this, "vertexPrecision").onChange(this.setvertexPrecision.bind(this));
   var transformFolder = this.gui.addFolder("Transform");
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
@@ -158,8 +158,8 @@ Stage.prototype.updateUI = function() {
 }
 
 // used for internal optimization while building a list of unique vertices
-Stage.prototype.setVertexGridSize = function() {
-  if (this.model) this.model.vertexGridSize = this.vertexGridSize;
+Stage.prototype.setvertexPrecision = function() {
+  if (this.model) this.model.vertexPrecision = this.vertexPrecision;
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -445,7 +445,7 @@ Stage.prototype.upload = function() {
 Stage.prototype.handleFile = function(file) {
   this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
   this.model.isLittleEndian = this.isLittleEndian;
-  this.model.vertexGridSize = this.vertexGridSize;
+  this.model.vertexPrecision = this.vertexPrecision;
   this.model.upload(file, this.displayMesh.bind(this));
 };
 
