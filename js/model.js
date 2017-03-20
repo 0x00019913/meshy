@@ -634,7 +634,7 @@ Model.prototype.upload = function(file, callback) {
 
       var n = dv.getUint32(0, isLittleEndian);
 
-      // First pass: only get model bounds. Need this for the hash table thingy
+      // First pass: only get model bounds. Need this for the vertex grid thingy
       // used by Vector3ArrayBuilder to make a list of unique vertices.
       var offset = 16; // offset 4 bytes for n and 12 bytes for first normal
       for (var tri=0; tri<n; tri++) {
@@ -650,8 +650,10 @@ Model.prototype.upload = function(file, callback) {
       // vertices. Build the array of triangles with these.
       offset = 4;
       _this.vertices = [];
-      var builder = new Vector3ArrayBuilder(this.vertexGridSize, _this.getBounds(), _this.vertices);
+      console.log(this.vertexGridSize);
+      var builder = new Vector3ArrayBuilder(_this.vertexGridSize, _this.getBounds(), _this.vertices);
 
+      var ct = 0;
       for (var tri=0; tri<n; tri++) {
         var triangle = new Triangle(_this.vertices);
 
@@ -661,6 +663,7 @@ Model.prototype.upload = function(file, callback) {
         for (var vert=0; vert<3; vert++) {
           var idx = builder.idx(getVector3(dv, offset, isLittleEndian))
           triangle.addVertex(idx);
+          ct++;
           offset += 12;
         }
 
@@ -676,6 +679,7 @@ Model.prototype.upload = function(file, callback) {
           dv.getFloat32(offset+8, isLittleEndian)
         );
       }
+      console.log(ct);
     }
     else if (_this.format=="obj") {
       _this.count = 0;
