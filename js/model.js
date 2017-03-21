@@ -654,11 +654,11 @@ Model.prototype.upload = function(file, callback) {
           var idx = -1;
           if (vertexMap[key]===undefined) {
             idx = _this.vertices.length;
-            vertexMap[key] = { vertex: vertex, idx: idx };
+            vertexMap[key] = idx;
             _this.vertices.push(vertex);
           }
           else {
-            idx = vertexMap[key].idx;
+            idx = vertexMap[key];
           }
           triangle.addVertex(idx);
           offset += 12;
