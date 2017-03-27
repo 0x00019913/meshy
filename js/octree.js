@@ -6,6 +6,8 @@
 //  scene: optional, used for visualizing the octree
 Octree = function(depth, origin, size, scene) {
   this.depth = depth;
+  this.origin = origin;
+  this.size = size;
 
   // for visualizing the octree, optional
   this.scene = scene;
@@ -14,29 +16,56 @@ Octree = function(depth, origin, size, scene) {
   this.node = new TreeNode(depth, origin, size);
 }
 Octree.prototype.addGeometry = function(faces, vertices) {
-  var count, counts = {}, total = 0;
   for (var i=0; i<faces.length; i++) {
     var face = faces[i];
-    count = this.node.addFace({
+    this.node.addFace({
       verts: [vertices[face.a], vertices[face.b], vertices[face.c]],
       normal: face.normal
     },
     i);
-    if (count in counts) counts[count] += 1;
-    else counts[count] = 1;
-    total += count;
   }
-  this.density = total/faces.length;
-  console.log(total, faces.length, this.density, counts);
+  var nLeaves = this.numLeaves()
+  console.log(nLeaves, faces.length, faces.length/nLeaves);
+}
+Octree.prototype.numLeaves = function() {
+  return this.node.numLeaves();
 }
 Octree.prototype.visualize = function() {
   if (!this.scene) return;
 
   var outlineGeo = new THREE.Geometry();
   this.node.visualize(outlineGeo);
-  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.01});
+  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.03});
   var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
   this.scene.add(outlineMesh);
+
+  var boxGeo = new THREE.Geometry();
+  v = [];
+  for (var i=0; i<8; i++) {
+    v[i] = this.origin.clone();
+    v[i].x += this.size*(i&1);
+    v[i].y += this.size*(i&2)/2;
+    v[i].z += this.size*(i&4)/4;
+  }
+
+  boxGeo.vertices.push(v[0]); boxGeo.vertices.push(v[1]);
+  boxGeo.vertices.push(v[2]); boxGeo.vertices.push(v[3]);
+  boxGeo.vertices.push(v[4]); boxGeo.vertices.push(v[5]);
+  boxGeo.vertices.push(v[6]); boxGeo.vertices.push(v[7]);
+
+  boxGeo.vertices.push(v[0]); boxGeo.vertices.push(v[2]);
+  boxGeo.vertices.push(v[1]); boxGeo.vertices.push(v[3]);
+  boxGeo.vertices.push(v[4]); boxGeo.vertices.push(v[6]);
+  boxGeo.vertices.push(v[5]); boxGeo.vertices.push(v[7]);
+
+  boxGeo.vertices.push(v[0]); boxGeo.vertices.push(v[4]);
+  boxGeo.vertices.push(v[1]); boxGeo.vertices.push(v[5]);
+  boxGeo.vertices.push(v[2]); boxGeo.vertices.push(v[6]);
+  boxGeo.vertices.push(v[3]); boxGeo.vertices.push(v[7]);
+
+  var boxMat = new THREE.LineBasicMaterial({color: 0xff0000});
+  var boxMesh = new THREE.LineSegments(boxGeo, boxMat);
+  this.scene.add(boxMesh);
 }
 
 TreeNode = function(depth, origin, size) {
@@ -53,9 +82,9 @@ TreeNode.prototype.addFace = function(face, idx) {
   var depth = this.depth;
   if (depth==0) {
     this.children.push(idx);
-    return 1;
+    return;
   }
-  var co, cs, total = 0;
+  var co, cs;
   for (var i=0; i<8; i++) {
     var child = this.children[i];
     if (child===undefined) {
@@ -74,12 +103,23 @@ TreeNode.prototype.addFace = function(face, idx) {
 
     if (cubeIntersectsTri(co, cs, face)) {
       if (child===undefined) this.children[i] = new TreeNode(depth-1, co, cs);
-      total += this.children[i].addFace(face, idx);
+      this.children[i].addFace(face, idx);
     }
   }
-  return total;
 }
-
+TreeNode.prototype.numLeaves = function() {
+  if (this.depth==0) {
+    return 1;
+  }
+  else {
+    var total = 0;
+    for (var i=0; i<8; i++) {
+      var child = this.children[i];
+      if (child!==undefined) total += child.numLeaves();
+    }
+    return total;
+  }
+}
 TreeNode.prototype.visualize = function(geo) {
   if (this.depth==0) {
     var center = this.origin.clone().addScalar(this.size/2);

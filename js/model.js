@@ -484,15 +484,15 @@ Model.prototype.makePlainModel = function(scene) {
 }
 
 Model.prototype.buildOctree = function(d) {
-  var depth = (d===undefined) ? 7 : d
+  var depth = (d===undefined) ? 7 : d;
+  console.log(Math.round(Math.log(this.count)*2/3));
   var size = this.getSize();
   var largestBoundAxis = "x";
   if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
   if (size.z>size[largestBoundAxis]) largestBoundAxis = "z";
   var largestSize = size[largestBoundAxis] * 1.1;
   var bounds = this.getBounds();
-  var origin = new THREE.Vector3(bounds.xmin, bounds.ymin, bounds.zmin);
-  origin.subScalar(size[largestBoundAxis]*.05);
+  var origin = this.getCenter().subScalar(largestSize/2);
   this.octree = new Octree(depth, origin, largestSize, this.scene);
   this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
 }
