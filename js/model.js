@@ -483,7 +483,8 @@ Model.prototype.makePlainModel = function(scene) {
   scene.add(this.plainMesh);
 }
 
-Model.prototype.buildOctree = function() {
+Model.prototype.buildOctree = function(d) {
+  var depth = (d===undefined) ? 7 : d
   var size = this.getSize();
   var largestBoundAxis = "x";
   if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
@@ -492,7 +493,7 @@ Model.prototype.buildOctree = function() {
   var bounds = this.getBounds();
   var origin = new THREE.Vector3(bounds.xmin, bounds.ymin, bounds.zmin);
   origin.subScalar(size[largestBoundAxis]*.05);
-  this.octree = new Octree(7, origin, largestSize, this.scene);
+  this.octree = new Octree(depth, origin, largestSize, this.scene);
   this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
 }
 
