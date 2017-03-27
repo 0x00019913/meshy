@@ -27,6 +27,7 @@ Octree.prototype.addGeometry = function(faces, vertices) {
     total += count;
   }
   this.density = total/faces.length;
+  console.log(total, faces.length, this.density, counts);
 }
 Octree.prototype.visualize = function() {
   if (!this.scene) return;
