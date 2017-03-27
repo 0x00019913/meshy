@@ -24,8 +24,6 @@ Octree.prototype.addGeometry = function(faces, vertices) {
     },
     i);
   }
-  var nLeaves = this.numLeaves()
-  console.log(nLeaves, faces.length, faces.length/nLeaves);
 }
 Octree.prototype.numLeaves = function() {
   return this.node.numLeaves();

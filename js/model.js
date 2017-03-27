@@ -483,17 +483,26 @@ Model.prototype.makePlainModel = function(scene) {
   scene.add(this.plainMesh);
 }
 
+// use the geometry to build an octree; this is quite computationally expensive
 Model.prototype.buildOctree = function(d) {
-  var depth = (d===undefined) ? 7 : d;
-  console.log(Math.round(Math.log(this.count)*2/3));
+  // heuristic is that the tree should be as deep as necessary to have 1-2 faces
+  // per leaf node so as to make raytracing cheap; the effectiveness will vary
+  // between different meshes, of course, but I estimate that
+  // ln(polycount)*0.6 should be good
+  var depth = (d===undefined) ? Math.round(Math.log(this.count)*0.6) : d;
+
   var size = this.getSize();
+  // find largest dimension
   var largestBoundAxis = "x";
   if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
   if (size.z>size[largestBoundAxis]) largestBoundAxis = "z";
+  // make octree 1.1 times as large as largest dimension
   var largestSize = size[largestBoundAxis] * 1.1;
-  var bounds = this.getBounds();
+  // center octree on model
   var origin = this.getCenter().subScalar(largestSize/2);
+
   this.octree = new Octree(depth, origin, largestSize, this.scene);
+  // add geometry
   this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
 }
 
