@@ -479,6 +479,16 @@ Model.prototype.makePlainModel = function(scene) {
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
+
+  var size = this.getSize();
+  var largestBoundAxis = "x";
+  if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
+  if (size.z>size[largestBoundAxis]) largestBoundAxis = "z";
+  var largestSize = size[largestBoundAxis] * 1.1;
+  var bounds = this.getBounds();
+  var origin = new THREE.Vector3(bounds.xmin, bounds.ymin, bounds.zmin);
+  origin.subScalar(size[largestBoundAxis]*.05);
+  this.octree = new Octree(7, origin, largestSize, this.scene);
 }
 
 Model.prototype.getMeshColor = function() {

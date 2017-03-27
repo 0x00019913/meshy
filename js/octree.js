@@ -3,12 +3,16 @@
 //  depth: depth at the root node; child nodes will have smaller depth
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
-Octree = function(depth, origin, size) {
+//  scene: optional, used for visualizing the octree
+Octree = function(depth, origin, size, scene) {
   this.depth = depth;
 
-  this.node = new Node(depth, origin, size);
+  // for visualizing the octree, optional
+  this.scene = scene;
+
+  this.node = new TreeNode(depth, origin, size);
 }
-Octree.prototype.mapGeometry = function(faces, vertices) {
+Octree.prototype.addGeometry = function(faces, vertices) {
   for (var i=0; i<faces.length; i++) {
     var face = faces[i];
     this.node.addFace({
@@ -18,30 +22,66 @@ Octree.prototype.mapGeometry = function(faces, vertices) {
     i);
   }
 }
+Octree.prototype.visualize = function() {
+  if (!this.scene) return;
 
-Node = function(depth, origin, size) {
+  var outlineGeo = new THREE.Geometry();
+  this.node.visualize(outlineGeo);
+  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.1});
+  var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
+  this.scene.add(outlineMesh);
+}
+
+TreeNode = function(depth, origin, size) {
   this.depth = depth;
   this.origin = origin;
   this.size = size;
 
-  this.nodes = [];
+  this.children = [];
 }
 // params:
 //  face: { verts, normal } object; verts is an array of THREE.Vector3s.
 //  idx: index to add to a root node if intersecting with the face
-Node.prototype.addFace = function(face, idx) {
+TreeNode.prototype.addFace = function(face, idx) {
+  var depth = this.depth;
+  if (depth==0) {
+    this.children.push(idx);
+    return;
+  }
+  var co, cs;
   for (var i=0; i<8; i++) {
-    var child = this.nodes[i];
+    var child = this.children[i];
     if (child===undefined) {
       // child size
-      var cs = this.size / 2.0;
+      cs = this.size / 2.0;
       // child origin
-      var co = this.origin.clone();
+      co = this.origin.clone();
       co.x += cs*(i&1);
       co.y += cs*(i&2)/2;
       co.z += cs*(i&4)/4;
+    }
+    else {
+      cs = child.size;
+      co = child.origin;
+    }
 
+    if (cubeIntersectsTri(co, cs, face)) {
+      if (child===undefined) this.children[i] = new TreeNode(depth-1, co, cs);
+      this.children[i].addFace(face, idx);
+    }
+  }
+}
 
+TreeNode.prototype.visualize = function(geo) {
+  if (this.depth==0) {
+    var center = this.origin.clone().addScalar(this.size/2);
+    geo.vertices.push(center);
+  }
+  else {
+    for (var i=0; i<8; i++) {
+      if (this.children[i]!==undefined) {
+        this.children[i].visualize(geo);
+      }
     }
   }
 }
