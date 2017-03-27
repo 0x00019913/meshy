@@ -14,7 +14,7 @@ Octree = function(depth, origin, size, scene) {
   this.node = new TreeNode(depth, origin, size);
 }
 Octree.prototype.addGeometry = function(faces, vertices) {
-  var count, total = 0;
+  var count, counts = {}, total = 0;
   for (var i=0; i<faces.length; i++) {
     var face = faces[i];
     count = this.node.addFace({
@@ -22,6 +22,8 @@ Octree.prototype.addGeometry = function(faces, vertices) {
       normal: face.normal
     },
     i);
+    if (count in counts) counts[count] += 1;
+    else counts[count] = 1;
     total += count;
   }
   this.density = total/faces.length;
