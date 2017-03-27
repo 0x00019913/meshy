@@ -33,6 +33,8 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.surfaceArea = null;
   this.volume = null;
   this.centerOfMass = null;
+  // octree
+  this.octree = null;
 
   // for slicing
   this.sliceCount = null;
@@ -479,7 +481,9 @@ Model.prototype.makePlainModel = function(scene) {
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
+}
 
+Model.prototype.buildOctree = function() {
   var size = this.getSize();
   var largestBoundAxis = "x";
   if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
@@ -489,6 +493,7 @@ Model.prototype.makePlainModel = function(scene) {
   var origin = new THREE.Vector3(bounds.xmin, bounds.ymin, bounds.zmin);
   origin.subScalar(size[largestBoundAxis]*.05);
   this.octree = new Octree(7, origin, largestSize, this.scene);
+  this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
 }
 
 Model.prototype.getMeshColor = function() {

@@ -337,42 +337,9 @@ Stage.prototype.initViewport = function() {
 
     _this.controls.update();
 
-    /* intersection testing; leaving here in case of bugs */
-    /*
-    var co = new THREE.Vector3(2, 1+0.15, 0.5);
-    var cs = 0.2;
-    var fc = {
-      verts: [
-        new THREE.Vector3(2, 1, 1),
-        new THREE.Vector3(2.1, 3, -0.9),
-        new THREE.Vector3(2.2, 1, 3)
-      ]
-    };
-    fc.edges = [
-      fc.verts[0].clone().sub(fc.verts[1]),
-      fc.verts[1].clone().sub(fc.verts[2]),
-      fc.verts[2].clone().sub(fc.verts[0])
-    ];
-    fc.normal = new THREE.Vector3().crossVectors(fc.edges[0], fc.edges[1]).normalize();
-    console.log(cubeIntersectsTri(co, cs, fc));
-    var testboxgeo = new THREE.BoxGeometry(cs, cs, cs);
-    var testboxmat = new THREE.MeshStandardMaterial({color: 0xffffff, side: THREE.DoubleSide});
-    var testboxmesh = new THREE.Mesh(testboxgeo, testboxmat);
-    _this.scene.add(testboxmesh);
-    testboxmesh.position.copy(co.clone().addScalar(cs/2.0));
-
-    var trigeo = new THREE.Geometry();
-    trigeo.vertices.push(fc.verts[1]);
-    trigeo.vertices.push(fc.verts[0]);
-    trigeo.vertices.push(fc.verts[2]);
-    trigeo.faces.push(new THREE.Face3(0, 1, 2, fc.normal));
-    var trimesh = new THREE.Mesh(trigeo, testboxmat);
-    _this.scene.add(trimesh);
-    */
-
     /* RENDER */
     _this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    _this.renderer.shadowMap.enabled = true;
+    //_this.renderer.shadowMap.enabled = true;
     _this.renderer.toneMapping = THREE.ReinhardToneMapping;
     _this.renderer.setPixelRatio(window.devicePixelRatio);
     _this.renderer.setSize(width, height);

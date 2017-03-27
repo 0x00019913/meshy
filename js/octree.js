@@ -9,25 +9,29 @@ Octree = function(depth, origin, size, scene) {
 
   // for visualizing the octree, optional
   this.scene = scene;
+  this.density = 0;
 
   this.node = new TreeNode(depth, origin, size);
 }
 Octree.prototype.addGeometry = function(faces, vertices) {
+  var count, total = 0;
   for (var i=0; i<faces.length; i++) {
     var face = faces[i];
-    this.node.addFace({
+    count = this.node.addFace({
       verts: [vertices[face.a], vertices[face.b], vertices[face.c]],
       normal: face.normal
     },
     i);
+    total += count;
   }
+  this.density = total/faces.length;
 }
 Octree.prototype.visualize = function() {
   if (!this.scene) return;
 
   var outlineGeo = new THREE.Geometry();
   this.node.visualize(outlineGeo);
-  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.1});
+  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.01});
   var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
   this.scene.add(outlineMesh);
 }
@@ -46,9 +50,9 @@ TreeNode.prototype.addFace = function(face, idx) {
   var depth = this.depth;
   if (depth==0) {
     this.children.push(idx);
-    return;
+    return 1;
   }
-  var co, cs;
+  var co, cs, total = 0;
   for (var i=0; i<8; i++) {
     var child = this.children[i];
     if (child===undefined) {
@@ -67,9 +71,10 @@ TreeNode.prototype.addFace = function(face, idx) {
 
     if (cubeIntersectsTri(co, cs, face)) {
       if (child===undefined) this.children[i] = new TreeNode(depth-1, co, cs);
-      this.children[i].addFace(face, idx);
+      total += this.children[i].addFace(face, idx);
     }
   }
+  return total;
 }
 
 TreeNode.prototype.visualize = function(geo) {
