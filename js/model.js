@@ -485,10 +485,10 @@ Model.prototype.makePlainModel = function(scene) {
 
 // use the geometry to build an octree; this is quite computationally expensive
 Model.prototype.buildOctree = function(d) {
-  // heuristic is that the tree should be as deep as necessary to have 1-2 faces
+  // heuristic is that the tree should be as deep as necessary to have 1-5 faces
   // per leaf node so as to make raytracing cheap; the effectiveness will vary
-  // between different meshes, of course, but I estimate that
-  // ln(polycount)*0.6 should be good
+  // between different meshes, of course, but I estimate that ln(polycount)*0.6
+  // should be good
   var depth = (d===undefined) ? Math.round(Math.log(this.count)*0.6) : d;
 
   var size = this.getSize();
