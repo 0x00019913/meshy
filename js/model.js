@@ -17,11 +17,9 @@
 */
 function Model(scene, camera, container, printout, infoOutput) {
   // internal geometry
-  this.triangles = [];
+  this.faces = [];
   this.vertices = [];
   this.count = 0; // count of faces; used more often than count of vertices
-  // true if transformation has occurred that may require updating triangle bounds
-  this.trianglesDirty = false;
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
@@ -60,11 +58,11 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.measurement.setOutput(this.infoOutput);
 }
 
-// Add a Triangle instance to the model.
-Model.prototype.add = function(triangle) {
-  this.triangles.push(triangle);
+// Add a Face3 to the model.
+Model.prototype.add = function(face) {
+  this.faces.push(face);
   this.count++;
-  this.updateBoundsT(triangle);
+  this.updateBoundsF(face);
 }
 
 // All bounds to Infinity.
@@ -77,14 +75,24 @@ Model.prototype.resetBounds = function() {
   this.zmax = -Infinity;
 }
 
-// Update the bounds with a new triangle.
-Model.prototype.updateBoundsT = function(triangle) {
-  this.xmin = triangle.xmin<this.xmin ? triangle.xmin : this.xmin;
-  this.xmax = triangle.xmax>this.xmax ? triangle.xmax : this.xmax;
-  this.ymin = triangle.ymin<this.ymin ? triangle.ymin : this.ymin;
-  this.ymax = triangle.ymax>this.ymax ? triangle.ymax : this.ymax;
-  this.zmin = triangle.zmin<this.zmin ? triangle.zmin : this.zmin;
-  this.zmax = triangle.zmax>this.zmax ? triangle.zmax : this.zmax;
+// Update the bounds with a new face.
+Model.prototype.updateBoundsF = function(face) {
+  var verts = this.faceGetVerts(face);
+  for (var i=0; i<3; i++) this.updateBoundsV(verts[i]);
+}
+
+// Get an array of the vertices of a face.
+Model.prototype.faceGetVerts = function(face) {
+    return [
+      this.vertices[face.a],
+      this.vertices[face.b],
+      this.vertices[face.c]
+    ];
+}
+
+// Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
+Model.prototype.faceGetSubscript = function(idx) {
+  return (idx==0) ? 'a' : ((idx==1) ? 'b' : 'c');
 }
 
 // Update bounds with a new vertex.
@@ -155,7 +163,6 @@ Model.prototype.translate = function(axis, amount) {
   for (var i=0; i<this.vertices.length; i++) {
     this.vertices[i][axis] += amount;
   }
-  this.trianglesDirty = true;
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -186,9 +193,8 @@ Model.prototype.rotate = function(axis, amount) {
     this.updateBoundsV(vertex);
   }
   for (var i=0; i<this.count; i++) {
-    this.triangles[i].normal.applyAxisAngle(axisVector, amount);
+    this.faces[i].normal.applyAxisAngle(axisVector, amount);
   }
-  this.trianglesDirty = true;
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -211,12 +217,6 @@ Model.prototype.scale = function (axis, amount) {
   for (var i=0; i<this.vertices.length; i++) {
     this.vertices[i][axis] *= amount;
   }
-  for (var i=0; i<this.count; i++) {
-    var triangle = this.triangles[i];
-    triangle.surfaceArea = null;
-    triangle.signedVolume = null;
-  }
-  this.trianglesDirty = true;
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -311,8 +311,8 @@ Model.prototype.toggleWireframe = function() {
 Model.prototype.calcSurfaceArea = function() {
   this.surfaceArea = 0;
   for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    this.surfaceArea += tri.calcSurfaceArea();
+    var face = this.faces[i];
+    this.surfaceArea += this.faceCalcSurfaceArea(face);
   }
   return this.surfaceArea;
 }
@@ -321,40 +321,36 @@ Model.prototype.calcSurfaceArea = function() {
 Model.prototype.calcVolume = function() {
   this.volume = 0;
   for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    this.volume += tri.calcSignedVolume();
+    var face = this.faces[i];
+    this.volume += this.faceCalcSignedVolume(face);
   }
 }
 
 // Calculate center of mass.
 Model.prototype.calcCenterOfMass = function() {
   if (this.centerOfMass) return this.centerOfMass;
-  var modelVolume = 0, triVolume = 0;
-  var center = [0,0,0];
+  var modelVolume = 0, faceVolume = 0;
+  var center = new THREE.Vector3();
   for (var i=0; i<this.count; i++) {
-    var tri = this.triangles[i];
-    var verts = [];
-    for (var j=0; j<3; j++) verts.push(this.vertices[tri.indices[j]]);
-    triVolume = tri.calcSignedVolume();
-    modelVolume += triVolume;
-    center[0] += ((verts[0].x + verts[1].x + verts[2].x) / 4) * triVolume;
-    center[1] += ((verts[0].y + verts[1].y + verts[2].y) / 4) * triVolume;
-    center[2] += ((verts[0].z + verts[1].z + verts[2].z) / 4) * triVolume;
+    var face = this.faces[i];
+    var verts = this.faceGetVerts(face);
+    faceVolume = this.faceCalcSignedVolume(face);
+    modelVolume += faceVolume;
+    center.x += ((verts[0].x + verts[1].x + verts[2].x) / 4) * faceVolume;
+    center.y += ((verts[0].y + verts[1].y + verts[2].y) / 4) * faceVolume;
+    center.z += ((verts[0].z + verts[1].z + verts[2].z) / 4) * faceVolume;
   }
   this.volume = modelVolume;
-  this.centerOfMass = new THREE.Vector3();
-  this.centerOfMass.fromArray(center).divideScalar(modelVolume);
+  this.centerOfMass = center.divideScalar(modelVolume);
 }
 
+// Calculate cross-section.
 Model.prototype.calcCrossSection = function(axis, pos) {
   var crossSectionArea = 0;
   var segments = [];
   for (var i=0; i<this.count; i++) {
-    var triangle = this.triangles[i];
-    if (this.trianglesDirty) {
-      triangle.updateBounds();
-    }
-    var segment = triangle.intersection(axis, pos);
+    var face = this.faces[i];
+    var segment = this.faceIntersection(face, axis, pos);
     if (segment && segment.length==2) {
       segments.push(segment);
       // Algorithm is like this:
@@ -364,14 +360,83 @@ Model.prototype.calcCrossSection = function(axis, pos) {
       segment[0][axis] = 0;
       segment[1][axis] = 0;
       var area = segment[0].cross(segment[1]).multiplyScalar(1/2).length();
-      var sign = Math.sign(segment[1].dot(triangle.normal));
+      var sign = Math.sign(segment[1].dot(face.normal));
       crossSectionArea += sign * area;
     }
   }
-  this.trianglesDirty = false;
 
   return crossSectionArea;
 }
+
+// Calculate triangle area via cross-product.
+Model.prototype.faceCalcSurfaceArea = function(face) {
+  var v = new THREE.Vector3();
+  var v2 = new THREE.Vector3();
+  v.subVectors(this.vertices[face.a], this.vertices[face.b]);
+  v2.subVectors(this.vertices[face.a], this.vertices[face.c]);
+  v.cross(v2);
+  this.surfaceArea = 0.5 * v.length();
+  return this.surfaceArea;
+}
+
+// Calculate the volume of a tetrahedron with one vertex on the origin and
+// with the triangle forming the outer face; sign is determined by the inner
+// product of the normal with any of the vertices.
+Model.prototype.faceCalcSignedVolume = function(face) {
+  var sign = Math.sign(this.vertices[face.a].dot(face.normal));
+  var v1 = this.vertices[face.a];
+  var v2 = this.vertices[face.b];
+  var v3 = this.vertices[face.c];
+  var volume = (-v3.x*v2.y*v1.z + v2.x*v3.y*v1.z + v3.x*v1.y*v2.z);
+  volume += (-v1.x*v3.y*v2.z - v2.x*v1.y*v3.z + v1.x*v2.y*v3.z);
+  this.signedVolume = sign * Math.abs(volume/6.0);
+  return this.signedVolume;
+}
+
+// Calculate the endpoints of the segment formed by the intersection of this
+// triangle and a plane normal to the given axis.
+// Returns an array of two Vector3s in the plane.
+Model.prototype.faceIntersection = function(face, axis, pos) {
+  var verts = this.faceGetVerts(face);
+  var min = verts[0][axis], max = min;
+  for (var i=1; i<3; i++) {
+    var bound = verts[i][axis];
+    if (bound<min) min = bound;
+    if (bound>max) max = bound;
+  }
+  if (max<=pos || min>=pos) return [];
+
+  var segment = [];
+  for (var i=0; i<3; i++) {
+    var v1 = verts[i];
+    var v2 = verts[(i+1)%3];
+    if ((v1[axis]<pos && v2[axis]>pos) || (v1[axis]>pos && v2[axis]<pos)) {
+      var d = v2[axis]-v1[axis];
+      if (d==0) return;
+      var factor = (pos-v1[axis])/d;
+      // more efficient to have a bunch of cases than being clever and calculating
+      // the orthogonal axes and building a Vector3 from basis vectors, etc.
+      if (axis=="x") {
+        var y = v1.y + (v2.y-v1.y)*factor;
+        var z = v1.z + (v2.z-v1.z)*factor;
+        segment.push(new THREE.Vector3(pos,y,z));
+      }
+      else if (axis=="y") {
+        var x = v1.x + (v2.x-v1.x)*factor;
+        var z = v1.z + (v2.z-v1.z)*factor;
+        segment.push(new THREE.Vector3(x,pos,z));
+      }
+      else { // axis=="z"
+        var x = v1.x + (v2.x-v1.x)*factor;
+        var y = v1.y + (v2.y-v1.y)*factor;
+        segment.push(new THREE.Vector3(x,y,pos));
+      }
+    }
+  }
+  if (segment.length!=2) console.log("Plane-triangle intersection: strange segment length: ", segment);
+  return segment;
+}
+
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then
 // calculate it.
@@ -451,7 +516,7 @@ Model.prototype.render = function(scene, mode) {
   this.measurement.setScale(this.getMaxSize() * 0.4);
 
   if (mode == "plain") {
-    this.makePlainModel(scene);
+    this.makePlainMesh(scene);
     this.currentMesh = this.plainMesh;
   }
   else if (mode == "sliced") {
@@ -464,16 +529,12 @@ Model.prototype.render = function(scene, mode) {
 }
 
 // Create the plain mesh (as opposed to another display mode).
-Model.prototype.makePlainModel = function(scene) {
+Model.prototype.makePlainMesh = function(scene) {
   if (this.plainMesh) return;
   /* set up camera, put in model */
   var geo = new THREE.Geometry();
-  for (var i=0; i<this.count; i++) {
-    for (j=0; j<3; j++) {
-      geo.vertices.push(this.vertices[this.triangles[i].indices[j]]);
-    }
-    geo.faces.push(new THREE.Face3(i*3, i*3+1, i*3+2, this.triangles[i].normal));
-  }
+  geo.vertices = this.vertices;
+  geo.faces = this.faces;
   var mat = new THREE.MeshStandardMaterial({
     color: 0xffffff
   });
@@ -485,7 +546,7 @@ Model.prototype.makePlainModel = function(scene) {
 
 // use the geometry to build an octree; this is quite computationally expensive
 Model.prototype.buildOctree = function(d) {
-  // heuristic is that the tree should be as deep as necessary to have 1-5 faces
+  // heuristic is that the tree should be as deep as necessary to have 1-10 faces
   // per leaf node so as to make raytracing cheap; the effectiveness will vary
   // between different meshes, of course, but I estimate that ln(polycount)*0.6
   // should be good
@@ -631,13 +692,13 @@ Model.prototype.upload = function(file, callback) {
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
-    try {
+    //try {
       parseResult(fr.result);
       success = true;
-      _this.printout.log("Uploaded file: " + file.name);
-    } catch(e) {
-      _this.printout.error("Error uploading: " + e);
-    }
+    //  _this.printout.log("Uploaded file: " + file.name);
+    //} catch(e) {
+    //  _this.printout.error("Error uploading: " + e);
+    //}
     callback(success);
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
@@ -659,7 +720,6 @@ Model.prototype.upload = function(file, callback) {
 
       var n = dv.getUint32(0, isLittleEndian);
 
-
       offset = 4;
       _this.vertices = [];
       // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
@@ -668,9 +728,9 @@ Model.prototype.upload = function(file, callback) {
       var p = Math.pow(10, _this.vertexPrecision);
 
       for (var tri=0; tri<n; tri++) {
-        var triangle = new Triangle(_this.vertices);
+        var face = new THREE.Face3();
 
-        triangle.setNormal(getVector3(dv, offset, isLittleEndian));
+        face.normal = getVector3(dv, offset, isLittleEndian);
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
@@ -685,13 +745,13 @@ Model.prototype.upload = function(file, callback) {
           else {
             idx = vertexMap[key];
           }
-          triangle.addVertex(idx);
+          face[_this.faceGetSubscript(vert)] = idx;
           offset += 12;
         }
 
         // ignore "attribute byte count" (2 bytes)
         offset += 2;
-        _this.add(triangle);
+        _this.add(face);
       }
 
       function getVector3(dv, offset, isLittleEndian) {
@@ -784,10 +844,10 @@ Model.prototype.upload = function(file, callback) {
           }
         }
         for (var tri=0; tri<triIndices.length; tri++) {
-          triangles.push(new Triangle(_this.vertices));
-          var triangle = triangles[tri];
+          var triangle = new THREE.Face3();
+          triangles.push(triangle);
           for (var j=0; j<3; j++) {
-            triangle.addVertex(triIndices[tri][j]);
+            triangle[_this.faceGetSubscript(j)] = triIndices[tri][j];
           }
 
           // average vertex normals (if available) or calculate via x-product
@@ -797,17 +857,17 @@ Model.prototype.upload = function(file, callback) {
           }
           else {
             var d01 = new THREE.Vector3().subVectors(
-              _this.vertices[triangle.indices[0]],
-              _this.vertices[triangle.indices[1]]
+              _this.vertices[triangle.a],
+              _this.vertices[triangle.b]
             );
             var d02 = new THREE.Vector3().subVectors(
-              _this.vertices[triangle.indices[0]],
-              _this.vertices[triangle.indices[2]]
+              _this.vertices[triangle.a],
+              _this.vertices[triangle.c]
             );
             normal.crossVectors(d01, d02);
           }
           normal.normalize();
-          triangle.setNormal(normal);
+          triangle.normal = normal;
         }
         return triangles;
       }
