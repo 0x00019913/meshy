@@ -598,13 +598,13 @@ Model.prototype.export = function(format, name) {
     dv.setUint32(offset, this.count, isLittleEndian);
     offset += 4;
     for (var tri=0; tri<this.count; tri++) {
-      var triangle = this.triangles[tri];
+      var face = this.faces[tri];
 
-      setVector3(dv, offset, triangle.normal, isLittleEndian);
+      setVector3(dv, offset, face.normal, isLittleEndian);
       offset += 12;
 
       for (var vert=0; vert<3; vert++) {
-        setVector3(dv, offset, this.vertices[triangle.indices[vert]], isLittleEndian);
+        setVector3(dv, offset, this.vertices[face[this.faceGetSubscript(vert)]], isLittleEndian);
         offset += 12;
       }
 
@@ -631,7 +631,7 @@ Model.prototype.export = function(format, name) {
     out =  "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
     out += "# NB: this file only stores faces and vertex positions. \n";
     out += "# number vertices: " + this.vertices.length + "\n";
-    out += "# number triangles: " + this.triangles.length + "\n";
+    out += "# number triangles: " + this.faces.length + "\n";
     out += "#\n";
     out += "# vertices: \n";
 
@@ -647,9 +647,9 @@ Model.prototype.export = function(format, name) {
     out += "# faces: \n";
     for (var tri=0; tri<this.count; tri++) {
       var line = "f";
-      var triangle = this.triangles[tri];
+      var face = this.faces[tri];
       for (var vert=0; vert<3; vert++) {
-        line += " " + (triangle.indices[vert]+1);
+        line += " " + (face[this.faceGetSubscript(vert)]+1);
       }
       line += "\n";
       out += line;
@@ -692,13 +692,13 @@ Model.prototype.upload = function(file, callback) {
   fr = new FileReader();
   fr.onload = function() {
     var success = false;
-    //try {
+    try {
       parseResult(fr.result);
       success = true;
-    //  _this.printout.log("Uploaded file: " + file.name);
-    //} catch(e) {
-    //  _this.printout.error("Error uploading: " + e);
-    //}
+      _this.printout.log("Uploaded file: " + file.name);
+    } catch(e) {
+      _this.printout.error("Error uploading: " + e);
+    }
     callback(success);
   };
   if (this.format=="stl") fr.readAsArrayBuffer(file);
@@ -889,7 +889,7 @@ Model.prototype.dispose = function() {
   }
 }
 
-// CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS.
+// CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS, PROBABLY DOESN'T WORK.
 
 // UNUSED, make this workable later.
 Model.prototype.renderSlicedModel = function(scene) {
