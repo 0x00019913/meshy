@@ -136,13 +136,14 @@ TreeNode.prototype.visualize = function(geo) {
 var epsilon = 0.000001;
 
 // return true if cube intersects triangle
+// uses the standard 13 SAT intersection tests
 // params:
 //  o: origin (THREE.Vector3)
 //  s: size (float)
 //  face: { verts, normal } object; verts is an array of THREE.Vector3s
 // references:
-// http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf
-// http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox2.txt
+//  http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox_tam.pdf
+//  http://fileadmin.cs.lth.se/cs/Personal/Tomas_Akenine-Moller/code/tribox2.txt
 function cubeIntersectsTri(o, s, face) {
   var v0 = face.verts[0], v1 = face.verts[1], v2 = face.verts[2];
   var min, max;
@@ -262,6 +263,49 @@ function cubeIntersectsPlane(o, s, v, n) {
 
   if (n.dot(vmin)>0.0) return false;
   if (n.dot(vmax)>0.0) return true;
+
+  return false;
+}
+
+// return true if tri intersects line segment (two vertices)
+// no easy way to explain how it works; look up the Moller-Trumbore algorithm
+// params:
+//  v1, v2, v3: tri vertices
+//  s1, s2: segment vertices
+function triIntersectsSegment(v1, v2, v3, s1, s2) {
+  // "ray" origin is implicitly s1; "ray" direction is s2-s1
+  var D = s2.clone().sub(s1);
+  var L = D.length();
+  // if line segment endpoints are the same, return b/c bad input
+  if (L < epsilon) return false;
+  // normalize "ray" direction
+  D.divideScalar(L);
+  // two edges of tri sharing v1
+  var e1 = v2.clone().sub(v1);
+  var e2 = v3.clone().sub(v1);
+
+  var P = D.clone().cross(e2);
+
+  var det = e1.dot(P);
+  // if determinant is 0, segment is parallel to tri, so no intersection
+  if (det > -epsilon && det < epsilon) return false;
+  var inv_det = 1.0/det;
+
+  // test u parameter
+  var T = s1.clone().sub(v1);
+  var u = T.dot(P) * inv_det;
+  // if intersection, u (see the MT paper) is between 0 and 1
+  if (u < 0.0 || u > 1.0) return false;
+
+  // test v parameter
+  var Q = T.cross(e1);
+  var v = D.dot(Q) * inv_det;
+  // like u, v is nonnegative and u+v <= 1
+  if (v < 0.0 || u+v > 1.0) return false;
+
+  // test t parameter; has to be positive and not farther from s1 than s2
+  var t = e2.dot(Q) * inv_det;
+  if (t > 0.0 && t < L) return true;
 
   return false;
 }

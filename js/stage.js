@@ -327,6 +327,27 @@ Stage.prototype.initViewport = function() {
       }
     );
 
+    // TESTING CODE for triangle-segment intersections; leaving it here
+    // temporarily in case of bugs
+    /*var v1 = new THREE.Vector3(0.1, 0.1, 0.1);
+    var v2 = new THREE.Vector3(1.0, 0.1, 0.9);
+    var v3 = new THREE.Vector3(0.1, 0.1, 1.1);
+    var s1 = new THREE.Vector3(0.3, 0.5, 0.0);
+    var s2 = new THREE.Vector3(0.3, 0.0999, 0.7);
+
+    console.log(triIntersectsSegment(v1, v2, v3, s1, s2));
+
+    var testGeo = new THREE.Geometry();
+    testGeo.vertices.push(v1); testGeo.vertices.push(v2);
+    testGeo.vertices.push(v2); testGeo.vertices.push(v3);
+    testGeo.vertices.push(v3); testGeo.vertices.push(v1);
+    testGeo.vertices.push(s1); testGeo.vertices.push(s2);
+
+    var testMat = new THREE.LineBasicMaterial({color: 0xff0000});
+    var testMesh = new THREE.LineSegments(testGeo, testMat);
+    _this.scene.add(testMesh);
+    */
+
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
     _this.controls.addObject(pointLight);

@@ -117,7 +117,7 @@ Model.prototype.getBounds = function() {
   };
 }
 
-// Get a list representing the coords of the center.
+// Get a vector representing the coords of the center.
 Model.prototype.getCenter = function() {
   return new THREE.Vector3(this.getCenterx(), this.getCentery(), this.getCenterz());
 }
@@ -255,7 +255,7 @@ Model.prototype.getMeasuredValue = function (type) {
       }
     }
     else {
-      this.printout.warn("Can't scale to " + type + "; no measurement currently active.");
+      this.printout.warn("Can't get value for " + type + "; no measurement currently active.");
       return null;
     }
   }
@@ -291,7 +291,7 @@ Model.prototype.activateMeasurement = function (type, param) {
     else {
       activated = this.measurement.activate(type);
     }
-    if (activated) return activated;
+    return activated;
   }
 }
 Model.prototype.deactivateMeasurement = function () {
