@@ -22,9 +22,6 @@ var FreeCam = 0;
 // adds a displacement vector to camera and origin, which rotates w/ phi.
 var CylCam = 1;
 
-// need to offset some default limits to prevent gimbal lock
-epsilon = .01;
-
 //  constructor
 //  arguments:
 //    camera: THREE.Camera
@@ -35,6 +32,8 @@ Controls = function(camera, domElement, params) {
   this.objects = [];
   this.camera = camera;
   this.domElement = (domElement!==undefined) ? domElement : document;
+  // need to offset some default limits to prevent gimbal lock
+  this.epsilon = 0.001;
 
   if (!params) params = { type: FreeCam };
   if (!params.type) params.type = FreeCam;
@@ -164,10 +163,10 @@ Controls.prototype.setDefaults = function(type) {
     this.xPanRate = 0.5;
     this.yPanRate = 0.5;
 
-    this.rMin = epsilon;
+    this.rMin = this.epsilon;
     this.rMax = Infinity;
-    this.thetaMin = epsilon;
-    this.thetaMax = Math.PI-epsilon;
+    this.thetaMin = this.epsilon;
+    this.thetaMax = Math.PI-this.epsilon;
 
     this.origin = new THREE.Vector3(0,0,0);
   }
@@ -187,14 +186,14 @@ Controls.prototype.setDefaults = function(type) {
     this.tthetaRate = -1;
     this.tphiRate = -0.5;
 
-    this.rMin = epsilon;
+    this.rMin = this.epsilon;
     this.rMax = Infinity;
     this.phiMin = -Infinity;
     this.phiMax = Infinity;
     this.zMin = -Infinity;
     this.zMax = Infinity;
-    this.tthetaMin = epsilon;
-    this.tthetaMax = Math.PI-epsilon;
+    this.tthetaMin = this.epsilon;
+    this.tthetaMax = Math.PI-this.epsilon;
     this.target = new THREE.Vector3(0,0,0);
   }
   else {

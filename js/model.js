@@ -562,9 +562,9 @@ Model.prototype.buildOctree = function(d) {
   // center octree on model
   var origin = this.getCenter().subScalar(largestSize/2);
 
-  this.octree = new Octree(depth, origin, largestSize, this.scene);
+  this.octree = new Octree(depth, origin, largestSize, this.faces, this.vertices, this.scene);
   // add geometry
-  this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
+  //this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
 }
 
 Model.prototype.getMeshColor = function() {

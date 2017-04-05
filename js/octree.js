@@ -4,18 +4,19 @@
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
 //  scene: optional, used for visualizing the octree
-Octree = function(depth, origin, size, scene) {
+Octree = function(depth, origin, size, faces, vertices, scene) {
   this.depth = depth;
   this.origin = origin;
   this.size = size;
 
-  // for visualizing the octree, optional
-  this.scene = scene;
-  this.density = 0;
+  if (!faces || !vertices) return;
+
+  this.faces = faces;
+  this.vertices = vertices;
 
   this.node = new TreeNode(depth, origin, size);
-}
-Octree.prototype.addGeometry = function(faces, vertices) {
+
+  // add geometry
   for (var i=0; i<faces.length; i++) {
     var face = faces[i];
     this.node.addFace({
@@ -24,27 +25,34 @@ Octree.prototype.addGeometry = function(faces, vertices) {
     },
     i);
   }
+
+  // for visualizing the octree, optional
+  this.scene = scene;
+  this.density = 0;
 }
 Octree.prototype.numLeaves = function() {
   return this.node.numLeaves();
 }
-Octree.prototype.visualize = function() {
+Octree.prototype.visualize = function(drawLines) {
   if (!this.scene) return;
 
   var outlineGeo = new THREE.Geometry();
-  this.node.visualize(outlineGeo);
-  var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.03});
-  var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
+  this.node.visualize(outlineGeo, drawLines);
+  // if drawLines, then outline child nodes with lines; else, draw a point in
+  // each one's center
+  if (drawLines) {
+    var outlineMat = new THREE.LineBasicMaterial({color: 0xff0000});
+    var outlineMesh = new THREE.LineSegments(outlineGeo, outlineMat);
+  }
+  else {
+    var outlineMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.03});
+    var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
+  }
+  outlineMesh.name = "octree";
   this.scene.add(outlineMesh);
 
   var boxGeo = new THREE.Geometry();
-  v = [];
-  for (var i=0; i<8; i++) {
-    v[i] = this.origin.clone();
-    v[i].x += this.size*(i&1);
-    v[i].y += this.size*(i&2)/2;
-    v[i].z += this.size*(i&4)/4;
-  }
+  v = this.node.nodeVertices();
 
   boxGeo.vertices.push(v[0]); boxGeo.vertices.push(v[1]);
   boxGeo.vertices.push(v[2]); boxGeo.vertices.push(v[3]);
@@ -63,7 +71,20 @@ Octree.prototype.visualize = function() {
 
   var boxMat = new THREE.LineBasicMaterial({color: 0xff0000});
   var boxMesh = new THREE.LineSegments(boxGeo, boxMat);
+  boxMesh.name = "octree";
   this.scene.add(boxMesh);
+}
+Octree.prototype.calculateEdgeIntersections = function() {
+  this.node.calculateEdgeIntersections(this.faces, this.vertices);
+}
+Octree.prototype.visualizeBorderEdges = function() {
+  if (!this.scene) return;
+
+  var borderGeo = new THREE.Geometry();
+  this.node.visualizeBorderEdges(borderGeo);
+  var borderMat = new THREE.LineBasicMaterial({color: 0x00ff00});
+  var borderMesh = new THREE.LineSegments(borderGeo, borderMat);
+  this.scene.add(borderMesh);
 }
 
 TreeNode = function(depth, origin, size) {
@@ -105,6 +126,73 @@ TreeNode.prototype.addFace = function(face, idx) {
     }
   }
 }
+TreeNode.prototype.edgeIndices = [
+  [0,1], [2,3], [4,5], [6,7], // x-aligned
+  [0,2], [1,3], [4,6], [5,7], // y-aligned
+  [0,4], [1,5], [2,6], [3,7]  // z-aligned
+];
+// faces are labeled with normal axis; "far" faces have a larger coordinate on
+// the axis than "near" faces
+TreeNode.prototype.faceEdgeIndices = [
+  [0,2,8,9],   // x, near
+  [1,3,10,11], // x, far
+  [0,1,4,5],   // y, near
+  [2,3,6,7],   // y, far
+  [4,6,8,10],  // z, near
+  [5,7,9,11]   // z, far
+];
+TreeNode.prototype.nodeVertices = function() {
+  // cube vertices
+  v = [];
+  for (var i=0; i<8; i++) {
+    v[i] = this.origin.clone();
+    v[i].x += this.size*(i&1);
+    v[i].y += this.size*(i&2)/2;
+    v[i].z += this.size*(i&4)/4;
+  }
+  return v;
+}
+// store a mask in each leaf node that indicates edge intersections
+// params:
+//  faces, vertices: pass these in to convert face indices to faces to vertices
+TreeNode.prototype.calculateEdgeIntersections = function(faces, vertices) {
+  if (!faces || !vertices) return;
+
+  var depth = this.depth;
+  if (depth==0) {
+    var edgeMask = 0;
+
+    var s = this.nodeVertices();
+    for (var i=0; i<this.children.length; i++) {
+      var face = faces[this.children[i]];
+      var v1 = vertices[face.a];
+      var v2 = vertices[face.b];
+      var v3 = vertices[face.c];
+      // walk through the edges of the node
+      // get edge vertices from the LUT (this.edgeIndices)
+      for (var j=0; j<12; j++) {
+        var edgeIndices = this.edgeIndices[j];
+        var s1 = s[edgeIndices[0]];
+        var s2 = s[edgeIndices[1]];
+
+
+        // if tri intersects a given edge, flip the corresponding edgeMask bit;
+        // a set bit corresponds to an edge that has an odd number of triangle
+        // intersections
+        if (triIntersectsSegment(v1, v2, v3, s1, s2)) {
+          edgeMask ^= 1<<j;
+        }
+      }
+    }
+    this.edgeMask = edgeMask;
+  }
+  else {
+    for (var i=0; i<8; i++) {
+      var child = this.children[i];
+      if (child!==undefined) child.calculateEdgeIntersections(faces, vertices);
+    }
+  }
+}
 TreeNode.prototype.numLeaves = function() {
   if (this.depth==0) {
     return 1;
@@ -118,15 +206,70 @@ TreeNode.prototype.numLeaves = function() {
     return total;
   }
 }
-TreeNode.prototype.visualize = function(geo) {
+TreeNode.prototype.visualize = function(geo, drawLines) {
   if (this.depth==0) {
-    var center = this.origin.clone().addScalar(this.size/2);
-    geo.vertices.push(center);
+    if (drawLines) {
+      var v = this.nodeVertices();
+
+      geo.vertices.push(v[0]); geo.vertices.push(v[1]);
+      geo.vertices.push(v[2]); geo.vertices.push(v[3]);
+      geo.vertices.push(v[4]); geo.vertices.push(v[5]);
+      geo.vertices.push(v[6]); geo.vertices.push(v[7]);
+
+      geo.vertices.push(v[0]); geo.vertices.push(v[2]);
+      geo.vertices.push(v[1]); geo.vertices.push(v[3]);
+      geo.vertices.push(v[4]); geo.vertices.push(v[6]);
+      geo.vertices.push(v[5]); geo.vertices.push(v[7]);
+
+      geo.vertices.push(v[0]); geo.vertices.push(v[4]);
+      geo.vertices.push(v[1]); geo.vertices.push(v[5]);
+      geo.vertices.push(v[2]); geo.vertices.push(v[6]);
+      geo.vertices.push(v[3]); geo.vertices.push(v[7]);
+    }
+    else {
+      var center = this.origin.clone().addScalar(this.size/2);
+      geo.vertices.push(center);
+    }
   }
   else {
     for (var i=0; i<8; i++) {
-      if (this.children[i]!==undefined) {
-        this.children[i].visualize(geo);
+      var child = this.children[i];
+      if (child!==undefined) {
+        child.visualize(geo, drawLines);
+      }
+    }
+  }
+}
+TreeNode.prototype.visualizeBorderEdges = function(geo) {
+  if (this.depth==0) {
+    if (!this.edgeMask) return;
+    var v = this.nodeVertices();
+
+    // walk through all 6 faces
+    for (var i=0; i<6; i++) {
+      var edges = this.faceEdgeIndices[i];
+
+      // test if total number of intersections on face is even or odd
+      var total = 0;
+      for (var j=0; j<4; j++) {
+         total += (this.edgeMask&(1<<edges[j]))>>edges[j];
+      }
+
+      // if face has an odd number of intersections, show it
+      if (total&1 != 0) {
+        for (var j=0; j<4; j++) {
+          var edgeIndices = this.edgeIndices[edges[j]];
+          geo.vertices.push(v[edgeIndices[0]]);
+          geo.vertices.push(v[edgeIndices[1]]);
+        }
+      }
+    }
+  }
+  else {
+    for (var i=0; i<8; i++) {
+      var child = this.children[i];
+      if (child!==undefined) {
+        child.visualizeBorderEdges(geo);
       }
     }
   }
