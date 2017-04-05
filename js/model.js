@@ -77,17 +77,8 @@ Model.prototype.resetBounds = function() {
 
 // Update the bounds with a new face.
 Model.prototype.updateBoundsF = function(face) {
-  var verts = this.faceGetVerts(face);
+  var verts = faceGetVerts(face, this.vertices);
   for (var i=0; i<3; i++) this.updateBoundsV(verts[i]);
-}
-
-// Get an array of the vertices of a face.
-Model.prototype.faceGetVerts = function(face) {
-    return [
-      this.vertices[face.a],
-      this.vertices[face.b],
-      this.vertices[face.c]
-    ];
 }
 
 // Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
@@ -156,6 +147,8 @@ Model.prototype.getCOMz = function() {
   if (this.centerOfMass) return this.centerOfMass.z;
   return null;
 }
+
+/* TRANSFORMATIONS */
 
 // Translate the model on axis ("x"/"y"/"z") by amount.
 Model.prototype.translate = function(axis, amount) {
@@ -237,6 +230,8 @@ Model.prototype.scale = function (axis, amount) {
   this.measurement.setScale(this.getMaxSize() * 0.4);
 }
 
+/* MEASUREMENT */
+
 // If current measurement has the given "type", return its value.
 Model.prototype.getMeasuredValue = function (type) {
   if (this.measurement) {
@@ -298,14 +293,7 @@ Model.prototype.deactivateMeasurement = function () {
   if (this.measurement) this.measurement.deactivate();
 }
 
-// Toggle wireframe.
-Model.prototype.toggleWireframe = function() {
-  this.wireframe = !this.wireframe;
-  this.printout.log("wireframe is " + (this.wireframe ? "on" : "off"));
-  if (this.plainMesh) {
-    this.plainMesh.material.wireframe = this.wireframe;
-  }
-}
+/* CALCULATIONS */
 
 // Calculate surface area.
 Model.prototype.calcSurfaceArea = function() {
@@ -333,7 +321,7 @@ Model.prototype.calcCenterOfMass = function() {
   var center = new THREE.Vector3();
   for (var i=0; i<this.count; i++) {
     var face = this.faces[i];
-    var verts = this.faceGetVerts(face);
+    var verts = faceGetVerts(face, this.vertices);
     faceVolume = this.faceCalcSignedVolume(face);
     modelVolume += faceVolume;
     center.x += ((verts[0].x + verts[1].x + verts[2].x) / 4) * faceVolume;
@@ -397,7 +385,7 @@ Model.prototype.faceCalcSignedVolume = function(face) {
 // triangle and a plane normal to the given axis.
 // Returns an array of two Vector3s in the plane.
 Model.prototype.faceIntersection = function(face, axis, pos) {
-  var verts = this.faceGetVerts(face);
+  var verts = faceGetVerts(face, this.vertices);
   var min = verts[0][axis], max = min;
   for (var i=1; i<3; i++) {
     var bound = verts[i][axis];
@@ -437,6 +425,16 @@ Model.prototype.faceIntersection = function(face, axis, pos) {
   return segment;
 }
 
+/* UI AND RENDERING */
+
+// Toggle wireframe.
+Model.prototype.toggleWireframe = function() {
+  this.wireframe = !this.wireframe;
+  this.printout.log("wireframe is " + (this.wireframe ? "on" : "off"));
+  if (this.plainMesh) {
+    this.plainMesh.material.wireframe = this.wireframe;
+  }
+}
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then
 // calculate it.
@@ -573,6 +571,8 @@ Model.prototype.getMeshColor = function() {
 Model.prototype.setMeshColor = function(color) {
   if (this.plainMesh) return this.plainMesh.material.color.set(color);
 }
+
+/* IMPORT AND EXPORT */
 
 // Generate file output representing the model and save it.
 Model.prototype.export = function(format, name) {

@@ -29,19 +29,28 @@ var axisToVector3Map = {
 var zeroVector = new THREE.Vector3(0,0,0);
 var oneVector = new THREE.Vector3(1,1,1);
 
-isArray = function(item) {
+function isArray(item) {
   return (Object.prototype.toString.call(item) === '[object Array]');
 }
 
-isString = function(item) {
+function isString(item) {
   return (typeof item === 'string' || item instanceof String);
 }
 
-isNumber = function(item) {
+function isNumber(item) {
   return (typeof item === 'number');
 }
-isFunction = function(item) {
+function isFunction(item) {
   return (typeof item === 'function');
+}
+
+// THREE.Face3-related functions
+function faceGetVerts(face, vertices) {
+    return [
+      vertices[face.a],
+      vertices[face.b],
+      vertices[face.c]
+    ];
 }
 
 // chart of ring inner diameters in mm
