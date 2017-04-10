@@ -81,11 +81,6 @@ Model.prototype.updateBoundsF = function(face) {
   for (var i=0; i<3; i++) this.updateBoundsV(verts[i]);
 }
 
-// Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
-Model.prototype.faceGetSubscript = function(idx) {
-  return (idx==0) ? 'a' : ((idx==1) ? 'b' : 'c');
-}
-
 // Update bounds with a new vertex.
 Model.prototype.updateBoundsV = function(v) {
   this.xmin = v.x<this.xmin ? v.x : this.xmin;
@@ -572,6 +567,609 @@ Model.prototype.setMeshColor = function(color) {
   if (this.plainMesh) return this.plainMesh.material.color.set(color);
 }
 
+/* MESH REPAIR */
+Model.prototype.closeHoles = function() {
+  // Will be an object { hash: data }, where data is { vertex, vertices, counts}.
+  // For a given vertex, it will have an entry (keyed by hash) and contain an
+  // object that stores the vertex, its adjacent vertices, and the count of
+  // faces it shares with each adjacent vertex.
+  // An important point is that, in a well-formed mesh, each vertex will share
+  // exactly two faces with each neighbor.
+  var adjacencyMap = {};
+
+  var p = Math.pow(10, this.vertexPrecision);
+  // for each face
+  for (var f=0; f<this.faces.length; f++) {
+    var face = this.faces[f];
+    var faceVerts = faceGetVerts(face, this.vertices);
+
+    // for each vertex in the face
+    for (var v=0; v<3; v++) {
+      var vertex = faceVerts[v];
+      var hash = vertexHash(vertex, p);
+
+      // the other two vertices for the face; we will add these to adjacencyMap
+      var vertex1 = (v==0) ? faceVerts[1] : faceVerts[0];
+      var vertex2 = (v==2) ? faceVerts[1] : faceVerts[2];
+
+      if (!(hash in adjacencyMap)) {
+        adjacencyMap[hash] = {
+          vertex: vertex,
+          vertices: [],
+          counts: [],
+          normal: new THREE.Vector3()
+        };
+      }
+
+      var data = adjacencyMap[hash];
+      addAdjacentVertex(vertex1, data);
+      addAdjacentVertex(vertex2, data);
+
+      data.normal.add(face.normal);
+    }
+  }
+
+  /* for visualizing verts */
+  var borderGeo = new THREE.Geometry();
+  var borderMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.1});
+  var borderMesh = new THREE.Points(borderGeo, borderMat);
+  this.scene.add(borderMesh);
+
+  // isolate vertices bordering holes, also store the number of holes adjacent
+  // to each vertex
+  var borderMap = {};
+  for (var key in adjacencyMap) {
+    var edgeVertex = false;
+    var data = adjacencyMap[key];
+    var singleNeighborCount = 0;
+
+    for (var c=0; c<data.counts.length; c++) {
+      if (data.counts[c] == 1) {
+        edgeVertex = true;
+        singleNeighborCount += 1;
+      }
+    }
+
+    if (edgeVertex) {
+      var neighbors = [];
+      for (var v=0; v<data.vertices.length; v++) {
+        if (data.counts[v]==1) neighbors.push(data.vertices[v]);
+      }
+      borderMap[key] = {
+        vertex: data.vertex,
+        neighbors: neighbors,
+        // every hole contributes two adjacent vertices with count 1
+        numHoles: singleNeighborCount/2,
+        normal: data.normal.normalize()
+      };
+    }
+  }
+
+  // check for empty border map; if properties exist, then holes exist
+  if (objectIsEmpty(borderMap)) return;
+
+  // array of THREE.Vertex3s and THREE.Face3s that will patch the holes
+  var patchVertices = [];
+  var patchFaces = [];
+  // need to make the vertices unique
+  var patchVertexMap = {};
+
+  // important:
+  // must first minimally patch the holes such that no vertex borders more than
+  // one hole; this will make finding loops of border edges easy
+  for (var key in borderMap) {
+    var data = borderMap[key];
+    // if vertex borders multiple holes, need to patch
+    if (data.numHoles>1) {
+      // source vertex
+      var vertex = data.vertex;
+      // border neighbors of source vertex
+      var neighbors = data.neighbors;
+      // all neighbors, not just the border neighbors; need this for telling if
+      // verts are connected by a path
+      var adjacent = adjacencyMap[vertexHash(vertex, p)].vertices;
+      // edges from the given vertex to its neighbors
+      var edges = neighbors.map(function(x) {return vertex.clone().sub(x).normalize();});
+
+      // pairs of indices for vertex's neighbors that aren't connected by a path
+      // of edges
+      var pairs = [];
+      // matrix of angles between two edges
+      var angles = [];
+      for (var i=0; i<neighbors.length; i++) {
+        angles.push([]);
+        for (var j=0; j<i; j++) {
+          angles[i].push(Math.acos(edges[i].dot(edges[j])));
+          var ijConnected = false;
+          // check if neighbor i and neighbor j are connected by a path of
+          // vertices that are also connected to the source vertex; if so,
+          // don't add them to the list of pairs
+          var start = neighbors[i];
+          var current = start;
+          var previous = null;
+          while (current) {
+            var chash = vertexHash(current, p);
+            var cadjacent = adjacencyMap[chash].vertices;
+            var next = null;
+            for (var n=0; n<cadjacent.length; n++) {
+              var cneighbor = cadjacent[n];
+              // check that cneighbor adjacent to main vertex and is not
+              if (adjacent.indexOf(cneighbor)>-1 && cneighbor != previous) {
+                previous = current;
+                next = cneighbor;
+                break;
+              }
+            }
+
+            current = next;
+            if (current==neighbors[j]) {
+              ijConnected = true;
+              break;
+            }
+          }
+
+          if (!ijConnected) pairs.push([i,j]);
+        }
+      }
+
+      // get pairs with the lowest angles between them
+      pairs.sort(function(p1, p2) {
+        var angle1 = angles[p1[0]][p1[1]];
+        var angle2 = angles[p2[0]][p2[1]];
+        return angle1 - angle2;
+      });
+
+      // draw new faces to bridge the vertex's connection with
+      // data.numHoles-1 of the holes it borders; after adding the new faces,
+      // need to alter the borderMap to reflect the new state of connectivity
+      // for the vertices that are adjacent to the new face
+      for (var i=0; i<data.numHoles-1; i++) {
+        var pair = pairs[i];
+        // pair should always exist, bugs notwithstanding
+        if (pair) {
+          var face = new THREE.Face3();
+          for (var j=0; j<3; j++) {
+            // get the right vertex (the source vertex or one of its neighbors)
+            var v;
+            if (j<2) v = neighbors[pair[j]];
+            else v = vertex;
+
+            // get the index for v, adding it to patchVertices if necessary
+            var vidx = vertexMapIdx(patchVertexMap, v, patchVertices, p);
+            face[faceGetSubscript(j)] = vidx;
+          }
+
+          var v1 = neighbors[pair[0]], v2 = neighbors[pair[1]];
+          // set the face normal to the cross product of two of its edges, then
+          // negate it if we got the sign wrong (correct sign is determined by
+          // any of its three vertex normals)
+          face.normal = new THREE.Vector3();
+          face.normal.crossVectors(
+            vertex.clone().sub(v1),
+            vertex.clone().sub(v2)
+          ).normalize();
+          face.normal.multiplyScalar(Math.sign(face.normal.dot(data.normal)));
+
+          // knowing the normal, we can correct the winding order if necessary:
+          // presently, face.a is v1, face.b is v2, and face.c is vertex, and we
+          // need ()(v2-v1) x normal) to have a positive component along
+          // (v1-vertex); if this is not true, flip face.a and face.b
+          if (v2.clone().sub(v1).cross(face.normal).dot(v1.clone().sub(vertex))<0) {
+            var tmp = face.a;
+            face.a = face.b;
+            face.b = tmp;
+          }
+
+          // finally, store the face
+          patchFaces.push(face);
+
+          // clean up the neighbor data given the new connection:
+
+          // for the two newly connected verts, replace the source vert in
+          // their neighbors array with a connection to each other
+          for (var j=0; j<2; j++) {
+            var v = neighbors[pair[j]];
+            var vhash = vertexHash(v, p);
+            var vdata = borderMap[vhash];
+            // LHS is reference to the source vertex in v's neighbors array,
+            // RHS is the vertex to which we just connected v
+            // for each of the two, we're replacing the source vertex with the
+            // other one
+            vdata.neighbors[vdata.neighbors.indexOf(vertex)] = neighbors[pair[(j+1)%2]];
+          }
+          // remove the two verts we just connected from the source vert's
+          // neighbors array in the border map
+          neighbors.splice(neighbors.indexOf(v1),1);
+          neighbors.splice(neighbors.indexOf(v2),1);
+        }
+      }
+      // we have ensured that the source vertex only borders one hole
+      data.numHoles = 1;
+    }
+  }
+
+  // temporary patch mesh
+  var patchGeo = new THREE.Geometry();
+  patchGeo.vertices = patchVertices;
+  patchGeo.faces = patchFaces;
+  var patchMat = new THREE.MeshStandardMaterial({
+    color: 0x44ff44,
+    wireframe: true
+  });
+  var patchMesh = new THREE.Mesh(patchGeo, patchMat);
+  this.scene.add(patchMesh);
+
+  // build an array of border edge cycles
+  var borderCycles = [];
+  var borderCycleNormals = [];
+  while (true) {
+    // start calculating a new cycle of border edges
+
+    // break if no more border edges
+    if (objectIsEmpty(borderMap)) break;
+
+    // will contain a closed path of vertices
+    var cycle = [];
+    var cycleNormals = [];
+    // only store cycle if search loop exits correctly
+    var cycleClosed = false;
+
+    var start = null;
+    var current = null;
+    var previous = null;
+    // get a vertex from the borderMap that's on the edge of only one hole; if
+    // nothing failed in our initial patching step, this should always pick a
+    // vertex on the first iteration because every vertex will now border only
+    // one hole
+    for (var key in borderMap) {
+      if (borderMap[key].numHoles==1) {
+        start = borderMap[key].vertex;
+        break;
+      }
+    }
+    // if can't get a vertex bordering only one hole, break (should never
+    // fail here, but checking in case of weirdly malformed geometry)
+    if (!start) break;
+    current = start;
+
+    // go along the cycle till we close the loop
+    while (true) {
+      // given a current vertex, search for the next vertex in the loop
+
+      // hash current vertex to find its neighbors
+      var hash = vertexHash(current, p);
+
+      // get the vertex's two neighbors
+      var neighbors = borderMap[hash].neighbors;
+      var normal = borderMap[hash].normal;
+      delete borderMap[hash];
+
+      // store vertex in the cycle
+      cycle.push(current);
+      cycleNormals.push(normal);
+
+      // neighbor count should always be 2 (unless a vertex shares holes, but
+      // that should never be true for the current vertex by design)
+      if (neighbors.length!=2) break;
+
+      // if we're on the first vertex, need to wind the cycle in a consistent
+      // direction (CW here) to make face generation easier
+      if (previous==null) {
+        // two adjacent verts ("vc" and "vn") on the border must certainly have
+        // a vert ("va") that's adjacent to both; if ((vn-vc) x normal) has a
+        // negative component along an edge to va, then we're winding CW; else,
+        // take the other neighbor to be the next vertex
+        var next = neighbors[0];
+        var edge = next.clone().sub(current);
+        // using the normal of the current vert, not of the next; shouldn't make
+        // a difference as the normal can't flip sign w.r.t. the normals of its
+        // adjacent faces on just one vert
+        var cross = edge.cross(normal);
+        // get the common adjacent vert of current and next
+        var adjacentVertex = null;
+        var currentAdjacent = adjacencyMap[vertexHash(current, p)].vertices;
+        var nextAdjacent = adjacencyMap[vertexHash(next, p)].vertices;
+        //console.log(currentAdjacent, nextAdjacent);
+        for (var i=0; i<nextAdjacent.length; i++) {
+          var n = nextAdjacent[i];
+          if (n!=current && currentAdjacent.indexOf(n)>-1) {
+            adjacentVertex = n;
+            break;
+          }
+        }
+        // if the two border verts don't share a vert, something went wrong
+        if (adjacentVertex==null) break;
+
+        // if not clockwise, replace next with current's other neighbor
+        if (cross.dot(adjacentVertex.clone().sub(current))>0) {
+          next = neighbors[1];
+        }
+
+        previous = current;
+        current = next;
+      }
+      // else, just pick the neighbor that isn't the previous vert
+      else {
+        var tmp = current;
+        // if first element of neighbors is previous vertex, next vertex has to
+        // be the other one; similarly if second element is previous vertex
+        current = neighbors[0];
+        if (current==previous) current = neighbors[1];
+        previous = tmp;
+      }
+
+      // if we've reached the end of the loop, break
+      if (current==start) {
+        cycleClosed = true;
+        break;
+      }
+    }
+
+    // if cycle search loop found a correctly formed cycle, add it to the list;
+    // should always happen, bugs notwithstanding
+    if (cycleClosed) {
+      borderCycles.push(cycle);
+      borderCycleNormals.push(cycleNormals);
+    }
+  }
+
+  for (var c=0; c<borderCycles.length; c++) {
+    var cycle = borderCycles[c];
+    var normals = borderCycleNormals[c];
+
+    var n = cycle.length;
+    // every cycle should be nonempty, but check this just in case
+    if (n==0) continue;
+
+    // array of edges from vertex i to vertex i+1 (loops around at the end)
+    var edges = [];
+    // center of the hole
+    var center = new THREE.Vector3();
+    // average length of the edges
+    var avgLen = 0;
+
+    for (var i=0; i<n; i++) {
+      var v = cycle[i];
+      edges.push(cycle[(i+1)%n].clone().sub(v));
+      avgLen += edges[i].length()/n;
+      center.add(v.clone().divideScalar(n));
+    }
+    var angles = [];
+    for (var i=0; i<n; i++) {
+      angles.push(calculateAngleFromEdges(i, edges, cycle, normals, n));
+    }
+
+    var count = 0;
+
+    var threshold = avgLen * 0.5;
+    // while the cycle of border edges can't be bridged by a single triangle,
+    // add or remove vertices by the advancing front mesh method
+    while (cycle.length>3) {
+      break;
+      // find vertex whose adjacent edges have the smallest angle
+      var angle = angles[0];
+      var idx = 0;
+      for (var i=1; i<n; i++) {
+        var a = angles[i];
+        if (a < angle) {
+          angle = a;
+          idx = i;
+        }
+      }
+
+      var prevIdx = (idx-1+n)%n;
+      var nextIdx = (idx+1)%n;
+      var v = cycle[idx];
+      var vprev = cycle[prevIdx];
+      var vnext = cycle[nextIdx];
+
+      var patchvidx = vertexMapIdx(patchVertexMap, v, patchVertices, p);
+      var patchprevidx = vertexMapIdx(patchVertexMap, vprev, patchVertices, p);
+      var patchnextidx = vertexMapIdx(patchVertexMap, vnext, patchVertices, p);
+
+      // these rules come from "A robust hole-filling algorithm for triangular
+      // mesh", Zhao, Gao, Lin
+      if (angle < 1.308996939) { // if angle < 75 degrees
+        // just make a face and remove v from the cycle
+        var face = new THREE.Face3();
+        face.a = patchvidx;
+        // we know the order because the border vert cycle winds CW (see above)
+        face.b = patchprevidx;
+        face.c = patchnextidx;
+        face.normal = edges[idx].clone().cross(vprev.clone().sub(v)).normalize();
+        patchFaces.push(face);
+
+        n -= 1;
+        // remove v from the cycle because it's been patched over
+        cycle.splice(idx, 1);
+        // update edges, angles, and normals
+        edges.splice(idx, 1);
+        angles.splice(idx, 1);
+        normals.splice(idx, 1);
+        // now idx will point to vprev
+        if (idx==0) idx = prevIdx-1;
+        else idx = prevIdx;
+        nextIdx = (idx+1)%n;
+        edges[idx] = cycle[nextIdx].clone().sub(cycle[idx]);
+        // recalculate angle
+        angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
+        angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
+      }
+      else if (angle < 2.356194490) { // if 75 degrees <= angle < 135 degrees
+        // edges from v to next and from v to prev
+        var enext = edges[idx];
+        var eprev = edges[prevIdx].clone().multiplyScalar(-1);
+        // create a new vertex and set its distance from v to be the average of
+        // the two existing edges
+        var v1 = eprev.clone().setLength((eprev.length()+enext.length())/2.0);
+        // rotate and move the new vertex into position
+        v1.applyAxisAngle(enext.clone().cross(eprev).normalize(), -angle/2.0).add(v);
+        // put the vertex into the patch map
+        var patchv1idx = vertexMapIdx(patchVertexMap, v1, patchVertices, p);
+
+        // new edge
+        var e1 = v1.clone().sub(v);
+
+        // construct the two new faces
+        var face1 = new THREE.Face3();
+        face1.a = patchvidx;
+        face1.b = patchprevidx;
+        face1.c = patchv1idx;
+        face1.normal = eprev.clone().cross(e1);
+        patchFaces.push(face1);
+        var face2 = face1.clone();
+        face2.b = patchv1idx;
+        face2.c = patchnextidx;
+        face2.normal = e1.clone().cross(enext);
+        patchFaces.push(face2);
+
+        // replace vertex v in the cycle with the new vertex
+        cycle[cycle.indexOf(v)] = v1;
+        // update edges, angles, and normals
+        edges[prevIdx] = v1.clone().sub(vprev);
+        edges[idx] = vnext.clone().sub(v1);
+        angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
+        angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
+        angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
+        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
+      }
+      else { // angle >= 135 degrees
+        // edges from v to next and from v to prev
+        var enext = edges[idx];
+        var eprev = edges[prevIdx].clone().multiplyScalar(-1);
+        // create new vertices, interpolate their lengths between enext & eprev
+        var prevlen = eprev.length(), nextlen = enext.length();
+        var v1 = eprev.clone().setLength((prevlen*2.0+nextlen)/3.0);
+        var v2 = eprev.clone().setLength((prevlen+nextlen*2.0)/3.0);
+        // rotate and move the new vertices into position
+        var axis = enext.clone().cross(eprev).normalize();
+        v1.applyAxisAngle(axis, -angle/3.0).add(v);
+        v2.applyAxisAngle(axis, -angle*2.0/3.0).add(v);
+        // put the vertices into the patch map
+        var patchv1idx = vertexMapIdx(patchVertexMap, v1, patchVertices, p);
+        var patchv2idx = vertexMapIdx(patchVertexMap, v2, patchVertices, p);
+
+        // new edges
+        var e1 = v1.clone().sub(v);
+        var e2 = v2.clone().sub(v);
+
+        // construct the three new faces
+        var face1 = new THREE.Face3();
+        face1.a = patchvidx;
+        face1.b = patchprevidx;
+        face1.c = patchv1idx;
+        face1.normal = eprev.clone().cross(e1);
+        patchFaces.push(face1);
+        var face2 = face1.clone();
+        face2.b = patchv1idx;
+        face2.c = patchv2idx;
+        face2.normal = e1.clone().cross(e2);
+        patchFaces.push(face2);
+        var face3 = face2.clone();
+        face3.b = patchv2idx;
+        face3.c = patchvnextidx;
+        face3.normal = e2.clone().cross(enext);
+        patchFaces.push(face3);
+
+        n += 1;
+        cycle.splice(idx, 1, v1, v2);
+        if (idx==0) prevIdx += 1;
+        nextIdx += 1;
+        edges[prevIdx] = v1.clone().sub(vprev);
+        edges[idx] = v2.clone().sub(v1);
+        edges[nextIdx] = vnext.clone().sub(v2);
+        var nextnextIdx = (nextIdx+1)%n;
+        angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
+        angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
+        angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
+        angles[nextnextIdx] = calculateAngleFromEdges(nextnextIdx, edges, cycle, normals, n);
+        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
+        normals[nextIdx] = face2.normal.clone().add(face3.normal).normalize();
+      }
+
+      if (++count > 0) break;
+    }
+  }
+
+  // given an existing adjacency set for a given vertex (mapRow), add a new
+  // vertex (vertex) that's adjacent to the first one
+  function addAdjacentVertex(vertex, mapRow) {
+    // hash of the vertex we're adding
+    var hash = vertexHash(vertex, p);
+    // index of matching vertex
+    var idx = -1;
+
+    // for each vertex in the existing adjacency list
+    for (var v=0; v<mapRow.vertices.length; v++) {
+      // get hash for the other vertex; "hashp" means "hash prime" :P
+      var hashp = vertexHash(mapRow.vertices[v], p);
+      // if the vertex we're adding is found in the existing adjacency list,
+      // set index and stop searching
+      if (hashp==hash) {
+        idx = v;
+        break;
+      }
+    }
+
+    // if the vertex we're adding exists in the adjacency list, update count
+    if (idx > -1) {
+      mapRow.counts[idx] += 1;
+    }
+    // if not found, append vertex and set its count to 1
+    else {
+      mapRow.vertices.push(vertex);
+      mapRow.counts.push(1);
+    }
+  }
+  function calculateAngleFromEdges(idx, edges, cycle, normals, n) {
+    var prevIdx = (idx-1+n)%n;
+    var nextIdx = (idx+1)%n;
+    // first edge points to previous vert, second edge points to next vert
+    var e1 = edges[prevIdx].clone().normalize().multiplyScalar(-1);
+    var e2 = edges[idx].clone().normalize();
+    var angle = Math.acos(e1.dot(e2));
+
+    /*
+    // need to check if vertex (call it "v") is actually protruding into the
+    // hole (i.e., if its two neighbors on the cycle are connected by an edge
+    // or there's a vertex ("vn") connected to v [that's not either of its
+    // border neighbors] such that vn-v has a positive component along e1+e2);
+    // if this is the case, subtract the calculated angle from 2pi
+    var hash, data;
+
+    hash = vertexHash(cycle[prevIdx], p);
+    data = adjacencyMap[hash];
+    var neighborsConnected = data.vertices.indexOf(cycle[nextIdx])>-1;
+
+    hash = vertexHash(cycle[idx], p);
+    data = adjacencyMap[hash];
+    var protrudingEdgeExists = false;
+    var edge = null;
+    for (var j=0; j<data.vertices.length; j++) {
+      var v = data.vertices[j];
+      if (v != cycle[prevIdx] && v != cycle[nextIdx]) {
+        edge = v.clone().sub(cycle[idx]);
+        break;
+      }
+    }
+    if (edge && edge.dot(e1.clone().add(e2))>0) protrudingEdgeExists = true;
+
+    if (neighborsConnected || protrudingEdgeExists) {
+      angle = 2.0*Math.PI - angle;
+    }*/
+
+    // need to check if the vertex is convex, i.e., protruding into the hole,
+    // and, if so, subtract the calculated angle from 2pi; because we know the
+    // winding order, this is true when the previous edge crossed with the
+    // normal has a negative component along the current edge
+    if (edges[prevIdx].clone().cross(normals[idx]).dot(edges[idx]) < 0) {
+      angle = 2.0*Math.PI - angle;
+    }
+
+    return angle;
+  }
+}
+
 /* IMPORT AND EXPORT */
 
 // Generate file output representing the model and save it.
@@ -604,7 +1202,7 @@ Model.prototype.export = function(format, name) {
       offset += 12;
 
       for (var vert=0; vert<3; vert++) {
-        setVector3(dv, offset, this.vertices[face[this.faceGetSubscript(vert)]], isLittleEndian);
+        setVector3(dv, offset, this.vertices[face[faceGetSubscript(vert)]], isLittleEndian);
         offset += 12;
       }
 
@@ -649,7 +1247,7 @@ Model.prototype.export = function(format, name) {
       var line = "f";
       var face = this.faces[tri];
       for (var vert=0; vert<3; vert++) {
-        line += " " + (face[this.faceGetSubscript(vert)]+1);
+        line += " " + (face[faceGetSubscript(vert)]+1);
       }
       line += "\n";
       out += line;
@@ -735,7 +1333,7 @@ Model.prototype.upload = function(file, callback) {
 
         for (var vert=0; vert<3; vert++) {
           var vertex = getVector3(dv, offset, isLittleEndian);
-          var key = Math.round(vertex.x*p)+'_'+Math.round(vertex.y*p)+'_'+Math.round(vertex.z*p);
+          var key = vertexHash(vertex, p);
           var idx = -1;
           if (vertexMap[key]===undefined) {
             idx = _this.vertices.length;
@@ -745,7 +1343,7 @@ Model.prototype.upload = function(file, callback) {
           else {
             idx = vertexMap[key];
           }
-          face[_this.faceGetSubscript(vert)] = idx;
+          face[faceGetSubscript(vert)] = idx;
           offset += 12;
         }
 
@@ -847,7 +1445,7 @@ Model.prototype.upload = function(file, callback) {
           var triangle = new THREE.Face3();
           triangles.push(triangle);
           for (var j=0; j<3; j++) {
-            triangle[_this.faceGetSubscript(j)] = triIndices[tri][j];
+            triangle[faceGetSubscript(j)] = triIndices[tri][j];
           }
 
           // average vertex normals (if available) or calculate via x-product
@@ -879,7 +1477,6 @@ Model.prototype.upload = function(file, callback) {
 // wouldn't be automatically disposed of when the Model instance
 // disappears.
 Model.prototype.dispose = function() {
-  this.measurement.deactivate();
   if (!this.scene) return;
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];

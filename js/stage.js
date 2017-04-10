@@ -2,8 +2,8 @@
    classes:
     Stage
    description:
-    Main class representing the Meshy viewport. Encompasses UI, handling the
-    model, and controlling the viewport.
+    Main class representing the Meshy viewport. Encompasses UI, creating and
+    handling the model, and controlling the viewport.
 */
 
 // Constructor.
@@ -123,6 +123,8 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
+  var repairFolder = this.gui.addFolder("Repair");
+  repairFolder.add(this, "closeHoles");
   var specialFolder = this.gui.addFolder("Special");
   var ringSizeFolder = specialFolder.addFolder("Scale To Ring Size");
   ringSizeFolder.add(this, "mCircle");
@@ -239,6 +241,9 @@ Stage.prototype.startMeasurement = function(type, param) {
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
   this.clearScaleToMeasurementFolder();
+}
+Stage.prototype.closeHoles = function() {
+  if (this.model) this.model.closeHoles();
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearScaleToMeasurementFolder();
@@ -465,7 +470,8 @@ Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks uploading
   // a model with the same name twice in a row
   this.fileInput.value = "";
-
+  
+  this.mDeactivate();
   if (this.model) {
     this.model.dispose();
   }
