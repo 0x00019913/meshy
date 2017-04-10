@@ -794,7 +794,7 @@ Model.prototype.closeHoles = function() {
   patchGeo.faces = patchFaces;
   var patchMat = new THREE.MeshStandardMaterial({
     color: 0x44ff44,
-    wireframe: true
+    wireframe: false
   });
   var patchMesh = new THREE.Mesh(patchGeo, patchMat);
   this.scene.add(patchMesh);
@@ -869,7 +869,6 @@ Model.prototype.closeHoles = function() {
         var adjacentVertex = null;
         var currentAdjacent = adjacencyMap[vertexHash(current, p)].vertices;
         var nextAdjacent = adjacencyMap[vertexHash(next, p)].vertices;
-        //console.log(currentAdjacent, nextAdjacent);
         for (var i=0; i<nextAdjacent.length; i++) {
           var n = nextAdjacent[i];
           if (n!=current && currentAdjacent.indexOf(n)>-1) {
@@ -940,12 +939,12 @@ Model.prototype.closeHoles = function() {
     }
 
     var count = 0;
+    var limit = 20000;
 
     var threshold = avgLen * 0.5;
     // while the cycle of border edges can't be bridged by a single triangle,
     // add or remove vertices by the advancing front mesh method
     while (cycle.length>3) {
-      break;
       // find vertex whose adjacent edges have the smallest angle
       var angle = angles[0];
       var idx = 0;
@@ -957,26 +956,77 @@ Model.prototype.closeHoles = function() {
         }
       }
 
+      // local indices of cycle[idx] neighbors
       var prevIdx = (idx-1+n)%n;
       var nextIdx = (idx+1)%n;
+      // cycle[idx] and its neighbors
       var v = cycle[idx];
       var vprev = cycle[prevIdx];
       var vnext = cycle[nextIdx];
 
+      // indices into the patch vertex array
       var patchvidx = vertexMapIdx(patchVertexMap, v, patchVertices, p);
       var patchprevidx = vertexMapIdx(patchVertexMap, vprev, patchVertices, p);
       var patchnextidx = vertexMapIdx(patchVertexMap, vnext, patchVertices, p);
 
-      // these rules come from "A robust hole-filling algorithm for triangular
-      // mesh", Zhao, Gao, Lin
+      // edges from v to next and from v to prev
+      var enext = edges[idx];
+      var eprev = edges[prevIdx].clone().multiplyScalar(-1);
+
+      var newVerts;
+      // determine how many verts to create; these rules are a modification of
+      // those found in "A robust hole-filling algorithm for triangular mesh",
+      // Zhao, Gao, Lin
       if (angle < 1.308996939) { // if angle < 75 degrees
+        // do nothing; we're not creating any vertices
+        newVerts = [];
+      }
+      else if (angle < 2.356194490) { // if 75 degrees <= angle < 135 degrees
+        // create a new vertex and set its distance from v to be the average of
+        // the two existing edges
+        var v1 = eprev.clone().setLength((eprev.length()+enext.length())/2.0);
+        // rotate and move the new vertex into position
+        v1.applyAxisAngle(enext.clone().cross(eprev).normalize(), -angle/2.0).add(v);
+
+        // check if the length is below the threshold; if so, skip creating the
+        // vertex and just make one face
+        if (v1.clone().sub(vnext).length()<threshold) {
+          newVerts = [];
+        }
+        else {
+          newVerts = [v1];
+        }
+      }
+      else { // angle >= 135 degrees
+        // create new vertices, interpolate their lengths between enext & eprev
+        var prevlen = eprev.length(), nextlen = enext.length();
+        var v1 = eprev.clone().setLength((prevlen*2.0+nextlen)/3.0);
+        var v2 = eprev.clone().setLength((prevlen+nextlen*2.0)/3.0);
+        // rotate and move the new vertices into position
+        var axis = enext.clone().cross(eprev).normalize();
+        v1.applyAxisAngle(axis, -angle/3.0).add(v);
+        v2.applyAxisAngle(axis, -angle*2.0/3.0).add(v);
+
+        // check if the length is below the threshold; if so, skip creating the
+        // vertex and just make one face
+        if (v2.clone().sub(v1).length()<threshold) {
+          // removing v2; take v1, set it to the midpoint of v1 and v2
+          v1.add(v2).divideScalar(2.0);
+          newVerts = [v1];
+        }
+        else {
+          newVerts = [v1, v2];
+        }
+      }
+
+      if (newVerts.length==0) {
         // just make a face and remove v from the cycle
         var face = new THREE.Face3();
         face.a = patchvidx;
         // we know the order because the border vert cycle winds CW (see above)
         face.b = patchprevidx;
         face.c = patchnextidx;
-        face.normal = edges[idx].clone().cross(vprev.clone().sub(v)).normalize();
+        face.normal = vprev.clone().sub(v).cross(edges[idx]).normalize();
         patchFaces.push(face);
 
         n -= 1;
@@ -995,15 +1045,8 @@ Model.prototype.closeHoles = function() {
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
       }
-      else if (angle < 2.356194490) { // if 75 degrees <= angle < 135 degrees
-        // edges from v to next and from v to prev
-        var enext = edges[idx];
-        var eprev = edges[prevIdx].clone().multiplyScalar(-1);
-        // create a new vertex and set its distance from v to be the average of
-        // the two existing edges
-        var v1 = eprev.clone().setLength((eprev.length()+enext.length())/2.0);
-        // rotate and move the new vertex into position
-        v1.applyAxisAngle(enext.clone().cross(eprev).normalize(), -angle/2.0).add(v);
+      else if (newVerts.length==1) {
+        var v1 = newVerts[0];
         // put the vertex into the patch map
         var patchv1idx = vertexMapIdx(patchVertexMap, v1, patchVertices, p);
 
@@ -1024,27 +1067,19 @@ Model.prototype.closeHoles = function() {
         patchFaces.push(face2);
 
         // replace vertex v in the cycle with the new vertex
-        cycle[cycle.indexOf(v)] = v1;
+        cycle[idx] = v1;
         // update edges, angles, and normals
         edges[prevIdx] = v1.clone().sub(vprev);
         edges[idx] = vnext.clone().sub(v1);
+        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
         angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
-        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
       }
-      else { // angle >= 135 degrees
-        // edges from v to next and from v to prev
-        var enext = edges[idx];
-        var eprev = edges[prevIdx].clone().multiplyScalar(-1);
-        // create new vertices, interpolate their lengths between enext & eprev
-        var prevlen = eprev.length(), nextlen = enext.length();
-        var v1 = eprev.clone().setLength((prevlen*2.0+nextlen)/3.0);
-        var v2 = eprev.clone().setLength((prevlen+nextlen*2.0)/3.0);
-        // rotate and move the new vertices into position
-        var axis = enext.clone().cross(eprev).normalize();
-        v1.applyAxisAngle(axis, -angle/3.0).add(v);
-        v2.applyAxisAngle(axis, -angle*2.0/3.0).add(v);
+      else {
+        var v1 = newVerts[0];
+        var v2 = newVerts[1];
+
         // put the vertices into the patch map
         var patchv1idx = vertexMapIdx(patchVertexMap, v1, patchVertices, p);
         var patchv2idx = vertexMapIdx(patchVertexMap, v2, patchVertices, p);
@@ -1067,27 +1102,27 @@ Model.prototype.closeHoles = function() {
         patchFaces.push(face2);
         var face3 = face2.clone();
         face3.b = patchv2idx;
-        face3.c = patchvnextidx;
+        face3.c = patchnextidx;
         face3.normal = e2.clone().cross(enext);
         patchFaces.push(face3);
 
         n += 1;
         cycle.splice(idx, 1, v1, v2);
         if (idx==0) prevIdx += 1;
-        nextIdx += 1;
+        edges.splice(idx, 1, v2.clone().sub(v1), vnext.clone().sub(v2));
         edges[prevIdx] = v1.clone().sub(vprev);
-        edges[idx] = v2.clone().sub(v1);
-        edges[nextIdx] = vnext.clone().sub(v2);
         var nextnextIdx = (nextIdx+1)%n;
+        normals.splice(idx, 1, null, null);
+        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
+        normals[nextIdx] = face2.normal.clone().add(face3.normal).normalize();
+        angles.splice(idx, 1, 0, 0);
         angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
         angles[nextnextIdx] = calculateAngleFromEdges(nextnextIdx, edges, cycle, normals, n);
-        normals[idx] = face1.normal.clone().add(face2.normal).normalize();
-        normals[nextIdx] = face2.normal.clone().add(face3.normal).normalize();
       }
 
-      if (++count > 0) break;
+      if (++count > limit) break;
     }
   }
 
@@ -1123,46 +1158,17 @@ Model.prototype.closeHoles = function() {
   }
   function calculateAngleFromEdges(idx, edges, cycle, normals, n) {
     var prevIdx = (idx-1+n)%n;
-    var nextIdx = (idx+1)%n;
     // first edge points to previous vert, second edge points to next vert
     var e1 = edges[prevIdx].clone().normalize().multiplyScalar(-1);
+    if (normals[idx]===undefined) borderGeo.vertices.push(cycle[idx]);
     var e2 = edges[idx].clone().normalize();
     var angle = Math.acos(e1.dot(e2));
-
-    /*
-    // need to check if vertex (call it "v") is actually protruding into the
-    // hole (i.e., if its two neighbors on the cycle are connected by an edge
-    // or there's a vertex ("vn") connected to v [that's not either of its
-    // border neighbors] such that vn-v has a positive component along e1+e2);
-    // if this is the case, subtract the calculated angle from 2pi
-    var hash, data;
-
-    hash = vertexHash(cycle[prevIdx], p);
-    data = adjacencyMap[hash];
-    var neighborsConnected = data.vertices.indexOf(cycle[nextIdx])>-1;
-
-    hash = vertexHash(cycle[idx], p);
-    data = adjacencyMap[hash];
-    var protrudingEdgeExists = false;
-    var edge = null;
-    for (var j=0; j<data.vertices.length; j++) {
-      var v = data.vertices[j];
-      if (v != cycle[prevIdx] && v != cycle[nextIdx]) {
-        edge = v.clone().sub(cycle[idx]);
-        break;
-      }
-    }
-    if (edge && edge.dot(e1.clone().add(e2))>0) protrudingEdgeExists = true;
-
-    if (neighborsConnected || protrudingEdgeExists) {
-      angle = 2.0*Math.PI - angle;
-    }*/
 
     // need to check if the vertex is convex, i.e., protruding into the hole,
     // and, if so, subtract the calculated angle from 2pi; because we know the
     // winding order, this is true when the previous edge crossed with the
     // normal has a negative component along the current edge
-    if (edges[prevIdx].clone().cross(normals[idx]).dot(edges[idx]) < 0) {
+    if (e1.cross(normals[idx]).dot(e2) > 0) {
       angle = 2.0*Math.PI - angle;
     }
 
