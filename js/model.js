@@ -926,6 +926,8 @@ Model.prototype.closeHoles = function() {
     var center = new THREE.Vector3();
     // average length of the edges
     var avgLen = 0;
+    // average distance of cycle verts from the center
+    var avgDist = 0;
 
     for (var i=0; i<n; i++) {
       var v = cycle[i];
@@ -933,15 +935,24 @@ Model.prototype.closeHoles = function() {
       avgLen += edges[i].length()/n;
       center.add(v.clone().divideScalar(n));
     }
+    for (var i=0; i<n; i++) {
+      avgDist += cycle[i].distanceTo(center)/n;
+    }
     var angles = [];
     for (var i=0; i<n; i++) {
       angles.push(calculateAngleFromEdges(i, edges, cycle, normals, n));
     }
 
     var count = 0;
-    var limit = 20000;
+    var limit = 5000;
 
-    var threshold = avgLen * 0.5;
+    // merge new vertices if adjacent edge length is below this threshold
+    var threshold = avgLen * 1;
+    // determines the combination of v and centerVector at each step; final
+    // vertex is v + centerVector*redirectFactor, where centerVector is scaled
+    // to the same length as v
+    var redirectFactor = 0.2;
+
     // while the cycle of border edges can't be bridged by a single triangle,
     // add or remove vertices by the advancing front mesh method
     while (cycle.length>3) {
@@ -973,6 +984,8 @@ Model.prototype.closeHoles = function() {
       var enext = edges[idx];
       var eprev = edges[prevIdx].clone().multiplyScalar(-1);
 
+      var centerVector = center.clone().sub(v);
+
       var newVerts;
       // determine how many verts to create; these rules are a modification of
       // those found in "A robust hole-filling algorithm for triangular mesh",
@@ -990,7 +1003,7 @@ Model.prototype.closeHoles = function() {
 
         // check if the length is below the threshold; if so, skip creating the
         // vertex and just make one face
-        if (v1.clone().sub(vnext).length()<threshold) {
+        if (v1.distanceTo(vnext)<threshold) {
           newVerts = [];
         }
         else {
@@ -1009,7 +1022,7 @@ Model.prototype.closeHoles = function() {
 
         // check if the length is below the threshold; if so, skip creating the
         // vertex and just make one face
-        if (v2.clone().sub(v1).length()<threshold) {
+        if (v2.distanceTo(v1)<threshold) {
           // removing v2; take v1, set it to the midpoint of v1 and v2
           v1.add(v2).divideScalar(2.0);
           newVerts = [v1];
@@ -1041,7 +1054,28 @@ Model.prototype.closeHoles = function() {
         else idx = prevIdx;
         nextIdx = (idx+1)%n;
         edges[idx] = cycle[nextIdx].clone().sub(cycle[idx]);
-        // recalculate angle
+        // recalculate normals for the two vertices whose neigbors were changed;
+        // set this as the old normal plus the new face's normal, both weighted
+        // by their angle contributions at the vertex (old normal is weighted by
+        // 2pi-angle, face normal by the angle between face's outermost edge and
+        // the other edge adjacent to the vertex)
+        // (you can really feel the clunky notation here >.>...)
+        var faceAngle;
+        faceAngle = Math.acos(
+          edges[idx].clone().normalize().dot(
+            v.clone().sub(cycle[idx]).normalize()
+          )
+        );
+        normals[idx].multiplyScalar(2*Math.PI-angle)
+          .add(face.normal.clone().multiplyScalar(faceAngle)).normalize();
+        faceAngle = Math.acos(
+          edges[idx].clone().normalize().dot(
+            cycle[nextIdx].clone().sub(v).normalize()
+          )
+        );
+        normals[nextIdx].multiplyScalar(2*Math.PI-angles[nextIdx])
+          .add(face.normal.clone().multiplyScalar(faceAngle)).normalize();
+        // recalculate angles
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
       }
@@ -1052,6 +1086,12 @@ Model.prototype.closeHoles = function() {
 
         // new edge
         var e1 = v1.clone().sub(v);
+
+        // adjust the new vertex to point more toward the center
+        var redirect = centerVector.setLength(
+          e1.length() * redirectFactor * v.distanceTo(center) / avgDist
+        );
+        v1.add(redirect);
 
         // construct the two new faces
         var face1 = new THREE.Face3();
@@ -1071,7 +1111,24 @@ Model.prototype.closeHoles = function() {
         // update edges, angles, and normals
         edges[prevIdx] = v1.clone().sub(vprev);
         edges[idx] = vnext.clone().sub(v1);
+        // recalculate normals
+        var faceAngle;
+        faceAngle = Math.acos(
+          edges[prevIdx].clone().normalize().dot(
+            v.clone().sub(cycle[prevIdx]).normalize()
+          )
+        );
+        normals[prevIdx].multiplyScalar(2*Math.PI-angles[prevIdx])
+          .add(face1.normal.clone().multiplyScalar(faceAngle)).normalize();
         normals[idx] = face1.normal.clone().add(face2.normal).normalize();
+        faceAngle = Math.acos(
+          edges[idx].clone().normalize().dot(
+            cycle[nextIdx].clone().sub(v).normalize()
+          )
+        );
+        normals[nextIdx].multiplyScalar(2*Math.PI-angles[nextIdx])
+          .add(face2.normal.clone().multiplyScalar(faceAngle)).normalize();
+        // recalculate angles
         angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
@@ -1087,6 +1144,17 @@ Model.prototype.closeHoles = function() {
         // new edges
         var e1 = v1.clone().sub(v);
         var e2 = v2.clone().sub(v);
+
+        // adjust the new vertex to point more toward the center
+        var redirect;
+        redirect = centerVector.setLength(
+          e1.length() * redirectFactor * v.distanceTo(center) / avgDist
+        );
+        v1.add(redirect);
+        redirect = centerVector.setLength(
+          e2.length() * redirectFactor * v.distanceTo(center) / avgDist
+        );
+        v1.add(redirect);
 
         // construct the three new faces
         var face1 = new THREE.Face3();
@@ -1113,9 +1181,26 @@ Model.prototype.closeHoles = function() {
         edges[prevIdx] = v1.clone().sub(vprev);
         var nextnextIdx = (nextIdx+1)%n;
         normals.splice(idx, 1, null, null);
+        angles.splice(idx, 1, 0, 0);
+        // recalculate normals
+        var faceAngle;
+        faceAngle = Math.acos(
+          edges[prevIdx].clone().normalize().dot(
+            v.clone().sub(cycle[prevIdx]).normalize()
+          )
+        );
+        normals[prevIdx].multiplyScalar(2*Math.PI-angles[prevIdx])
+          .add(face1.normal.clone().multiplyScalar(faceAngle)).normalize();
         normals[idx] = face1.normal.clone().add(face2.normal).normalize();
         normals[nextIdx] = face2.normal.clone().add(face3.normal).normalize();
-        angles.splice(idx, 1, 0, 0);
+        faceAngle = Math.acos(
+          edges[nextIdx].clone().normalize().dot(
+            cycle[nextnextIdx].clone().sub(v).normalize()
+          )
+        );
+        normals[nextnextIdx].multiplyScalar(2*Math.PI-angles[nextnextIdx])
+          .add(face3.normal.clone().multiplyScalar(faceAngle)).normalize();
+        // recalculate angles
         angles[prevIdx] = calculateAngleFromEdges(prevIdx, edges, cycle, normals, n);
         angles[idx] = calculateAngleFromEdges(idx, edges, cycle, normals, n);
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
@@ -1123,6 +1208,19 @@ Model.prototype.closeHoles = function() {
       }
 
       if (++count > limit) break;
+    }
+
+    // we should get here once the cycle only contains three verts; patch the
+    // final hole
+    if (cycle.length==3) {
+      var face = new THREE.Face3();
+      face.a = vertexMapIdx(patchVertexMap, cycle[0], patchVertices, p);
+      face.b = vertexMapIdx(patchVertexMap, cycle[2], patchVertices, p);
+      face.c = vertexMapIdx(patchVertexMap, cycle[1], patchVertices, p);
+      var e1 = cycle[1].clone().sub(cycle[0]);
+      var e2 = cycle[2].clone().sub(cycle[0]);
+      face.normal = e2.cross(e1).normalize();
+      patchFaces.push(face);
     }
   }
 
@@ -1160,7 +1258,6 @@ Model.prototype.closeHoles = function() {
     var prevIdx = (idx-1+n)%n;
     // first edge points to previous vert, second edge points to next vert
     var e1 = edges[prevIdx].clone().normalize().multiplyScalar(-1);
-    if (normals[idx]===undefined) borderGeo.vertices.push(cycle[idx]);
     var e2 = edges[idx].clone().normalize();
     var angle = Math.acos(e1.dot(e2));
 
