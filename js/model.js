@@ -917,6 +917,9 @@ Model.prototype.closeHoles = function() {
     var normals = borderCycleNormals[c];
 
     var n = cycle.length;
+    var originalCycleLength = n;
+    var originalCyclePathLength = 0;
+    var originalFaceCount = patchFaces.length;
     // every cycle should be nonempty, but check this just in case
     if (n==0) continue;
 
@@ -932,7 +935,9 @@ Model.prototype.closeHoles = function() {
     for (var i=0; i<n; i++) {
       var v = cycle[i];
       edges.push(cycle[(i+1)%n].clone().sub(v));
-      avgLen += edges[i].length()/n;
+      var len = edges[i].length();
+      avgLen += len/n;
+      originalCyclePathLength += len;
       center.add(v.clone().divideScalar(n));
     }
     for (var i=0; i<n; i++) {
@@ -943,9 +948,6 @@ Model.prototype.closeHoles = function() {
       angles.push(calculateAngleFromEdges(i, edges, cycle, normals, n));
     }
 
-    var count = 0;
-    var limit = 5000;
-
     // merge new vertices if adjacent edge length is below this threshold
     var threshold = avgLen * 1;
     // determines the combination of v and centerVector at each step; final
@@ -953,9 +955,20 @@ Model.prototype.closeHoles = function() {
     // to the same length as v
     var redirectFactor = 0.2;
 
+    var count = 0;
+    var limit = Infinity;
+
     // while the cycle of border edges can't be bridged by a single triangle,
     // add or remove vertices by the advancing front mesh method
     while (cycle.length>3) {
+      count++;
+      if (count > limit) break;
+      // if the front is expanding infinitely or doing something funky, break
+      if (count%originalCycleLength==0) {
+        var newPathLength = edges.reduce(function(acc,x) {return acc+x.length()}, 0);
+        if (newPathLength > originalCyclePathLength) break;
+      }
+
       // find vertex whose adjacent edges have the smallest angle
       var angle = angles[0];
       var idx = 0;
@@ -1206,8 +1219,6 @@ Model.prototype.closeHoles = function() {
         angles[nextIdx] = calculateAngleFromEdges(nextIdx, edges, cycle, normals, n);
         angles[nextnextIdx] = calculateAngleFromEdges(nextnextIdx, edges, cycle, normals, n);
       }
-
-      if (++count > limit) break;
     }
 
     // we should get here once the cycle only contains three verts; patch the
@@ -1221,6 +1232,11 @@ Model.prototype.closeHoles = function() {
       var e2 = cycle[2].clone().sub(cycle[0]);
       face.normal = e2.cross(e1).normalize();
       patchFaces.push(face);
+    }
+    // ...but, if we found an infinitely expanding front (the algorithm isn't
+    // perfect), we need to remove the faces we added
+    else if (cycle.length>3) {
+      //patchFaces.splice(originalFaceCount);
     }
   }
 
