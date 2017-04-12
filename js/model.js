@@ -5,7 +5,7 @@
     Represents a discrete model corresponding to one loaded OBJ or STL
     file. Has transformation functions, associated bounds that are
     recalculated on transformation, methods to do calculations, methods
-    to upload and export.
+    to import and export.
     Call .dispose() before leaving the instance to be cleaned up so that
     the geometry added to the scene can be properly deleted.
 */
@@ -682,7 +682,7 @@ Model.prototype.export = function(format, name) {
 }
 
 // Import a model from an STL or OBJ file (any capitalization).
-Model.prototype.upload = function(file, callback) {
+Model.prototype.import = function(file, callback) {
   var fSplit = splitFilename(file.name);
   this.filename = fSplit.name;
   this.format = fSplit.extension;
@@ -695,9 +695,9 @@ Model.prototype.upload = function(file, callback) {
     try {
       parseResult(fr.result);
       success = true;
-      _this.printout.log("Uploaded file: " + file.name);
+      _this.printout.log("Imported file: " + file.name);
     } catch(e) {
-      _this.printout.error("Error uploading: " + e);
+      _this.printout.error("Error importing: " + e);
     }
     callback(success);
   };

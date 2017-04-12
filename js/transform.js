@@ -63,9 +63,6 @@ function Transform(op, axis, amount, model, printout) {
       this.axis = axis;
       this.amount = amount;
       break;
-    case "toggleWireframe":
-      this.op = "toggleWireframe";
-      break;
   }
   return this;
 }
@@ -137,9 +134,6 @@ Transform.prototype = {
         else {
           this.model.scale(this.axis, this.amount);
         }
-        break;
-      case "toggleWireframe":
-        this.model.toggleWireframe();
         break;
     }
   },

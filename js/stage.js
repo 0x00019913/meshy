@@ -12,7 +12,7 @@ Stage = function() {
   this.floorSize = 50;
 
   // toggles
-  this.uploadEnabled = true;
+  this.importEnabled = true;
   this.floorVisible = true;
 
   // geometry
@@ -40,8 +40,7 @@ Stage = function() {
 // initializes floor.
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
-  this.gui.add(this, "upload");
-  this.gui.add(this, "undo");
+  this.gui.add(this, "import");
 
   var exportFolder = this.gui.addFolder("Export");
   this.filename = "meshy";
@@ -51,6 +50,13 @@ Stage.prototype.generateUI = function() {
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
   settingsFolder.add(this, "toggleAxisWidget");
+  var displayFolder = this.gui.addFolder("Mesh Display");
+  displayFolder.add(this, "toggleCOM");
+  displayFolder.add(this, "toggleWireframe");
+  displayFolder.add(this, "cameraToModel");
+  this.meshColor = "#ffffff";
+  this.meshColorController =
+    displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
   var technicalFolder = settingsFolder.addFolder("Technical");
   technicalFolder.add(this, "isLittleEndian");
   technicalFolder.add(this, "vertexPrecision").onChange(this.setvertexPrecision.bind(this));
@@ -90,7 +96,7 @@ Stage.prototype.generateUI = function() {
   scaleByFactorFolder.add(this, "allScale", 0);
   scaleByFactorFolder.add(this, "scaleAll");
   var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
-  this.scaleOnAllAxes = false;
+  this.scaleOnAllAxes = true;
   scaleToSizeFolder.add(this, "scaleOnAllAxes");
   this.newXSize = 1;
   scaleToSizeFolder.add(this, "newXSize", 0);
@@ -102,6 +108,12 @@ Stage.prototype.generateUI = function() {
   scaleToSizeFolder.add(this, "newZSize", 0);
   scaleToSizeFolder.add(this, "scaleToZSize");
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
+  var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size");
+  ringSizeFolder.add(this, "mCircle");
+  this.newRingSize = 0;
+  ringSizeFolder.add(this, "newRingSize", ringSizes);
+  ringSizeFolder.add(this, "scaleToRingSize");
+  ringSizeFolder.add(this, "mDeactivate");
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -123,18 +135,7 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
-  var specialFolder = this.gui.addFolder("Special");
-  var ringSizeFolder = specialFolder.addFolder("Scale To Ring Size");
-  ringSizeFolder.add(this, "mCircle");
-  this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes);
-  ringSizeFolder.add(this, "scaleToRingSize");
-  var displayFolder = this.gui.addFolder("Display");
-  displayFolder.add(this, "toggleCOM");
-  displayFolder.add(this, "toggleWireframe");
-  displayFolder.add(this, "cameraToModel");
-  this.meshColor = "#ffffff";
-  this.meshColorController = displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
+  this.gui.add(this, "undo");
   this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
@@ -289,7 +290,7 @@ Stage.prototype.toggleCOM = function() {
   }
 }
 Stage.prototype.toggleWireframe = function() {
-  this.transform("toggleWireframe",null,null,this.model);
+  if (this.model) this.model.toggleWireframe();
 }
 Stage.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
@@ -429,9 +430,9 @@ Stage.prototype.initFloor = function() {
 }
 
 // Interface for the dat.gui button.
-Stage.prototype.upload = function() {
+Stage.prototype.import = function() {
   if (this.model) {
-    this.printout.warn("A model is already loaded; delete the current model to upload a new one.");
+    this.printout.warn("A model is already loaded; delete the current model to import a new one.");
     return;
   }
 
@@ -440,13 +441,13 @@ Stage.prototype.upload = function() {
   }
 }
 
-// Called from HTML when the upload button is clicked. Creates the Model
+// Called from HTML when the import button is clicked. Creates the Model
 // instance and tells it to load the geometry.
 Stage.prototype.handleFile = function(file) {
   this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.vertexPrecision = this.vertexPrecision;
-  this.model.upload(file, this.displayMesh.bind(this));
+  this.model.import(file, this.displayMesh.bind(this));
 };
 
 // Interface for the dat.gui button. Saves the model.
@@ -462,7 +463,7 @@ Stage.prototype.export = function(format) {
 // Interface for the dat.gui button. Completely removes the model and resets
 // everything to a clean state.
 Stage.prototype.delete = function() {
-  // it's necessary to clear file input box because it blocks uploading
+  // it's necessary to clear file input box because it blocks importing
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
@@ -479,7 +480,7 @@ Stage.prototype.delete = function() {
   this.printout.log("Model deleted.");
 }
 
-// Callback passed to model.upload; puts the mesh into the viewport.
+// Callback passed to model.import; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success) {
   if (!success) {
     this.model = null;
