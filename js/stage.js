@@ -351,6 +351,7 @@ Stage.prototype.initViewport = function() {
 
   function addEventListeners() {
     window.addEventListener('resize', onWindowResize, false);
+    window.addEventListener('keydown', onKeyDown, false);
   }
 
   function onWindowResize() {
@@ -360,6 +361,12 @@ Stage.prototype.initViewport = function() {
     _this.camera.updateProjectionMatrix();
 
     _this.renderer.setSize(width, height);
+  }
+
+  function onKeyDown(e) {
+    if (e.key=="z" && e.ctrlKey) {
+      _this.undo();
+    }
   }
 
   function animate() {
