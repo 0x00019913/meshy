@@ -372,6 +372,9 @@ Stage.prototype.initViewport = function() {
     _this.controls.update();
     _this.axisWidget.update();
     _this.infoBox.update();
+    if (_this.model && _this.model.measurement) {
+      _this.model.measurement.rescale();
+    }
     _this.renderer.render(_this.scene, _this.camera);
   }
 }

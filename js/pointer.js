@@ -90,8 +90,11 @@ Pointer.prototype.deactivate = function() {
   this.cursor.visible = false;
 }
 
-// Set the cursor scale.
-Pointer.prototype.setScale = function(scale) {
+// Rescale cursor.
+Pointer.prototype.rescale = function() {
+  if (!this.active) return;
+
+  var scale = this.camera.position.distanceTo(this.cursor.position) * 0.1;
   this.scale = scale;
   this.cursor.scale.set(scale, scale, scale);
 }

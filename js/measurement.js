@@ -25,6 +25,9 @@ Measurement = function(scene, camera, domElement, printout) {
   this.scene = scene;
   this.active = false;
 
+  this.camera = camera;
+  this.prevCameraPosition = new THREE.Vector3();
+
   // ordered from most to least recent (darker is more recent)
   this.markerColors = [0x1adeff, 0x8adeff, 0xeadeff];
   this.connectorColor = 0xffff66;
@@ -403,11 +406,21 @@ Measurement.prototype.setPlaneMarker = function() {
   marker.scale.copy(size);
 }
 
-// Set the size of the markers.
-Measurement.prototype.setScale = function(scale) {
-  this.pointer.setScale(scale);
-  for (var i=0; i<this.markers.length; i++) {
-    this.markers[i].scale.set(scale, scale, scale);
+// Set the size of the markers and pointer.
+Measurement.prototype.rescale = function() {
+  if (!this.active) return;
+
+  var cameraPos = this.camera.position;
+  // if camera has moved, update; else, do nothing
+  if (this.prevCameraPosition.distanceTo(cameraPos) > 0.0001) {
+    this.prevCameraPosition.copy(cameraPos);
+
+    this.pointer.rescale();
+    for (var i=0; i<this.markers.length; i++) {
+      var marker = this.markers[i];
+      var scale = marker.position.distanceTo(cameraPos)*0.1;
+      marker.scale.set(scale, scale, scale);
+    }
   }
 }
 

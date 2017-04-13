@@ -226,8 +226,6 @@ Model.prototype.scale = function (axis, amount) {
   }
 
   this.measurement.scale(axis, amount);
-  // sets the scale for measurement markers and the cursor
-  this.measurement.setScale(this.getMaxSize() * 0.4);
 }
 
 /* MEASUREMENT */
@@ -511,7 +509,6 @@ Model.prototype.positionTargetPlanes = function(point) {
 // Render the THREE mesh; currently, only the "plain" mode is supported.
 Model.prototype.render = function(scene, mode) {
   this.scene = scene;
-  this.measurement.setScale(this.getMaxSize() * 0.4);
 
   if (mode == "plain") {
     this.makePlainMesh(scene);
