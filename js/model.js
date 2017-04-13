@@ -54,6 +54,10 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.targetPlanes = null;
   this.showCenterOfMass = false;
 
+  // for patching the mesh
+  this.adjacencyMap = null;
+  this.patch = null;
+
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
   this.measurement.setOutput(this.infoOutput);
 }

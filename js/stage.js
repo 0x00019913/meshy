@@ -125,6 +125,8 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mDeactivate");
   var repairFolder = this.gui.addFolder("Repair");
   repairFolder.add(this, "closeHoles");
+  repairFolder.add(this, "acceptPatch");
+  repairFolder.add(this, "cancelPatch");
   var specialFolder = this.gui.addFolder("Special");
   var ringSizeFolder = specialFolder.addFolder("Scale To Ring Size");
   ringSizeFolder.add(this, "mCircle");
@@ -244,6 +246,12 @@ Stage.prototype.mDeactivate = function() {
 }
 Stage.prototype.closeHoles = function() {
   if (this.model) this.model.closeHoles();
+}
+Stage.prototype.acceptPatch = function() {
+  if (this.model) this.model.acceptPatch();
+}
+Stage.prototype.cancelPatch = function() {
+  if (this.model) this.model.cancelPatch();
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearScaleToMeasurementFolder();
