@@ -53,7 +53,7 @@ Stage.prototype.generateUI = function() {
   settingsFolder.add(this, "toggleAxisWidget");
   var technicalFolder = settingsFolder.addFolder("Technical");
   technicalFolder.add(this, "isLittleEndian");
-  technicalFolder.add(this, "vertexPrecision").onChange(this.setvertexPrecision.bind(this));
+  technicalFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
   var transformFolder = this.gui.addFolder("Transform");
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
@@ -124,7 +124,11 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
   var repairFolder = this.gui.addFolder("Repair");
-  repairFolder.add(this, "closeHoles");
+  this.patchSteps = 15;
+  this.patchStepsController = repairFolder.add(this, "patchSteps");
+  repairFolder.add(this, "generatePatch");
+  repairFolder.add(this, "patchStepUp");
+  repairFolder.add(this, "patchStepDown");
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
   var specialFolder = this.gui.addFolder("Special");
@@ -162,8 +166,8 @@ Stage.prototype.updateUI = function() {
 }
 
 // used for internal optimization while building a list of unique vertices
-Stage.prototype.setvertexPrecision = function() {
-  if (this.model) this.model.vertexPrecision = this.vertexPrecision;
+Stage.prototype.setVertexPrecision = function() {
+  if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -244,8 +248,22 @@ Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
   this.clearScaleToMeasurementFolder();
 }
-Stage.prototype.closeHoles = function() {
-  if (this.model) this.model.closeHoles();
+Stage.prototype.generatePatch = function() {
+  if (this.model) this.model.generatePatch(this.patchSteps);
+}
+Stage.prototype.patchStepUp = function() {
+  if (this.model) {
+    this.patchSteps++;
+    this.patchStepsController.updateDisplay();
+    this.model.generatePatch(this.patchSteps);
+  }
+}
+Stage.prototype.patchStepDown = function() {
+  if (this.model) {
+    this.patchSteps--;
+    this.patchStepsController.updateDisplay();
+    this.model.generatePatch(this.patchSteps);
+  }
 }
 Stage.prototype.acceptPatch = function() {
   if (this.model) this.model.acceptPatch();
