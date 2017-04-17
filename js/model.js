@@ -685,12 +685,14 @@ Model.prototype.generatePatch = function(patchSteps) {
 
     // go along the cycle till we close the loop
     while (true) {
+      borderGeo.vertices.push(current);
       // given a current vertex, search for the next vertex in the loop
 
       // hash current vertex to find its neighbors
       var hash = vertexHash(current, p);
 
       // get the vertex's two neighbors
+      //if (borderMap[hash]===undefined) borderGeo.vertices.push(current);
       var neighbors = borderMap[hash].neighbors;
       var normal = borderMap[hash].normal;
       delete borderMap[hash];
@@ -718,17 +720,32 @@ Model.prototype.generatePatch = function(patchSteps) {
         var cross = edge.cross(normal);
         // get the common adjacent vert of current and next
         var adjacentVertex = null;
-        var currentAdjacent = adjacencyMap[vertexHash(current, p)].vertices;
+        var currentAdjacentData = adjacencyMap[vertexHash(current, p)];
+        var currentAdjacent = currentAdjacentData.vertices;
         var nextAdjacent = adjacencyMap[vertexHash(next, p)].vertices;
+        if (hash=="1373_23317_97201") {
+          for (var i=0; i<currentAdjacent.length; i++) {
+            for (var j=0; j<adjacencyMap[vertexHash(current, p)].counts[i]; j++) {
+              //borderGeo.vertices.push(currentAdjacent[i].clone().add(adjacencyMap[vertexHash(current, p)].normal.clone().multiplyScalar(j*0.04)));
+            }
+            //borderGeo.vertices.push()
+          }
+          console.log(JSON.parse(JSON.stringify(currentAdjacent)), JSON.parse(JSON.stringify(nextAdjacent)), JSON.parse(JSON.stringify(currentAdjacentData.counts)));
+        }
         for (var i=0; i<nextAdjacent.length; i++) {
           var n = nextAdjacent[i];
-          if (n!=current && currentAdjacent.indexOf(n)>-1) {
-            adjacentVertex = n;
-            break;
+          if (n!=current) {
+            var idx = currentAdjacent.indexOf(n);
+            if (idx>-1) {
+              adjacentVertex = n;
+              break;
+            }
           }
         }
         // if the two border verts don't share a vert, something went wrong
-        if (adjacentVertex==null) break;
+        if (adjacentVertex==null) {
+          break;
+        }
 
         // if not clockwise, replace next with current's other neighbor
         if (cross.dot(adjacentVertex.clone().sub(current))>0) {
@@ -1080,9 +1097,9 @@ Model.prototype.generatePatch = function(patchSteps) {
       face.a = vertexMapIdx(patchVertexMap, cycle[0], patchVertices, p);
       face.b = vertexMapIdx(patchVertexMap, cycle[2], patchVertices, p);
       face.c = vertexMapIdx(patchVertexMap, cycle[1], patchVertices, p);
-      var e1 = cycle[1].clone().sub(cycle[0]);
-      var e2 = cycle[2].clone().sub(cycle[0]);
-      face.normal = e2.cross(e1).normalize();
+      var e01 = cycle[1].clone().sub(cycle[0]);
+      var e02 = cycle[2].clone().sub(cycle[0]);
+      face.normal = e02.cross(e01).normalize();
       patchFaces.push(face);
     }
     // ...but, if we found an infinitely expanding front (the algorithm isn't
@@ -1318,6 +1335,15 @@ Model.prototype.generatePatch = function(patchSteps) {
         face.a = face.b;
         face.b = tmp;
       }
+
+      /*
+      // update the adjacency map because we'll require the adjacency info for
+      // determining winding order
+      var data = adjacencyMap[vertexHash(vertex, p)];
+      var v1data = adjacencyMap[vertexHash(v1, p)];
+      var v2data = adjacencyMap[vertexHash(v2, p)];
+      data.vertices[data.vertices]
+      */
 
       // finally, store the face
       patchFaces.push(face);
