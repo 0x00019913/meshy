@@ -123,11 +123,11 @@ Stage.prototype.generateUI = function() {
   centerFolder.add(this, "centerX");
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
-  var calculationFolder = this.gui.addFolder("Calculation");
+  var calculationFolder = this.gui.addFolder("Calculate");
   calculationFolder.add(this, "calcSurfaceArea");
   calculationFolder.add(this, "calcVolume");
   calculationFolder.add(this, "calcCenterOfMass");
-  var measurementFolder = this.gui.addFolder("Measurement");
+  var measurementFolder = this.gui.addFolder("Measure");
   measurementFolder.add(this, "mLength");
   measurementFolder.add(this, "mAngle");
   measurementFolder.add(this, "mCircle");
@@ -135,7 +135,7 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
-  var repairFolder = this.gui.addFolder("Repair");
+  var repairFolder = this.gui.addFolder("Repair (beta)");
   repairFolder.add(this, "generatePatch");
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");

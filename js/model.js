@@ -578,19 +578,36 @@ Model.prototype.setMeshColor = function(color) {
 /* MESH REPAIR */
 // take the existing patch geometry and integrate it into the model geometry
 Model.prototype.acceptPatch = function() {
+  if (!this.patchMesh) return;
 
+  var vertices = this.patchMesh.geometry.vertices;
+  var faces = this.patchMesh.geometry.faces;
+  var vertexMap = {};
+  var p = this.p;
+  for (var f=0; f<faces.length; f++) {
+    var face = faces[f].clone();
+    face.a = vertexMapIdx(vertexMap, vertices[face.a], this.vertices, p);
+    face.b = vertexMapIdx(vertexMap, vertices[face.b], this.vertices, p);
+    face.c = vertexMapIdx(vertexMap, vertices[face.c], this.vertices, p);
+    this.faces.push(face);
+  }
+  this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.plainMesh.geometry.elementsNeedUpdate = true;
+  this.plainMesh.geometry.normalsNeedUpdate = true;
+
+  this.cancelPatch();
 }
 
 // remove the patch and clear associated data
 Model.prototype.cancelPatch = function() {
-  if (this.patchMesh) {
-    this.patchMesh = null;
+  if (!this.patchMesh) return;
 
-    if (!this.scene) return;
-    for (var i=this.scene.children.length-1; i>=0; i--) {
-      var child = this.scene.children[i];
-      if (child.name=="patch" || child.name=="borderVerts") this.scene.remove(child);
-    }
+  this.patchMesh = null;
+
+  if (!this.scene) return;
+  for (var i=this.scene.children.length-1; i>=0; i--) {
+    var child = this.scene.children[i];
+    if (child.name=="patch" || child.name=="borderVerts") this.scene.remove(child);
   }
 }
 
@@ -621,7 +638,7 @@ Model.prototype.generatePatch = function() {
 
   // check for empty border map; if properties exist, then holes exist
   if (objectIsEmpty(borderMap)) {
-    this.printout.log("This mesh does not contain holes.");
+    this.printout.warn("This mesh does not contain holes.");
     return;
   }
 
@@ -1577,6 +1594,7 @@ Model.prototype.import = function(file, callback) {
 // disappears.
 Model.prototype.dispose = function() {
   if (!this.scene) return;
+  this.cancelPatch();
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];
     if (child.name=="model" || child.name=="targetPlane") {
