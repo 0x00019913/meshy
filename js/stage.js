@@ -2,8 +2,8 @@
    classes:
     Stage
    description:
-    Main class representing the Meshy viewport. Encompasses UI, handling the
-    model, and controlling the viewport.
+    Main class representing the Meshy viewport. Encompasses UI, creating and
+    handling the model, and controlling the viewport.
 */
 
 // Constructor.
@@ -59,7 +59,7 @@ Stage.prototype.generateUI = function() {
     displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
   var technicalFolder = settingsFolder.addFolder("Technical");
   technicalFolder.add(this, "isLittleEndian");
-  technicalFolder.add(this, "vertexPrecision").onChange(this.setvertexPrecision.bind(this));
+  technicalFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
   var transformFolder = this.gui.addFolder("Transform");
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
@@ -135,6 +135,10 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
+  var repairFolder = this.gui.addFolder("Repair");
+  repairFolder.add(this, "generatePatch");
+  repairFolder.add(this, "acceptPatch");
+  repairFolder.add(this, "cancelPatch");
   this.gui.add(this, "undo");
   this.gui.add(this, "delete");
 
@@ -159,8 +163,8 @@ Stage.prototype.updateUI = function() {
 }
 
 // used for internal optimization while building a list of unique vertices
-Stage.prototype.setvertexPrecision = function() {
-  if (this.model) this.model.vertexPrecision = this.vertexPrecision;
+Stage.prototype.setVertexPrecision = function() {
+  if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
 
 // Set up an arbitrary transform, create its inverse and push it onto the
@@ -240,6 +244,15 @@ Stage.prototype.startMeasurement = function(type, param) {
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
   this.clearScaleToMeasurementFolder();
+}
+Stage.prototype.generatePatch = function() {
+  if (this.model) this.model.generatePatch();
+}
+Stage.prototype.acceptPatch = function() {
+  if (this.model) this.model.acceptPatch();
+}
+Stage.prototype.cancelPatch = function() {
+  if (this.model) this.model.cancelPatch();
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearScaleToMeasurementFolder();
@@ -477,6 +490,7 @@ Stage.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
+  this.mDeactivate();
   if (this.model) {
     this.model.dispose();
   }

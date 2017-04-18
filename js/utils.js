@@ -40,17 +40,56 @@ function isString(item) {
 function isNumber(item) {
   return (typeof item === 'number');
 }
+
 function isFunction(item) {
   return (typeof item === 'function');
 }
 
-// THREE.Face3-related functions
+// check if object has properties
+function objectIsEmpty(obj) {
+  var isEmpty = true;
+  for (var key in obj) {
+    isEmpty = false;
+    break;
+  }
+  return isEmpty;
+}
+
+// THREE.Face3- and THREE.Vector3-related functions
+// get THREE.Face3 vertices
 function faceGetVerts(face, vertices) {
     return [
       vertices[face.a],
       vertices[face.b],
       vertices[face.c]
     ];
+}
+// Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
+function faceGetSubscript(idx) {
+  return (idx==0) ? 'a' : ((idx==1) ? 'b' : 'c');
+}
+function vertexHash(v, p) {
+  return Math.round(v.x*p)+'_'+Math.round(v.y*p)+'_'+Math.round(v.z*p);
+}
+
+// for vertex hash maps
+
+// inputs:
+//  map: hash map ({hash:idx} object)
+//  v: vertex whose index to get, adding it to the map and array as necessary
+//  vertices: array of vertices whose indices are stored in the hash map
+function vertexMapIdx(map, v, vertices, p) {
+  var hash = vertexHash(v, p);
+  var idx = -1;
+  if (map[hash]===undefined) {
+    idx = vertices.length;
+    map[hash] = idx;
+    vertices.push(v);
+  }
+  else {
+    idx = map[hash];
+  }
+  return idx;
 }
 
 // chart of ring inner diameters in mm
