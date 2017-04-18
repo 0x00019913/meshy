@@ -616,10 +616,10 @@ Model.prototype.cancelPatch = function() {
 }
 
 // the algorithm is like this:
-//  1. generate or retrieve an adjacency map
+//  1. generate an adjacency map
 //  2. from the adjacency map, get the hash table of vertices that border holes
 //  3. generate a list of border vertex cycles (wind them clockwise)
-//  4. use the advanding front mesh (AFM) method to fill the holes
+//  4. use the advancing front mesh (AFM) method to fill the holes
 Model.prototype.generatePatch = function() {
   // remove any existing patch
   this.cancelPatch();
