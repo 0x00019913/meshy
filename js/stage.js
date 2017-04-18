@@ -28,6 +28,7 @@ Stage = function() {
   this.renderer = null;
   this.axisWidget = null;
   this.printout = new Printout();
+  this.printout.log("Meshy is subject to the MIT license. Thanks for using!")
 
   // undo stack
   this.undoStack = new UndoStack(this.printout);
