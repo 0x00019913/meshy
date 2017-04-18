@@ -177,6 +177,8 @@ Model.prototype.translate = function(axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
+  this.cancelPatch();
+
   this.measurement.translate(axis, amount);
 }
 
@@ -205,6 +207,7 @@ Model.prototype.rotate = function(axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
+  this.cancelPatch();
   // size argument is necessary for resizing things that aren't rotationally
   // symmetric
   this.measurement.rotate(axis, amount, this.getSize());
@@ -230,6 +233,8 @@ Model.prototype.scale = function (axis, amount) {
     this.centerOfMass[axis] *= amount;
     this.positionTargetPlanes(this.centerOfMass);
   }
+
+  this.cancelPatch();
 
   this.measurement.scale(axis, amount);
 }
@@ -589,11 +594,10 @@ Model.prototype.acceptPatch = function() {
     face.a = vertexMapIdx(vertexMap, vertices[face.a], this.vertices, p);
     face.b = vertexMapIdx(vertexMap, vertices[face.b], this.vertices, p);
     face.c = vertexMapIdx(vertexMap, vertices[face.c], this.vertices, p);
-    this.faces.push(face);
+    this.add(face);
   }
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.elementsNeedUpdate = true;
-  this.plainMesh.geometry.normalsNeedUpdate = true;
 
   this.cancelPatch();
 }
