@@ -55,7 +55,6 @@ function Model(scene, camera, container, printout, infoOutput) {
   this.showCenterOfMass = false;
 
   // for patching the mesh
-  this.adjacencyMap = null;
   this.patchMat = new THREE.MeshStandardMaterial({
     color: 0x44ff44,
     wireframe: false
@@ -582,14 +581,13 @@ Model.prototype.setMeshColor = function(color) {
 /* MESH REPAIR */
 // take the existing patch geometry and integrate it into the model geometry
 Model.prototype.acceptPatch = function() {
-  this.adjacencyMap = null;
+
 }
 
 // remove the patch and clear associated data
 Model.prototype.cancelPatch = function() {
   if (this.patchMesh) {
     this.patchMesh = null;
-    this.adjacencyMap = null;
 
     if (!this.scene) return;
     for (var i=this.scene.children.length-1; i>=0; i--) {
@@ -602,16 +600,21 @@ Model.prototype.cancelPatch = function() {
 // the algorithm is like this:
 //  1. generate or retrieve an adjacency map
 //  2. from the adjacency map, get the hash table of vertices that border holes
-//  3. minimally patch border vertices to make every vert only border one hole
-//  4. generate a list of border vertex cycles (wind them clockwise)
-//  5. use the advanding front mesh (AFM) method to fill the holes
+//  3. generate a list of border vertex cycles (wind them clockwise)
+//  4. use the advanding front mesh (AFM) method to fill the holes
 Model.prototype.generatePatch = function(patchSteps) {
   // remove any existing patch
   this.cancelPatch();
 
+  // for visualizing verts; unused, but leaving it here as debugging code
+  var borderGeo = new THREE.Geometry();
+  var borderMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.07});
+  var borderMesh = new THREE.Points(borderGeo, borderMat);
+  borderMesh.name = "borderVerts";
+  this.scene.add(borderMesh);
+
   // get the hash table detailing vertex adjacency
-  if (!this.adjacencyMap) this.adjacencyMap = this.generateAdjacencyMap();
-  var adjacencyMap = this.adjacencyMap;
+  var adjacencyMap = this.generateAdjacencyMap();
 
   // vertex precision factor
   var p = this.p;
@@ -639,16 +642,6 @@ Model.prototype.generatePatch = function(patchSteps) {
   this.patchMesh.name = "patch";
   this.scene.add(this.patchMesh);
 
-  /* for visualizing verts */
-  var borderGeo = new THREE.Geometry();
-  var borderMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.04});
-  var borderMesh = new THREE.Points(borderGeo, borderMat);
-  borderMesh.name = "borderVerts";
-  this.scene.add(borderMesh);
-
-  // patch all vertices bordering more than one hole
-  patchMultipleHoleVerts();
-
   // build an array of border edge cycles
   var borderCycles = [];
   var borderCycleNormals = [];
@@ -669,9 +662,7 @@ Model.prototype.generatePatch = function(patchSteps) {
     var current = null;
     var previous = null;
     // get a vertex from the borderMap that's on the edge of only one hole; if
-    // nothing failed in our initial patching step, this should always pick a
-    // vertex on the first iteration because every vertex will now border only
-    // one hole
+    // nothing went wrong, this should always find such a vertex
     for (var key in borderMap) {
       if (borderMap[key].numHoles==1) {
         start = borderMap[key].vertex;
@@ -685,85 +676,115 @@ Model.prototype.generatePatch = function(patchSteps) {
 
     // go along the cycle till we close the loop
     while (true) {
-      borderGeo.vertices.push(current);
       // given a current vertex, search for the next vertex in the loop
 
-      // hash current vertex to find its neighbors
+      // hash current vertex to find its data
       var hash = vertexHash(current, p);
+      var data = borderMap[hash];
 
-      // get the vertex's two neighbors
-      //if (borderMap[hash]===undefined) borderGeo.vertices.push(current);
-      var neighbors = borderMap[hash].neighbors;
-      var normal = borderMap[hash].normal;
-      delete borderMap[hash];
+      // juuuuuust in case; should never happen
+      if (borderMap[hash]===undefined) break;
+
+      // get the vertex's neighbors
+      var neighbors = data.neighbors;
+      var normal = data.normal;
 
       // store vertex in the cycle
       cycle.push(current);
       cycleNormals.push(normal);
 
-      // neighbor count should always be 2 (unless a vertex shares holes, but
-      // that should never be true for the current vertex by design)
-      if (neighbors.length!=2) break;
-
       // if we're on the first vertex, need to wind the cycle in a consistent
       // direction (CW here) to make face generation easier
       if (previous==null) {
-        // two adjacent verts ("vc" and "vn") on the border must certainly have
-        // a vert ("va") that's adjacent to both; if ((vn-vc) x normal) has a
-        // negative component along an edge to va, then we're winding CW; else,
-        // take the other neighbor to be the next vertex
+        // pick one of the two neighbors as next, giving a (next-current) edge;
+        // if its direction in the adjacency map is negative, that means the
+        // adjacent geometry is to the left (looking along the negative normal)
+        // and we're winding CW; if direction is positive, need to pick the
+        // other neighbor as next
         var next = neighbors[0];
-        var edge = next.clone().sub(current);
-        // using the normal of the current vert, not of the next; shouldn't make
-        // a difference as the normal can't flip sign w.r.t. the normals of its
-        // adjacent faces on just one vert
-        var cross = edge.cross(normal);
-        // get the common adjacent vert of current and next
-        var adjacentVertex = null;
-        var currentAdjacentData = adjacencyMap[vertexHash(current, p)];
-        var currentAdjacent = currentAdjacentData.vertices;
-        var nextAdjacent = adjacencyMap[vertexHash(next, p)].vertices;
-        if (hash=="1373_23317_97201") {
-          for (var i=0; i<currentAdjacent.length; i++) {
-            for (var j=0; j<adjacencyMap[vertexHash(current, p)].counts[i]; j++) {
-              //borderGeo.vertices.push(currentAdjacent[i].clone().add(adjacencyMap[vertexHash(current, p)].normal.clone().multiplyScalar(j*0.04)));
-            }
-            //borderGeo.vertices.push()
-          }
-          console.log(JSON.parse(JSON.stringify(currentAdjacent)), JSON.parse(JSON.stringify(nextAdjacent)), JSON.parse(JSON.stringify(currentAdjacentData.counts)));
-        }
-        for (var i=0; i<nextAdjacent.length; i++) {
-          var n = nextAdjacent[i];
-          if (n!=current) {
-            var idx = currentAdjacent.indexOf(n);
-            if (idx>-1) {
-              adjacentVertex = n;
-              break;
-            }
-          }
-        }
-        // if the two border verts don't share a vert, something went wrong
-        if (adjacentVertex==null) {
-          break;
-        }
-
-        // if not clockwise, replace next with current's other neighbor
-        if (cross.dot(adjacentVertex.clone().sub(current))>0) {
+        var currentAdjacentData = adjacencyMap[hash];
+        if (currentAdjacentData.direction[currentAdjacentData.vertices.indexOf(next)]<0) {
           next = neighbors[1];
         }
 
         previous = current;
         current = next;
       }
-      // else, just pick the neighbor that isn't the previous vert
+      // else, two possibilities:
+      //  1. current vertex borders only one hole; if so, just pick the neighbor
+      //    that's not previous
+      //  2. current vertex borders multiple holes; if so, find the neighbor
+      //    that borders the same hole
       else {
-        var tmp = current;
-        // if first element of neighbors is previous vertex, next vertex has to
-        // be the other one; similarly if second element is previous vertex
-        current = neighbors[0];
-        if (current==previous) current = neighbors[1];
-        previous = tmp;
+        if (data.numHoles==1) {
+          // pick the neighbor that's not previous
+          var tmp = current;
+          current = neighbors[0];
+          if (current==previous) current = neighbors[1];
+          previous = tmp;
+        }
+        else {
+          // heuristic goes like this:
+          //  1. project the edges out of current onto the plane perpendicular
+          //    to the vertex normal
+          //  2. find the one that's CCW from the prev-current edge, if
+          //    looking along negative normal
+          //  3. that edge points to the correct next vertex, assuming a
+          //    correctly calculated normal
+          var edges = [];
+          for (var i=0; i<neighbors.length; i++) {
+            // edge from current to neighbor
+            edges[i] = neighbors[i].clone().sub(current);
+            // project out the component along the normal
+            edges[i] = edges[i].sub(normal.clone().multiplyScalar(normal.dot(edges[i]))).normalize();
+          }
+
+          // the angles of the outflowing edges around current vertex
+          var angles = [];
+          // need to be aware of the edge leading to previous vert; its angle
+          // will be 0
+          var prevEdge = edges[neighbors.indexOf(previous)];
+          // orthogonal to both prevEdge and normal; use this to test for angles
+          // greater than pi
+          var orthogonalVector = prevEdge.clone().cross(normal);
+          // calculate angles of every edge around normal w.r.t. prevEdge
+          for (var i=0; i<edges.length; i++) {
+            var edge = edges[i];
+            if (edge==prevEdge) {
+              angles[i] = 0;
+              continue;
+            }
+            angles[i] = Math.acos(edge.dot(prevEdge));
+            if (edge.dot(orthogonalVector)<0) angles[i] = 2.0*Math.PI - angles[i];
+          }
+
+          // find the edge that forms the largest angle with the edge to the
+          // previous vert, so it's the first edge CCW from prevEdge
+          var maxAngleIdx = 0;
+          var maxAngle = angles[0];
+          for (var i=1; i<angles.length; i++) {
+            var angle = angles[i];
+            if (angle>maxAngle) {
+              maxAngleIdx = i;
+              maxAngle = angle;
+            }
+          }
+          var next = neighbors[maxAngleIdx];
+
+          // need to remove prev and next from the neighbors list so that future
+          // iterations don't take those turns
+          neighbors.splice(neighbors.indexOf(previous), 1);
+          neighbors.splice(neighbors.indexOf(next), 1);
+
+          previous = current;
+          current = next;
+        }
       }
+
+      // if single-hole vertex, delete its entry in the border map; if bordering
+      // multiple holes, decrement number of adjacent holes
+      if (data.numHoles==1) delete borderMap[hash];
+      else data.numHoles--;
 
       // if we've reached the end of the loop, break
       if (current==start) {
@@ -825,13 +846,11 @@ Model.prototype.generatePatch = function(patchSteps) {
     var redirectFactor = 0.2;
 
     var count = 0;
-    var limit = patchSteps;
 
     // while the cycle of border edges can't be bridged by a single triangle,
     // add or remove vertices by the advancing front mesh method
     while (cycle.length>3) {
       count++;
-      if (count > limit) break;
       // if the front is expanding infinitely or doing something funky, break
       if (count%originalCycleLength==0) {
         var newPathLength = edges.reduce(function(acc,x) {return acc+x.length()}, 0);
@@ -1104,7 +1123,7 @@ Model.prototype.generatePatch = function(patchSteps) {
     }
     // ...but, if we found an infinitely expanding front (the algorithm isn't
     // perfect), we need to remove the faces we added
-    else if (cycle.length>3 && !patchSteps) {
+    else if (cycle.length>3) {
       patchFaces.splice(originalFaceCount);
     }
   }
@@ -1125,229 +1144,6 @@ Model.prototype.generatePatch = function(patchSteps) {
     }
 
     return angle;
-  }
-
-  function patchMultipleHoleVerts() {
-    // must first minimally patch the holes such that no vertex borders more than
-    // one hole; this will make finding loops of border edges easy
-    for (var key in borderMap) {
-      var data = borderMap[key];
-      // if vertex borders multiple holes, need to patch
-      if (data.numHoles>1) {
-        // source vertex
-        var vertex = data.vertex;
-        // border neighbors of source vertex
-        var neighbors = data.neighbors;
-        // all neighbors, not just the border neighbors; need this for telling if
-        // verts are connected by a path
-        var adjacent = adjacencyMap[vertexHash(vertex, p)].vertices;
-        // edges from the given vertex to its neighbors
-        var edges = neighbors.map(function(x) {return vertex.clone().sub(x).normalize();});
-
-        // find all one-triangle holes bordering the vertex; fill them immediately
-        while (true) {
-          var foundTriangleHole = false;
-          for (var i=0; i<neighbors.length; i++) {
-            for (var j=0; j<i; j++) {
-              var ni = neighbors[i];
-              var nj = neighbors[j];
-              var nihash = vertexHash(ni, p);
-              var niAdjacencyData = adjacencyMap[nihash];
-              // find nj among ni's adjacent verts
-              var njidx = niAdjacencyData.vertices.indexOf(nj);
-              // if nj adjacent to ni and they border a hole (count is 1, whereas,
-              // if bordering a triangle, count would be 2), fill them and remove
-              // both ni and nj from neighbors array
-              if (njidx>-1 && niAdjacencyData.counts[njidx]==1) {
-                foundTriangleHole = true;
-
-                var nidata = borderMap[nihash];
-                var njhash = vertexHash(nj, p);
-                var njdata = borderMap[njhash];
-
-                var nineighbors = nidata.neighbors;
-                var njneighbors = njdata.neighbors;
-
-                // insert triangle patch
-                triPatchFromIdxPair(data, [i, j], neighbors);
-
-                // check i's number of holes; if i still borders another hole,
-                // decrement the number and remove vertex and j from its
-                // neighbors; if i now borders zero holes, remove it from the
-                // border map
-                if (nidata.numHoles>1) {
-                  nidata.numHoles -= 1;
-                  nineighbors.splice(nineighbors.indexOf(nj), 1);
-                  nineighbors.splice(nineighbors.indexOf(vertex), 1);
-                }
-                else delete borderMap[nihash];
-
-                // ditto for j
-                if (njdata.numHoles>1) {
-                  njdata.numHoles -= 1;
-                  njneighbors.splice(njneighbors.indexOf(ni), 1);
-                  njneighbors.splice(njneighbors.indexOf(vertex), 1);
-                }
-                else delete borderMap[njhash];
-
-                // ditto for the original vertex
-                // (removal from neighbors array happens regardless because the
-                // future iterations of this loop depend on its length)
-                neighbors.splice(neighbors.indexOf(ni), 1);
-                neighbors.splice(neighbors.indexOf(nj), 1);
-                if (data.numHoles>1) {
-                  data.numHoles -= 1;
-                }
-                else delete borderMap[key];
-
-                break;
-              }
-            }
-            // if found a hole, break out of i loop and try to find more holes
-            if (foundTriangleHole) break;
-          }
-
-          // didn't find any holes, stop the loop
-          if (!foundTriangleHole) break;
-        }
-
-        // if all adjacent holes got patched by our one-triangle hole check,
-        // then we stop working on this vertex
-        if (neighbors.length==0) continue;
-
-        // make a list of pairs of indices for vertex's neighbors that aren't
-        // connected by a path of edges; these will be candidates for the minimal
-        // patching
-        var pairs = [];
-        // matrix of angles between two edges
-        var angles = [];
-        for (var i=0; i<neighbors.length; i++) {
-          angles.push([]);
-          for (var j=0; j<i; j++) {
-            angles[i].push(Math.acos(edges[i].dot(edges[j])));
-            var ijConnected = false;
-            // check if neighbor i and neighbor j are connected by a path of
-            // vertices that are also connected to the source vertex; if so,
-            // don't add them to the list of pairs
-            var start = neighbors[i];
-            var current = start;
-            var previous = null;
-            while (current) {
-              var chash = vertexHash(current, p);
-              var cadjacent = adjacencyMap[chash].vertices;
-              var next = null;
-              for (var n=0; n<cadjacent.length; n++) {
-                var cneighbor = cadjacent[n];
-                // check that cneighbor adjacent to main vertex and is not
-                if (adjacent.indexOf(cneighbor)>-1 && cneighbor != previous) {
-                  previous = current;
-                  next = cneighbor;
-                  break;
-                }
-              }
-
-              current = next;
-              if (current==neighbors[j]) {
-                ijConnected = true;
-                break;
-              }
-            }
-
-            if (!ijConnected) pairs.push([i,j]);
-          }
-        }
-
-        // get pairs with the lowest angles between them
-        pairs.sort(function(p1, p2) {
-          var angle1 = angles[p1[0]][p1[1]];
-          var angle2 = angles[p2[0]][p2[1]];
-          return angle1 - angle2;
-        });
-
-        // draw new faces to bridge the vertex's connection with
-        // data.numHoles-1 of the holes it borders; after adding the new faces,
-        // need to alter the borderMap to reflect the new state of connectivity
-        // for the vertices that are adjacent to the new face
-        for (var i=0; i<data.numHoles-1; i++) {
-          var pair = pairs[i];
-          // pair should always exist, bugs notwithstanding
-          if (!pair) continue;
-          triPatchFromIdxPair(data, pair, neighbors);
-
-          // clean up the neighbor data given the new connection:
-
-          // for the two newly connected verts, replace the source vert in
-          // their neighbors array with a connection to each other
-          var v = [];
-          for (var j=0; j<2; j++) {
-            v[j] = neighbors[pair[j]];
-            var vhash = vertexHash(v[j], p);
-            var vdata = borderMap[vhash];
-            // LHS is reference to the source vertex in v's neighbors array,
-            // RHS is the vertex to which we just connected v
-            // for each of the two, we're replacing the source vertex with the
-            // other one
-            vdata.neighbors[vdata.neighbors.indexOf(vertex)] = neighbors[pair[(j+1)%2]];
-          }
-
-          // remove the vertex we just connected from the source vertex's
-          // neighbors array in the border map
-          neighbors.splice(neighbors.indexOf(v[0]),1);
-          neighbors.splice(neighbors.indexOf(v[1]),1);
-        }
-        // we have ensured that the source vertex only borders one hole
-        data.numHoles = 1;
-      }
-    }
-
-    function triPatchFromIdxPair(data, pair, neighbors) {
-      var vertex = data.vertex;
-
-      var face = new THREE.Face3();
-      for (var j=0; j<3; j++) {
-        // get the right vertex (the source vertex or one of its neighbors)
-        var v;
-        if (j<2) v = neighbors[pair[j]];
-        else v = vertex;
-
-        // get the index for v, adding it to patchVertices if necessary
-        var vidx = vertexMapIdx(patchVertexMap, v, patchVertices, p);
-        face[faceGetSubscript(j)] = vidx;
-      }
-
-      var v1 = neighbors[pair[0]], v2 = neighbors[pair[1]];
-      // set the face normal to the cross product of two of its edges, then
-      // negate it if we got the sign wrong (correct sign is determined by
-      // any of its three vertex normals)
-      face.normal = new THREE.Vector3();
-      face.normal.crossVectors(
-        vertex.clone().sub(v1),
-        vertex.clone().sub(v2)
-      ).normalize();
-      face.normal.multiplyScalar(Math.sign(face.normal.dot(data.normal)));
-
-      // knowing the normal, we can correct the winding order if necessary:
-      // presently, face.a is v1, face.b is v2, and face.c is vertex, and we
-      // need ()(v2-v1) x normal) to have a positive component along
-      // (v1-vertex); if this is not true, flip face.a and face.b
-      if (v2.clone().sub(v1).cross(face.normal).dot(v1.clone().sub(vertex))<0) {
-        var tmp = face.a;
-        face.a = face.b;
-        face.b = tmp;
-      }
-
-      /*
-      // update the adjacency map because we'll require the adjacency info for
-      // determining winding order
-      var data = adjacencyMap[vertexHash(vertex, p)];
-      var v1data = adjacencyMap[vertexHash(v1, p)];
-      var v2data = adjacencyMap[vertexHash(v2, p)];
-      data.vertices[data.vertices]
-      */
-
-      // finally, store the face
-      patchFaces.push(face);
-    }
   }
 }
 
@@ -1381,46 +1177,58 @@ Model.prototype.generateAdjacencyMap = function() {
           vertex: vertex,
           vertices: [],
           counts: [],
+          direction: [],
           normal: new THREE.Vector3()
         };
       }
 
       var data = adjacencyMap[hash];
-      addAdjacentVertex(vertex1, data);
-      addAdjacentVertex(vertex2, data);
+      var normal = face.normal;
+      addAdjacentVertex(vertex1, data, normal, vertex2);
+      addAdjacentVertex(vertex2, data, normal, vertex1);
 
-      data.normal.add(face.normal);
+      // weigh the accumulated normal by its angle at the vertex; this should
+      // prevent the normal from having a negative component along the adjacent
+      // face normals in all reasonable circumstances
+      data.normal.add(
+        normal.clone().multiplyScalar(Math.acos(
+          vertex1.clone().sub(vertex).normalize().dot(vertex2.clone().sub(vertex).normalize())
+        ))
+      );
     }
   }
 
-  // given an existing adjacency set for a given vertex (mapRow), add a new
-  // vertex (vertex) that's adjacent to the first one
-  function addAdjacentVertex(vertex, mapRow) {
+  // given an existing adjacency set for a given vertex (data), add a new
+  // vertex (vertex) that's adjacent to the first one; also passing normal and
+  // the other vertex because we need these to calculate the directionality
+  // of the edge from data.vertex to vertex
+  function addAdjacentVertex(vertex, data, normal, otherVertex) {
     // hash of the vertex we're adding
     var hash = vertexHash(vertex, p);
-    // index of matching vertex
-    var idx = -1;
+    // index of the vertex in the existing adjacency list of data.vertex
+    var idx = data.vertices.indexOf(vertex);
 
-    // for each vertex in the existing adjacency list
-    for (var v=0; v<mapRow.vertices.length; v++) {
-      // get hash for the other vertex; "hashp" means "hash prime" :P
-      var hashp = vertexHash(mapRow.vertices[v], p);
-      // if the vertex we're adding is found in the existing adjacency list,
-      // set index and stop searching
-      if (hashp==hash) {
-        idx = v;
-        break;
-      }
-    }
+    // direction takes the following values:
+    //  -1: edge from data.vertex to vertex crossed with the normal points
+    //  into the triangle (i.e. has a negative dot product with
+    //  vertex-otherVertex)
+    //  1: positive dot product
+    // this equantity tells us, given a vertex, a neighbor, and the normal,
+    // where the adjacent face is (will be zero for all edges sharing two faces)
+    var direction = Math.sign(
+      vertex.clone().sub(data.vertex).cross(normal).dot(vertex.clone().sub(otherVertex))
+    );
 
     // if the vertex we're adding exists in the adjacency list, update count
     if (idx > -1) {
-      mapRow.counts[idx] += 1;
+      data.counts[idx] += 1;
+      data.direction[idx] += direction;
     }
     // if not found, append vertex and set its count to 1
     else {
-      mapRow.vertices.push(vertex);
-      mapRow.counts.push(1);
+      data.vertices.push(vertex);
+      data.counts.push(1);
+      data.direction.push(direction);
     }
   }
 
@@ -1429,7 +1237,6 @@ Model.prototype.generateAdjacencyMap = function() {
 
 // make a hash table with vertices that border holes, based on an adjacency map
 Model.prototype.generateBorderMap = function(adjacencyMap) {
-  if (!adjacencyMap) adjacencyMap = this.adjacencyMap;
   if (!adjacencyMap) adjacencyMap = this.generateAdjacencyMap();
 
   // isolate vertices bordering holes, also store the number of holes adjacent
