@@ -715,13 +715,13 @@ Model.prototype.generatePatch = function() {
       // direction (CW here) to make face generation easier
       if (previous==null) {
         // pick one of the two neighbors as next, giving a (next-current) edge;
-        // if its direction in the adjacency map is negative, that means the
+        // if its winding order in the adjacency map is negative, that means the
         // adjacent geometry is to the left (looking along the negative normal)
-        // and we're winding CW; if direction is positive, need to pick the
+        // and we're winding CW; if winding order is positive, need to pick the
         // other neighbor as next
         var next = neighbors[0];
         var currentAdjacentData = adjacencyMap[hash];
-        if (currentAdjacentData.direction[currentAdjacentData.neighbors.indexOf(next)]<0) {
+        if (currentAdjacentData.windingOrder[currentAdjacentData.neighbors.indexOf(next)]<0) {
           next = neighbors[1];
         }
 
@@ -1234,8 +1234,8 @@ Model.prototype.generatePatch = function() {
 }
 
 // build a hash table detailing vertex adjacency
-Model.prototype.generateAdjacencyMap = function(vertices, faces, storeDirection, storeNormal) {
-  // Will be an object { hash: data }, where data is { vertex, vertices, direction, normal}.
+Model.prototype.generateAdjacencyMap = function(vertices, faces, storeWindingOrder, storeNormal) {
+  // Will be an object { hash: data }, where data is { vertex, vertices, windingOrder, normal}.
   // For a given vertex, it will have an entry (keyed by hash) and contain an
   // object that stores the vertex, its adjacent vertices, and the count of
   // faces it shares with each adjacent vertex.
@@ -1255,22 +1255,23 @@ Model.prototype.generateAdjacencyMap = function(vertices, faces, storeDirection,
       var hash = vertexHash(vertex, p);
 
       // the other two vertices for the face; we will add these to adjacencyMap
-      var vertex1 = (v==0) ? faceVerts[1] : faceVerts[0];
-      var vertex2 = (v==2) ? faceVerts[1] : faceVerts[2];
+      var vertex1 = faceVerts[(v+1)%3];
+      var vertex2 = faceVerts[(v+2)%3];
 
       if (!(hash in adjacencyMap)) {
         adjacencyMap[hash] = {
           vertex: vertex,
           neighbors: []
         };
-        if (storeDirection) adjacencyMap[hash].direction = [];
+        if (storeWindingOrder) adjacencyMap[hash].windingOrder = [];
         if (storeNormal) adjacencyMap[hash].normal = new THREE.Vector3();
       }
 
       var data = adjacencyMap[hash];
       var normal = face.normal;
-      addAdjacentVertex(vertex1, data, normal, vertex2);
-      addAdjacentVertex(vertex2, data, normal, vertex1);
+      // if winding CCW, store a winding order of 1; if CW, winding order is -1
+      addAdjacentVertex(vertex1, data, 1);
+      addAdjacentVertex(vertex2, data, -1);
 
       // weigh the accumulated normal by its angle at the vertex; this should
       // prevent the normal from having a negative component along the adjacent
@@ -1286,32 +1287,21 @@ Model.prototype.generateAdjacencyMap = function(vertices, faces, storeDirection,
   }
 
   // given an existing adjacency set for a given vertex (data), add a new
-  // vertex (vertex) that's adjacent to the first one; also passing normal and
-  // the other vertex because we need these to calculate the directionality
-  // of the edge from data.vertex to vertex
-  function addAdjacentVertex(vertex, data, normal, otherVertex) {
+  // vertex (vertex) that's adjacent to the first one; also pass winding order
+  // for the edge from data.vertex to vertex
+  function addAdjacentVertex(vertex, data, windingOrder) {
     // hash of the vertex we're adding
     var hash = vertexHash(vertex, p);
     // index of the vertex in the existing adjacency list of data.vertex
     var idx = data.neighbors.indexOf(vertex);
     if (idx==-1) data.neighbors.push(vertex);
 
-    if (storeDirection) {
-      // direction takes the following values:
-      //  -1: edge from data.vertex to vertex crossed with the normal points
-      //  into the triangle (i.e. has a negative dot product with
-      //  vertex-otherVertex)
-      //  1: positive dot product
-      // this equantity tells us, given a vertex, a neighbor, and the normal,
-      // where the adjacent face is (will be zero for all edges sharing two faces)
-      var direction = Math.sign(
-        vertex.clone().sub(data.vertex).cross(normal).dot(vertex.clone().sub(otherVertex))
-      );
-
-      // if the vertex we're adding existed in the adjacency list, add direction
-      if (idx > -1) data.direction[idx] += direction;
-      // if didn't exist, set vertex direction
-      else data.direction.push(direction);
+    if (storeWindingOrder) {
+      // if the vertex we're adding existed in the adjacency list, add to its
+      // winding order
+      if (idx > -1) data.windingOrder[idx] += windingOrder;
+      // if didn't exist, set winding order
+      else data.windingOrder.push(windingOrder);
     }
   }
 
@@ -1330,8 +1320,8 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
     var data = adjacencyMap[key];
     var singleNeighborCount = 0;
 
-    for (var c=0; c<data.direction.length; c++) {
-      if (data.direction[c] != 0) {
+    for (var c=0; c<data.windingOrder.length; c++) {
+      if (data.windingOrder[c] != 0) {
         edgeVertex = true;
         singleNeighborCount += 1;
       }
@@ -1340,7 +1330,7 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
     if (edgeVertex) {
       var neighbors = [];
       for (var v=0; v<data.neighbors.length; v++) {
-        if (data.direction[v] != 0) neighbors.push(data.neighbors[v]);
+        if (data.windingOrder[v] != 0) neighbors.push(data.neighbors[v]);
       }
       borderMap[key] = {
         vertex: data.vertex,
