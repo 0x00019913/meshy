@@ -632,7 +632,7 @@ Model.prototype.generatePatch = function() {
   this.scene.add(borderMesh);
 
   // get the hash table detailing vertex adjacency
-  var adjacencyMap = this.generateAdjacencyMap();
+  var adjacencyMap = this.generateAdjacencyMap(this.vertices, this.faces, true, true);
 
   // vertex precision factor
   var p = this.p;
@@ -721,7 +721,7 @@ Model.prototype.generatePatch = function() {
         // other neighbor as next
         var next = neighbors[0];
         var currentAdjacentData = adjacencyMap[hash];
-        if (currentAdjacentData.direction[currentAdjacentData.vertices.indexOf(next)]<0) {
+        if (currentAdjacentData.direction[currentAdjacentData.neighbors.indexOf(next)]<0) {
           next = neighbors[1];
         }
 
@@ -821,7 +821,7 @@ Model.prototype.generatePatch = function() {
 
   // patch every border cycle
   for (var c=0; c<borderCycles.length; c++) {
-    var cycle = borderCycles[c];
+    var cycle = borderCycles[c].slice();
     var normals = borderCycleNormals[c];
 
     var n = cycle.length;
@@ -1144,6 +1144,74 @@ Model.prototype.generatePatch = function() {
     else if (cycle.length>3) {
       patchFaces.splice(originalFaceCount);
     }
+
+    // smooth the patch; algorithm looks like this:
+    //  1. build an adjacency map for the verts in the patch
+    //  2. for every vertex that's not on the boundary of the patch, set its
+    //    position to the average of its neighbors
+    //  3. iterate this several times
+    var vertices = this.patchMesh.geometry.vertices;
+    var faces = this.patchMesh.geometry.faces.slice(originalFaceCount);
+    var patchAdjacencyMap = this.generateAdjacencyMap(vertices, faces);
+
+    // set cycle to the initial array of border verts
+    cycle = borderCycles[c];
+
+    // skip the rest if the hole was triangular
+    if (cycle.length<=3) continue;
+
+    // remove verts that are on the border because we won't move them
+    for (var key in patchAdjacencyMap) {
+      if (cycle.indexOf(patchAdjacencyMap[key].vertex)>-1) {
+        delete patchAdjacencyMap[key];
+      }
+      else {
+        // make a copy of neighbor vertices so that every vertex gets updated
+        // from its neighbors' original positions
+        var data = patchAdjacencyMap[key];
+        data.copyNeighbors = data.neighbors.map(function(x) {return x.clone();});
+      }
+    }
+
+    var numIterations = 20;
+
+    // do a set number of smoothing iterations; could do an adaptive algorithm
+    // like "only adjust the vert if its distance to its new position is greater
+    // than a threshold", but that seems like overkill as this is cheap
+    for (var i=0; i<numIterations; i++) {
+      // set each vertex to the average of its neighbors based on copNeighbors
+      for (var key in patchAdjacencyMap) {
+        var n = patchAdjacencyMap[key].neighbors.length;
+        var neighbors = patchAdjacencyMap[key].copyNeighbors;
+        var sum = neighbors.reduce(function (acc, x) {
+          return acc.add(x);
+        }, new THREE.Vector3());
+        patchAdjacencyMap[key].vertex.copy(sum.divideScalar(n));
+      }
+
+      // skip updating the copy neighbor if no more iterations
+      if (i == (numIterations-1)) break;
+
+      // update copy neighbors
+      for (var key in patchAdjacencyMap) {
+        var data = patchAdjacencyMap[key];
+        for (var j=0; j<data.neighbors.length; j++) {
+          data.copyNeighbors[j].copy(data.neighbors[j]);
+        }
+      }
+    }
+
+    // vertices have moved, so recalculate normals
+    for (var i=0; i<faces.length; i++) {
+      var face = faces[i];
+      var va = vertices[face.a];
+      var vb = vertices[face.b];
+      var vc = vertices[face.c];
+      face.normal.copy(
+        vb.clone().sub(va).cross(vc.clone().sub(va)).normalize()
+      );
+    }
+
   }
 
   function calculateAngleFromEdges(idx, edges, cycle, normals, n) {
@@ -1166,8 +1234,8 @@ Model.prototype.generatePatch = function() {
 }
 
 // build a hash table detailing vertex adjacency
-Model.prototype.generateAdjacencyMap = function() {
-  // Will be an object { hash: data }, where data is { vertex, vertices, counts}.
+Model.prototype.generateAdjacencyMap = function(vertices, faces, storeDirection, storeNormal) {
+  // Will be an object { hash: data }, where data is { vertex, vertices, direction, normal}.
   // For a given vertex, it will have an entry (keyed by hash) and contain an
   // object that stores the vertex, its adjacent vertices, and the count of
   // faces it shares with each adjacent vertex.
@@ -1177,9 +1245,9 @@ Model.prototype.generateAdjacencyMap = function() {
 
   var p = this.p;
   // for each face
-  for (var f=0; f<this.faces.length; f++) {
-    var face = this.faces[f];
-    var faceVerts = faceGetVerts(face, this.vertices);
+  for (var f=0; f<faces.length; f++) {
+    var face = faces[f];
+    var faceVerts = faceGetVerts(face, vertices);
 
     // for each vertex in the face
     for (var v=0; v<3; v++) {
@@ -1193,11 +1261,10 @@ Model.prototype.generateAdjacencyMap = function() {
       if (!(hash in adjacencyMap)) {
         adjacencyMap[hash] = {
           vertex: vertex,
-          vertices: [],
-          counts: [],
-          direction: [],
-          normal: new THREE.Vector3()
+          neighbors: []
         };
+        if (storeDirection) adjacencyMap[hash].direction = [];
+        if (storeNormal) adjacencyMap[hash].normal = new THREE.Vector3();
       }
 
       var data = adjacencyMap[hash];
@@ -1208,11 +1275,13 @@ Model.prototype.generateAdjacencyMap = function() {
       // weigh the accumulated normal by its angle at the vertex; this should
       // prevent the normal from having a negative component along the adjacent
       // face normals in all reasonable circumstances
-      data.normal.add(
-        normal.clone().multiplyScalar(Math.acos(
-          vertex1.clone().sub(vertex).normalize().dot(vertex2.clone().sub(vertex).normalize())
-        ))
-      );
+      if (storeNormal) {
+        data.normal.add(
+          normal.clone().multiplyScalar(Math.acos(
+            vertex1.clone().sub(vertex).normalize().dot(vertex2.clone().sub(vertex).normalize())
+          ))
+        );
+      }
     }
   }
 
@@ -1224,29 +1293,25 @@ Model.prototype.generateAdjacencyMap = function() {
     // hash of the vertex we're adding
     var hash = vertexHash(vertex, p);
     // index of the vertex in the existing adjacency list of data.vertex
-    var idx = data.vertices.indexOf(vertex);
+    var idx = data.neighbors.indexOf(vertex);
+    if (idx==-1) data.neighbors.push(vertex);
 
-    // direction takes the following values:
-    //  -1: edge from data.vertex to vertex crossed with the normal points
-    //  into the triangle (i.e. has a negative dot product with
-    //  vertex-otherVertex)
-    //  1: positive dot product
-    // this equantity tells us, given a vertex, a neighbor, and the normal,
-    // where the adjacent face is (will be zero for all edges sharing two faces)
-    var direction = Math.sign(
-      vertex.clone().sub(data.vertex).cross(normal).dot(vertex.clone().sub(otherVertex))
-    );
+    if (storeDirection) {
+      // direction takes the following values:
+      //  -1: edge from data.vertex to vertex crossed with the normal points
+      //  into the triangle (i.e. has a negative dot product with
+      //  vertex-otherVertex)
+      //  1: positive dot product
+      // this equantity tells us, given a vertex, a neighbor, and the normal,
+      // where the adjacent face is (will be zero for all edges sharing two faces)
+      var direction = Math.sign(
+        vertex.clone().sub(data.vertex).cross(normal).dot(vertex.clone().sub(otherVertex))
+      );
 
-    // if the vertex we're adding exists in the adjacency list, update count
-    if (idx > -1) {
-      data.counts[idx] += 1;
-      data.direction[idx] += direction;
-    }
-    // if not found, append vertex and set its count to 1
-    else {
-      data.vertices.push(vertex);
-      data.counts.push(1);
-      data.direction.push(direction);
+      // if the vertex we're adding existed in the adjacency list, add direction
+      if (idx > -1) data.direction[idx] += direction;
+      // if didn't exist, set vertex direction
+      else data.direction.push(direction);
     }
   }
 
@@ -1255,7 +1320,7 @@ Model.prototype.generateAdjacencyMap = function() {
 
 // make a hash table with vertices that border holes, based on an adjacency map
 Model.prototype.generateBorderMap = function(adjacencyMap) {
-  if (!adjacencyMap) adjacencyMap = this.generateAdjacencyMap();
+  if (!adjacencyMap) return null;
 
   // isolate vertices bordering holes, also store the number of holes adjacent
   // to each vertex
@@ -1265,8 +1330,8 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
     var data = adjacencyMap[key];
     var singleNeighborCount = 0;
 
-    for (var c=0; c<data.counts.length; c++) {
-      if (data.counts[c] == 1) {
+    for (var c=0; c<data.direction.length; c++) {
+      if (data.direction[c] != 0) {
         edgeVertex = true;
         singleNeighborCount += 1;
       }
@@ -1274,8 +1339,8 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
     if (edgeVertex) {
       var neighbors = [];
-      for (var v=0; v<data.vertices.length; v++) {
-        if (data.counts[v]==1) neighbors.push(data.vertices[v]);
+      for (var v=0; v<data.neighbors.length; v++) {
+        if (data.direction[v] != 0) neighbors.push(data.neighbors[v]);
       }
       borderMap[key] = {
         vertex: data.vertex,
