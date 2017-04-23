@@ -22,13 +22,26 @@ Stage = function() {
   this.vertexPrecision = 5;
 
   // webgl viewport
-  this.container = null;
+  this.container = document.getElementById("container");
   this.camera = null;
   this.scene = null;
   this.renderer = null;
   this.axisWidget = null;
   this.printout = new Printout();
+
+  // verify that WebGL is enabled
+  if (!Detector.webgl) {
+    Detector.addGetWebGLMessage();
+    var webGLWarning = document.createElement("div");
+    webGLWarning.innerHTML = "Welp! Your browser doesn't support WebGL. This page will remain blank."
+    webGLWarning.style.paddingTop = "100px";
+    container.appendChild(webGLWarning);
+    return;
+  }
+
+  // standard notifications
   this.printout.log("Meshy is freely available under the MIT license. Thanks for using!");
+  this.printout.log("Supported import formats: OBJ, STL.");
 
   // undo stack
   this.undoStack = new UndoStack(this.printout);
@@ -323,7 +336,6 @@ Stage.prototype.initViewport = function() {
   animate();
 
   function init() {
-    _this.container = document.getElementById('container');
     height = container.offsetHeight;
     width = container.offsetWidth;
 

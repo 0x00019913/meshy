@@ -119,6 +119,10 @@ a {
 #container {
   width: 100%;
   height: 100%;
+  background-color: #222;
+  text-align: center;
+  font-family: 'Crete Round', sans-serif;
+  color: #ddd;
   cursor: default;
   user-select: none;
   -ms-user-select: none;
