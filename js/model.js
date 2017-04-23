@@ -177,7 +177,7 @@ Model.prototype.translate = function(axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
-  this.cancelPatch();
+  this.removePatchMesh();
 
   this.measurement.translate(axis, amount);
 }
@@ -207,7 +207,7 @@ Model.prototype.rotate = function(axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
-  this.cancelPatch();
+  this.removePatchMesh();
   // size argument is necessary for resizing things that aren't rotationally
   // symmetric
   this.measurement.rotate(axis, amount, this.getSize());
@@ -234,7 +234,7 @@ Model.prototype.scale = function (axis, amount) {
     this.positionTargetPlanes(this.centerOfMass);
   }
 
-  this.cancelPatch();
+  this.removePatchMesh();
 
   this.measurement.scale(axis, amount);
 }
@@ -605,13 +605,20 @@ Model.prototype.acceptPatch = function() {
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.elementsNeedUpdate = true;
 
-  this.cancelPatch();
+  this.printout.log("Model patched.");
+
+  this.removePatchMesh();
 }
 
-// remove the patch and clear associated data
 Model.prototype.cancelPatch = function() {
   if (!this.patchMesh) return;
 
+  this.removePatchMesh();
+  this.printout.log("Patch canceled.");
+}
+
+// remove the patch and clear associated data
+Model.prototype.removePatchMesh = function() {
   this.patchMesh = null;
 
   if (!this.scene) return;
@@ -628,7 +635,7 @@ Model.prototype.cancelPatch = function() {
 //  4. use the advancing front mesh (AFM) method to fill the holes
 Model.prototype.generatePatch = function() {
   // remove any existing patch
-  this.cancelPatch();
+  this.removePatchMesh();
 
   // for visualizing verts; unused, but leaving it here as debugging code
   var borderGeo = new THREE.Geometry();
@@ -1237,6 +1244,8 @@ Model.prototype.generatePatch = function() {
 
     return angle;
   }
+
+  this.printout.log("Patch generated (shown in green). Accept or cancel the patch.");
 }
 
 // build a hash table detailing vertex adjacency
@@ -1659,7 +1668,7 @@ Model.prototype.import = function(file, callback) {
 // disappears.
 Model.prototype.dispose = function() {
   if (!this.scene) return;
-  this.cancelPatch();
+  this.removePatchMesh();
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];
     if (child.name=="model" || child.name=="targetPlane") {
