@@ -589,6 +589,12 @@ Model.prototype.acceptPatch = function() {
   var faces = this.patchMesh.geometry.faces;
   var vertexMap = {};
   var p = this.p;
+
+  // add the model's existing verts into the map in order to be able to detect
+  // shared vertices between the model and patch
+  vertexArrayToMap(vertexMap, this.vertices, p);
+
+  // clone each face and update its indices into the vertex array
   for (var f=0; f<faces.length; f++) {
     var face = faces[f].clone();
     face.a = vertexMapIdx(vertexMap, vertices[face.a], this.vertices, p);

@@ -74,10 +74,13 @@ function vertexHash(v, p) {
 
 // for vertex hash maps
 
+// gets the index of a vertex in a hash map, adding it to the map and vertex
+// array if necessary
 // inputs:
 //  map: hash map ({hash:idx} object)
 //  v: vertex whose index to get, adding it to the map and array as necessary
 //  vertices: array of vertices whose indices are stored in the hash map
+//  p: precision factor
 function vertexMapIdx(map, v, vertices, p) {
   var hash = vertexHash(v, p);
   var idx = -1;
@@ -90,6 +93,13 @@ function vertexMapIdx(map, v, vertices, p) {
     idx = map[hash];
   }
   return idx;
+}
+
+// make a hash map of a whole array of vertices at once
+function vertexArrayToMap(map, vertices, p) {
+  for (var v=0; v<vertices.length; v++) {
+    map[vertexHash(vertices[v], p)] = v;
+  }
 }
 
 // chart of ring inner diameters in mm
