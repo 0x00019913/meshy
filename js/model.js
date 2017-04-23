@@ -605,7 +605,7 @@ Model.prototype.acceptPatch = function() {
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.elementsNeedUpdate = true;
 
-  this.printout.log("Model patched.");
+  this.printout.log("Mesh patched.");
 
   this.removePatchMesh();
 }
