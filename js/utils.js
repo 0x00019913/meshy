@@ -18,6 +18,9 @@ function splitFilename(fullName) {
   }
 }
 
+
+// Vector3 stuff
+
 // for turning "x" etc. into a normalized Vector3 along axis
 var axisToVector3Map = {
   x: new THREE.Vector3(1,0,0),
@@ -26,8 +29,26 @@ var axisToVector3Map = {
 }
 
 // special vectors
-var zeroVector = new THREE.Vector3(0,0,0);
-var oneVector = new THREE.Vector3(1,1,1);
+function getZeroVector() { return new THREE.Vector3(0,0,0); }
+function getOneVector() { return new THREE.Vector3(1,1,1); }
+
+// element max/min
+function vector3Max(v) {
+  return Math.max(v.x, v.y, v.z);
+}
+function vector3Min(v) {
+  return Math.min(v.x, v.y, v.z);
+}
+// return 'x', 'y', or 'z' depending on which element is greater/lesser
+function vector3ArgMax(v) {
+  return v.x>v.y ? (v.x>v.z ? 'x' : 'z') : (v.y>v.z ? 'y' : 'z');
+}
+function vector3ArgMin(v) {
+  return v.x<v.y ? (v.x<v.z ? 'x' : 'z') : (v.y<v.z ? 'y' : 'z');
+}
+
+
+// type checking
 
 function isArray(item) {
   return (Object.prototype.toString.call(item) === '[object Array]');

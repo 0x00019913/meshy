@@ -569,8 +569,57 @@ Model.prototype.buildOctree = function(d) {
   var origin = this.getCenter().subScalar(largestSize/2);
 
   this.octree = new Octree(depth, origin, largestSize, this.faces, this.vertices, this.scene);
-  // add geometry
-  //this.octree.addGeometry(this.plainMesh.geometry.faces, this.plainMesh.geometry.vertices)
+}
+
+Model.prototype.rayTest = function(repeats) {
+  // for visualizing verts
+  var vertGeo = new THREE.Geometry();
+  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.03});
+  var vertMesh = new THREE.Points(vertGeo, vertMat);
+  this.scene.add(vertMesh);
+  var vertLineGeo = new THREE.Geometry();
+  var vertLineMat = new THREE.LineBasicMaterial({color: 0x8888ff});
+  var vertLineMesh = new THREE.LineSegments(vertLineGeo, vertLineMat);
+  this.scene.add(vertLineMesh);
+  var _this = this;
+
+  var face = null;
+  for (var i=0; i<this.faces.length; i++) {
+    face = this.faces[i];
+    var n = face.normal;
+    var dist = castRay(face);
+    if (dist<0.00001) console.log(i);
+    if (repeats===undefined) break;
+    else {
+      if (repeats<=0) break;
+      else repeats--;
+    }
+  }
+
+  if (!face) return;
+
+  function castRay(face) {
+    var verts = faceGetVerts(face, _this.vertices);
+    var faceCenter = verts[0].clone().add(verts[1]).add(verts[2]).multiplyScalar(1/3);
+
+    if (!_this.octree) _this.buildOctree();
+    var p = faceCenter;
+    var d = face.normal.clone().multiplyScalar(-1);
+    var ray = _this.octree.castRay(p, d, _this.faces, _this.vertices);
+    showLine(ray.s, ray.e);
+    showLine(p.clone().add(d.clone().setLength(ray.dist)));
+    //console.log(ray.dist);
+    return ray.dist;
+  }
+
+  function showLine(v1, v2) {
+    vertGeo.vertices.push(v1);
+    if (v2) {
+      vertGeo.vertices.push(v2);
+      vertLineGeo.vertices.push(v1);
+      vertLineGeo.vertices.push(v2);
+    }
+  }
 }
 
 Model.prototype.getMeshColor = function() {

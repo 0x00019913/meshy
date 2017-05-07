@@ -384,7 +384,7 @@ Measurement.prototype.setCircleConnector = function(circle) {
 
 Measurement.prototype.setPlaneMarker = function() {
   var marker = this.planeMarkers[0];
-  marker.position.copy(zeroVector);
+  marker.position.copy(getZeroVector());
   marker.lookAt(axisToVector3Map[this.planeParams.axis]);
   marker.position.copy(this.planeParams.center);
   var size = this.planeParams.size.clone();
