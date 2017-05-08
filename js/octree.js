@@ -184,8 +184,8 @@ TreeNode.prototype.axisToBit = function(axis) {
   return axis=='x' ? 1 : (axis=='y' ? 2 : 4);
 }
 
-// return the distance traveled by the ray before it hits a face that has a
-// normal with a positive component along the ray direction
+// return the point where the ray hits a face that has a normal with a positive
+// component along the ray direction;; if no hit, return null
 // params:
 //  p: ray origin (THREE.Vector3)
 //  d: ray direction, assumed normalized (THREE.Vector3)
@@ -193,11 +193,22 @@ TreeNode.prototype.axisToBit = function(axis) {
 // (variable names are as per the convention of "An Efficient Parametric
 // Algorithm for Octree Traversal")
 TreeNode.prototype.castRay = function(p, d, faces, vertices) {
+  // correct d for values equal to -0: the negative sign breaks our math
+  if (d.x==-0) d.x = 0;
+  if (d.y==-0) d.y = 0;
+  if (d.z==-0) d.z = 0;
+
   // get the enter and exit t parameters for the root node
   var t0 = this.origin.clone().sub(p).divide(d);
   var t1 = this.origin.clone().addScalar(this.size).sub(p).divide(d);
-  // 1 if d is increasing along an axis; else, -1
-  var dir = new THREE.Vector3(Math.sign(d.x), Math.sign(d.y), Math.sign(d.z));
+
+  // direction sign vector: 1 if d is increasing along an axis, -1 if
+  // decreasing, 0 if constant
+  var dir = new THREE.Vector3(
+    Math.sign(d.x),
+    Math.sign(d.y),
+    Math.sign(d.z)
+  );
   // swap t0 and t1 values for the axes on which the ray is decreasing
   if (dir.x<0) {
     var tmp = t0.x;
@@ -221,7 +232,7 @@ TreeNode.prototype.castRay = function(p, d, faces, vertices) {
   // intersection-checking function to be passed to the ray-casting process:
   // if the ray intersects the given face, return the distance from the ray
   // origin to the intersection point; else, return 0
-  var rayHitDist = function(faceIdx) {
+  var hitTest = function(faceIdx, intersect) {
     var face = faces[faceIdx];
     // normal must have positive component along d
     if (face.normal.dot(d)<=0) return 0;
@@ -236,18 +247,18 @@ TreeNode.prototype.castRay = function(p, d, faces, vertices) {
 
     // if intersection exists, compute distance from ray source and return;
     // else, return 0
-    if (intersection) return p.distanceTo(intersection);
-    else return 0;
+    if (intersection) return intersection;
+    else return null;
   }
 
-  // cast the ray and get the distance at which it hits
-  var dist = this.castRayProc(t0, t1, dir, rayHitDist);
+  // cast the ray and get the point at which it hits
+  var hit = this.castRayProc(t0, t1, dir, p, hitTest);
 
-  return {t0: t0, t1: t1, s: p, e: rayEnd, dist: dist};
+  return hit;
 }
 
 // returns the distane from the ray origin to the closest face it hits
-TreeNode.prototype.castRayProc = function(t0, t1, dir, rayHitDist) {
+TreeNode.prototype.castRayProc = function(t0, t1, dir, p, hitTest) {
   var _this = this;
 
   // if at a leaf node
@@ -257,19 +268,25 @@ TreeNode.prototype.castRayProc = function(t0, t1, dir, rayHitDist) {
       var faceIdx = this.children[i];
 
       // get the distance to the face
-      // note that there may be multiple suitable faces in the node, but the
-      // impact of only taking the first one should be negligible
-      var dist = rayHitDist(faceIdx);
-      if (dist>0) return dist;
+      // (note that there may be multiple suitable faces in the node, but, given
+      // a sufficiently fine octree, the impact of only taking the first one
+      // should be negligible)
+      var hit = hitTest(faceIdx);
+      if (hit) return hit;
     }
 
-    return 0;
+    return null;
   }
   // if not at a leaf node, need to propagate the ray intersection testing to
   // each child node the ray crosses (in the order it crosses them)
   else {
     // t at the middle of the node
     var tm = t0.clone().add(t1).divideScalar(2.0);
+    // adjusting for the case of axis-asligned rays
+    var nodeCenter = this.origin.clone().addScalar(this.size/2.0);
+    if (isInfinite(t0.x)) tm.x = p.x<nodeCenter.x ? Infinity : -Infinity;
+    if (isInfinite(t0.y)) tm.y = p.y<nodeCenter.y ? Infinity : -Infinity;
+    if (isInfinite(t0.z)) tm.z = p.z<nodeCenter.z ? Infinity : -Infinity;
 
     // find the node among the eight children which the ray enters first
 
@@ -296,6 +313,19 @@ TreeNode.prototype.castRayProc = function(t0, t1, dir, rayHitDist) {
       if (tm.x<t0.z) currentChildIdx += dir.x;
       if (tm.y<t0.z) currentChildIdx += dir.y*2;
     }
+    // correct for axis-aligned ray direction
+    if (dir.x==0) {
+      if (p.x<nodeCenter.x) currentChildIdx &= ~1; // unset x bit
+      else currentChildIdx |= 1;
+    }
+    if (dir.y==0) {
+      if (p.y<nodeCenter.y) currentChildIdx &= ~2; // unset x bit
+      else currentChildIdx |= 2;
+    }
+    if (dir.z==0) {
+      if (p.z<nodeCenter.z) currentChildIdx &= ~4; // unset x bit
+      else currentChildIdx |= 4;
+    }
 
     // walk through the current node, recursing on the child nodes in the
     // order the ray hits them
@@ -303,19 +333,19 @@ TreeNode.prototype.castRayProc = function(t0, t1, dir, rayHitDist) {
       var child = this.children[currentChildIdx];
       var childParams = getNodeParams(currentChildIdx, t0, tm, t1, dir);
 
-      //console.log(this.depth, currentChildIdx, vector3ArgMax(childParams.t0), vector3ArgMin(childParams.t1), !!child);
       // child node may be undefined; if so, skip recursion and go to next child
       if (child) {
-        var dist = child.castRayProc(childParams.t0, childParams.t1, dir, rayHitDist);
-        // a child node has returned a collision, so return this
-        if (dist>0) return dist;
+        var hit = child.castRayProc(childParams.t0, childParams.t1, dir, p, hitTest);
+        // if a child node has returned a collision, return that; the return
+        // value will propagate up the recursion
+        if (hit) return hit;
       }
 
       currentChildIdx = getNextChild(currentChildIdx, childParams.t1, dir);
     }
   }
 
-  return 0;
+  return null;
 
 
   // node traversal functions
@@ -329,19 +359,44 @@ TreeNode.prototype.castRayProc = function(t0, t1, dir, rayHitDist) {
     var xmask = 1&idx;
     var ymask = 2&idx;
     var zmask = 4&idx;
-    // check if the child is far or near on an asix from the ray origin
-    var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
-    var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
-    var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
 
-    // if child is near on an axis, move t1 down to the middle;
-    // if child is far on an axis, move t0 up to the middle
-    if (xnear) t1c.x = tm.x;
-    else t0c.x = tm.x;
-    if (ynear) t1c.y = tm.y;
-    else t0c.y = tm.y;
-    if (znear) t1c.z = tm.z;
-    else t0c.z = tm.z;
+    // move the params inward as necessary to fit to the child node
+
+    // if axis-aligned on x
+    if (dir.x==0) {
+      // need to make sure that entrance t is -Infinity and exit t is Infinity
+      if (xmask) t0c.x = -Infinity;
+      else t1c.x = Infinity;
+    }
+    // if not axis-aligned on x
+    else {
+      // check if the child is far or near on the axis from the ray origin
+      var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
+      // if child is near on the axis, move t1 down to the middle;
+      // if child is far on the axis, move t0 up to the middle
+      if (xnear) t1c.x = tm.x;
+      else t0c.x = tm.x;
+    }
+
+    if (dir.y==0) {
+      if (ymask) t0c.y = -Infinity;
+      else t1c.y = Infinity;
+    }
+    else {
+      var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
+      if (ynear) t1c.y = tm.y;
+      else t0c.y = tm.y;
+    }
+
+    if (dir.z==0) {
+      if (zmask) t0c.z = -Infinity;
+      else t1c.z = Infinity;
+    }
+    else {
+      var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
+      if (znear) t1c.z = tm.z;
+      else t0c.z = tm.z;
+    }
 
     return { t0: t0c, t1: t1c };
   }
@@ -655,8 +710,9 @@ function triSegmentIntersection(v1, v2, v3, s1, s2) {
   var P = D.clone().cross(e2);
 
   var det = e1.dot(P);
-  // if determinant is 0, segment is parallel to tri, so no intersection
-  if (det > -epsilon && det < epsilon) return null;
+  // if determinant is 0, segment is parallel to tri, so no intersection;
+  // adjust for really small e1 or e2 by normalizing retroactively
+  if (Math.abs(det / (e1.length()*e2.length())) < epsilon) return null;
   var inv_det = 1.0/det;
 
   // test u parameter

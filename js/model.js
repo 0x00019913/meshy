@@ -574,7 +574,7 @@ Model.prototype.buildOctree = function(d) {
 Model.prototype.rayTest = function(repeats) {
   // for visualizing verts
   var vertGeo = new THREE.Geometry();
-  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.03});
+  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.01});
   var vertMesh = new THREE.Points(vertGeo, vertMat);
   this.scene.add(vertMesh);
   var vertLineGeo = new THREE.Geometry();
@@ -605,11 +605,10 @@ Model.prototype.rayTest = function(repeats) {
     if (!_this.octree) _this.buildOctree();
     var p = faceCenter;
     var d = face.normal.clone().multiplyScalar(-1);
-    var ray = _this.octree.castRay(p, d, _this.faces, _this.vertices);
-    showLine(ray.s, ray.e);
-    showLine(p.clone().add(d.clone().setLength(ray.dist)));
-    //console.log(ray.dist);
-    return ray.dist;
+    var hit = _this.octree.castRay(p, d, _this.faces, _this.vertices);
+    showLine(p, hit);
+    showLine(hit);
+    return hit.distanceTo(p);
   }
 
   function showLine(v1, v2) {

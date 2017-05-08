@@ -48,7 +48,7 @@ function vector3ArgMin(v) {
 }
 
 
-// type checking
+// bool checks
 
 function isArray(item) {
   return (Object.prototype.toString.call(item) === '[object Array]');
@@ -64,6 +64,10 @@ function isNumber(item) {
 
 function isFunction(item) {
   return (typeof item === 'function');
+}
+
+function isInfinite(n) {
+  return n==Infinity || n==-Infinity;
 }
 
 // check if object has properties
