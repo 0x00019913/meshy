@@ -15,7 +15,7 @@
    instance of Printout, or console by default), and an output for
    measurements.
 */
-function Model(scene, camera, container, printout, infoOutput) {
+function Model(scene, camera, container, printout, infoOutput, progressBarContainer) {
   // internal geometry
   this.faces = [];
   this.vertices = [];
@@ -63,6 +63,11 @@ function Model(scene, camera, container, printout, infoOutput) {
 
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
   this.measurement.setOutput(this.infoOutput);
+
+  // currently active non-thread-blocking calculations; each is associated with
+  // an iterator and a progress bar and label in the UI
+  this.iterators = {};
+  this.progressBarContainer = progressBarContainer;
 }
 
 // Add a Face3 to the model.
@@ -179,6 +184,13 @@ Model.prototype.translate = function(axis, amount) {
 
   this.removePatchMesh();
 
+  // invalidate the octree and stop any active iterators
+  this.octree = null;
+  this.stopIterator();
+
+  // erase the vertex colors signifying thickness
+  this.clearThicknessView();
+
   this.measurement.translate(axis, amount);
 }
 
@@ -208,6 +220,14 @@ Model.prototype.rotate = function(axis, amount) {
   }
 
   this.removePatchMesh();
+
+  // invalidate the octree and stop any active iterators
+  this.octree = null;
+  this.stopIterator();
+
+  // erase the vertex colors signifying thickness
+  this.clearThicknessView();
+
   // size argument is necessary for resizing things that aren't rotationally
   // symmetric
   this.measurement.rotate(axis, amount, this.getSize());
@@ -235,6 +255,13 @@ Model.prototype.scale = function (axis, amount) {
   }
 
   this.removePatchMesh();
+
+  // invalidate the octree and stop any active iterators
+  this.octree = null;
+  this.stopIterator();
+
+  // erase the vertex colors signifying thickness
+  this.clearThicknessView();
 
   this.measurement.scale(axis, amount);
 }
@@ -445,6 +472,14 @@ Model.prototype.toggleWireframe = function() {
   }
 }
 
+// Get and set material color.
+Model.prototype.getMeshColor = function() {
+  if (this.plainMesh) return this.plainMesh.material.color.getHex();
+}
+Model.prototype.setMeshColor = function(color) {
+  if (this.plainMesh) return this.plainMesh.material.color.set(color);
+}
+
 // Toggle the COM indicator. If the COM hasn't been calculated, then
 // calculate it.
 Model.prototype.toggleCenterOfMass = function() {
@@ -542,7 +577,8 @@ Model.prototype.makePlainMesh = function(scene) {
   geo.vertices = this.vertices;
   geo.faces = this.faces;
   var mat = new THREE.MeshStandardMaterial({
-    color: 0xffffff
+    color: 0xffffff,
+    vertexColors: THREE.FaceColors
   });
   this.plainMesh = new THREE.Mesh(geo, mat);
   this.plainMesh.name = "model";
@@ -551,30 +587,311 @@ Model.prototype.makePlainMesh = function(scene) {
 }
 
 // use the geometry to build an octree; this is quite computationally expensive
-Model.prototype.buildOctree = function(d) {
+// params:
+//  d: optional depth argument; else, we determine it as ~log of polycount
+//  nextIterator: optionally start this iterator when done building octree
+Model.prototype.buildOctree = function(d, nextIterator) {
+  // it's possible that the octree is being constructed right now; add the
+  // callback if we have one, then return
+  if (this.getIterator("octree")) {
+    if (nextIterator) this.addNext("octree", nextIterator);
+    return;
+  }
+
   // heuristic is that the tree should be as deep as necessary to have 1-10 faces
   // per leaf node so as to make raytracing cheap; the effectiveness will vary
   // between different meshes, of course, but I estimate that ln(polycount)*0.6
   // should be good
-  var depth = (d===undefined) ? Math.round(Math.log(this.count)*0.6) : d;
+  var depth = !d ? Math.round(Math.log(this.count)*0.6) : d;
 
-  var size = this.getSize();
+  var meshSize = this.getSize();
   // find largest dimension
-  var largestBoundAxis = "x";
-  if (size.y>size[largestBoundAxis]) largestBoundAxis = "y";
-  if (size.z>size[largestBoundAxis]) largestBoundAxis = "z";
+  var largestDimAxis = vector3ArgMax(meshSize);
   // make octree 1.1 times as large as largest dimension
-  var largestSize = size[largestBoundAxis] * 1.1;
+  var size = meshSize[largestDimAxis] * 1.1;
   // center octree on model
-  var origin = this.getCenter().subScalar(largestSize/2);
+  var origin = this.getCenter().subScalar(size/2);
 
-  this.octree = new Octree(depth, origin, largestSize, this.faces, this.vertices, this.scene);
+  // create the octree; the last argument means that we will manually fill out
+  // the geometry
+  this.octree = new Octree(depth, origin, size, this.faces, this.vertices, this.scene, true);
+
+
+  // fill out the octree in a non-blocking way
+
+  // start by making the iterator
+  var iterListEntry = this.makeIterator(
+    {
+      f: this.octree.addFace.bind(this.octree),
+      n: this.faces.length,
+      batchSize: 2000,
+      onProgress: onProgress.bind(this),
+      onDone: onDone.bind(this)
+    },
+    "octree",
+    "Building octree..."
+  );
+  if (!iterListEntry) return;
+  // add the next iterator if we have one
+  if (nextIterator) this.addNext("octree", nextIterator);
+  // and... begin
+  this.startIterator("octree");
+
+  // run this at every iteration; updates the progress bar
+  function onProgress(i) {
+    var bar = this.getIterator("octree").bar;
+    if (bar) bar.animate(i/this.faces.length);
+  }
+
+  function onDone() {
+    this.printout.log("Octree constructed.");
+  }
+}
+
+
+/* MESH THICKNESS */
+
+// color the verts according to their local diameter
+Model.prototype.viewThickness = function(threshold) {
+  var iterListEntry = this.getIterator("thickness");
+  if (iterListEntry) return;
+
+  iterListEntry = this.makeIterator(
+    {
+      f: viewFaceThickness.bind(this),
+      n: this.faces.length,
+      batchSize: 2000,
+      onDone: onDone.bind(this),
+      onProgress: onProgress.bind(this)
+    },
+    "thickness",
+    "Calculating mesh thickness..."
+  );
+
+  // if octree doesn't exist, build it and tell it to calculate thickness after
+  if (!this.octree) this.buildOctree(null, "thickness");
+  else {
+    // if octree currently being calculated, tell it to calculate thickness
+    // after it's done; else, just start calculating mesh thickness now
+    var octreeIterator = this.getIterator("octree");
+    if (octreeIterator) this.addNext("octree", "thickness");
+    else this.startIterator("thickness");
+  }
+
+  function viewFaceThickness(i) {
+    var face = this.faces[i];
+
+    var verts = faceGetVerts(face, this.vertices);
+    var faceCenter = verts[0].clone().add(verts[1]).add(verts[2]).multiplyScalar(1/3);
+    var negativeNormal = face.normal.clone().multiplyScalar(-1);
+
+    var intersection = this.octree.castRay(faceCenter, negativeNormal);
+
+    var dist = 0;
+    if (intersection) dist = faceCenter.distanceTo(intersection);
+
+    var level = Math.min(dist/threshold, 1.0);
+    face.color.setRGB(1.0, level, level);
+  }
+
+
+  function onDone() {
+    this.plainMesh.geometry.colorsNeedUpdate = true;
+
+    this.printout.log("Mesh thickness below the threshold is displayed in red.");
+  }
+
+  function onProgress(i) {
+    var bar = this.getIterator("thickness").bar;
+    bar.animate(i/this.faces.length);
+  }
+}
+
+// reset the face color to white
+Model.prototype.clearThicknessView = function() {
+  for (var i=0; i<this.faces.length; i++) {
+    this.faces[i].color.setRGB(1.0, 1.0, 1.0);
+  }
+
+  this.plainMesh.geometry.colorsNeedUpdate = true;
+}
+
+
+/* UTILITIES FOR DOING NON-BLOCKING CALCULATIONS. USE THESE TO AVOID LOCKING UP
+   THE THREAD WHILE PERFORMING OUR CALCULATIONS. */
+
+// create an iterator for calculation 'type' and store it in the 'iterators'
+// table; only allowed to create one of a certain type at a time
+// params:
+//  params: object containing key-value pairs corresponding to the
+//    parameters of functionIterator (see utils.js)
+//  type: string identifying the type of calculation the iterator will perform
+//  labelText: the label that will go on the progress bar
+Model.prototype.makeIterator = function(params, type, labelText) {
+  // check if an iterator of the same type already exists
+  var iterListEntry = this.getIterator(type);
+  if (iterListEntry) return null;
+
+  // create the iterator
+  var iterator = new functionIterator(
+    params.f,
+    params.n,
+    params.batchSize,
+    onDone.bind(this),
+    params.onProgress,
+    params.onStop
+  );
+  // create the iterator list entry and put it on the list
+  iterListEntry = {
+    iterator: iterator,
+    labelText: labelText,
+    next: []
+  };
+  this.iterators[type] = iterListEntry;
+
+  // return the entry if successful
+  return iterListEntry;
+
+  function onDone() {
+    this.removeIterator(type);
+
+    if (params.onDone) params.onDone();
+
+    var nextAll = iterListEntry.next;
+    if (nextAll.length>0) {
+      var next = nextAll[0];
+      nextAll.splice(0,1);
+      // preserve the remaining "next" iterators so that they'll run after the
+      // one we will start now
+      this.addNext(next, nextAll);
+
+      this.startIterator(next);
+    }
+  }
+}
+
+// set up the UI for the (existing) iterator of a given type and start the
+// calculation
+Model.prototype.startIterator = function(type) {
+  var iterListEntry = this.getIterator(type);
+  if (!iterListEntry) return null;
+
+  // do the UI setup - progress bar and its label
+
+  // progress bar
+  var bar = new ProgressBar.Line(
+    "#progressBarContainer",
+    {
+      easing: 'easeInOut',
+      color: '#dddddd',
+      trailColor: 'rgba(255, 255, 255, 0.2)',
+      strokeWidth: 0.25,
+      duration: 16
+    }
+  );
+  // need this to be able to remove the progress bar
+  var barElement = this.progressBarContainer.lastChild;
+  // text labeling the progress bar
+  var label = document.createElement('span');
+  label.className = "progressBarLabel";
+  label.textContent = iterListEntry.labelText;
+  this.progressBarContainer.appendChild(label);
+
+  iterListEntry.bar = bar;
+  iterListEntry.barElement = barElement;
+  iterListEntry.label = label;
+
+  // finally, start
+  iterListEntry.iterator.start();
+}
+
+// given an existing iterator (can be in progress), add another iterator to its
+// queue of iterators to run after it's done (the next param can be an array)
+Model.prototype.addNext = function(type, next) {
+  var iterListEntry = this.getIterator(type);
+  if (!iterListEntry) return;
+
+  if (isArray(next)) iterListEntry.next.concat(next);
+  else iterListEntry.next.push(next);
+}
+
+// get an iterator from the iterator list
+Model.prototype.getIterator = function(type) {
+  return this.iterators[type]
+}
+
+// remove an iterator from the list and remove its progress bar + label; doesn't
+// check whether the iterator is running or not
+Model.prototype.removeIterator = function(type) {
+  var removeProc = removeSingleIterator.bind(this);
+  // if type specified, remove only that iterator; else, remove all
+  if (type) removeProc(type);
+  else {
+    for (var key in this.iterators) removeProc(key);
+  }
+
+  function removeSingleIterator(key) {
+    var iterListEntry = this.iterators[key];
+    // if the given iterator type not found
+    if (!iterListEntry) return;
+
+    delete this.iterators[key];
+
+    // remove progress bar and its label
+    var barElement = iterListEntry.barElement;
+    if (barElement) this.progressBarContainer.removeChild(barElement);
+    var label = iterListEntry.label;
+    if (label) this.progressBarContainer.removeChild(label);
+  }
+}
+
+// force-stop a running iterator and remove it
+Model.prototype.stopIterator = function(type) {
+  var stopProc = stopSingleIterator.bind(this);
+  // if type specified, stop only that iterator; else, stop all
+  if (type) stopProc(type);
+  else {
+    for (var key in this.iterators) stopProc(key);
+  }
+
+  function stopSingleIterator(key) {
+    this.printout.warn("Calculation canceled (" + key + ").");
+
+    var iterListEntry = this.iterators[key];
+    // if the given iterator type not found
+    if (!iterListEntry) return;
+
+    var iterator = iterListEntry.iterator;
+    // stop the iterator
+    if (iterator.running()) iterator.stop();
+
+    // remove the iterator
+    this.removeIterator(key);
+
+    // also remove all of its "next" iterators
+    var nextAll = iterListEntry.next;
+    for (var i=0; i<nextAll; i++) {
+      this.removeIterator(nextAll[i]);
+    }
+  }
+}
+
+
+// testing some octree stuff; leave in for future testing
+Model.prototype.colorTest = function(color) {
+  for (var i=0; i<this.faces.length; i++) {
+    var face = this.faces[i];
+    if (color) face.color.set(color);
+    else face.color.set(0xff0000);
+
+  }
+  this.plainMesh.geometry.colorsNeedUpdate = true;
 }
 
 Model.prototype.rayTest = function(repeats) {
   // for visualizing verts
   var vertGeo = new THREE.Geometry();
-  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.01});
+  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.04});
   var vertMesh = new THREE.Points(vertGeo, vertMat);
   this.scene.add(vertMesh);
   var vertLineGeo = new THREE.Geometry();
@@ -583,12 +900,19 @@ Model.prototype.rayTest = function(repeats) {
   this.scene.add(vertLineMesh);
   var _this = this;
 
-  var face = null;
+  var threshold = 0.2;
+
   for (var i=0; i<this.faces.length; i++) {
-    face = this.faces[i];
+    var face = this.faces[i];
     var n = face.normal;
     var dist = castRay(face);
-    if (dist<0.00001) console.log(i);
+    if (dist<0.000001) {
+      console.log(i);
+    }
+    else {
+      var level = Math.min(dist/threshold, 1.0);
+      face.color.setRGB(1.0, level, level);
+    }
     if (repeats===undefined) break;
     else {
       if (repeats<=0) break;
@@ -596,7 +920,7 @@ Model.prototype.rayTest = function(repeats) {
     }
   }
 
-  if (!face) return;
+  this.plainMesh.geometry.colorsNeedUpdate = true;
 
   function castRay(face) {
     var verts = faceGetVerts(face, _this.vertices);
@@ -606,8 +930,9 @@ Model.prototype.rayTest = function(repeats) {
     var p = faceCenter;
     var d = face.normal.clone().multiplyScalar(-1);
     var hit = _this.octree.castRay(p, d, _this.faces, _this.vertices);
-    showLine(p, hit);
-    showLine(hit);
+    if (!hit) return 0;
+    //showLine(p, hit);
+    //showLine(hit);
     return hit.distanceTo(p);
   }
 
@@ -621,14 +946,9 @@ Model.prototype.rayTest = function(repeats) {
   }
 }
 
-Model.prototype.getMeshColor = function() {
-  if (this.plainMesh) return this.plainMesh.material.color.getHex();
-}
-Model.prototype.setMeshColor = function(color) {
-  if (this.plainMesh) return this.plainMesh.material.color.set(color);
-}
 
 /* MESH REPAIR */
+
 // take the existing patch geometry and integrate it into the model geometry
 Model.prototype.acceptPatch = function() {
   if (!this.patchMesh) return;
@@ -1407,6 +1727,7 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
   return borderMap;
 }
+
 
 /* IMPORT AND EXPORT */
 

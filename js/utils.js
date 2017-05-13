@@ -127,6 +127,71 @@ function vertexArrayToMap(map, vertices, p) {
   }
 }
 
+
+// non-blocking iterator
+// params:
+//  f: function to repeat
+//  n: number of times to repeat the function
+//  batchSize (optional): repeat the function this many times at each iteration
+//  onDone (optional): call this when done iterating
+//  onProgress (optional): call this at every iteration step
+//  onStop (optional): call this when the stop() function is called
+// usage:
+//  make a new instance with at least the first two params, call start()
+function functionIterator(f, n, batchSize, onDone, onProgress, onStop) {
+  this.f = f;
+  this.n = n;
+  this.i = 0;
+  this.batchSize = (batchSize===undefined || batchSize<1) ? 1 : batchSize;
+  this.onStop = onStop;
+  this.onProgress = onProgress;
+  this.onDone = onDone;
+  this.timer = 0;
+
+  // begin iterating and repeat until done
+  this.start = function() {
+    this.i = 0;
+
+    this.timer = setTimeout(this.iterate.bind(this), 16);
+  };
+
+  // main unit of iteration: repeatedly run f, stopping after batchSize
+  // repetitions (or fewer, if we've hit n)
+  this.iterate = function() {
+    var i;
+    var limit = this.i+this.batchSize;
+    var n = this.n;
+    for (i=this.i; i<limit && i<n; i++) {
+      this.f(i);
+    }
+
+    this.i = i;
+
+    if (this.onProgress) this.onProgress(i);
+
+    if (i>=n) {
+      clearTimeout(this.timer);
+      if (this.onDone) this.onDone();
+      return;
+    }
+
+    this.timer = setTimeout(this.iterate.bind(this), 0);
+  };
+
+  // manually terminate the iteration
+  this.stop = function() {
+    clearTimeout(this.timer);
+
+    if (this.onStop) this.onStop(this.i);
+  };
+
+  // return true if there are more iterations to run
+  this.running = function() {
+    return this.i<this.n;
+  }
+}
+
+
 // chart of ring inner diameters in mm
 // (source: https://en.wikipedia.org/wiki/Ring_size)
 var ringSizes = {
@@ -196,3 +261,44 @@ var ringSizes = {
   "15.75": 24.43,
   "   16": 24.64
 }
+
+
+// memory usage - from zensh on github: https://gist.github.com/zensh/4975495
+function memorySizeOf(obj) {
+  var bytes = 0;
+
+  function sizeOf(obj) {
+    if(obj !== null && obj !== undefined) {
+      switch(typeof obj) {
+      case 'number':
+        bytes += 8;
+        break;
+      case 'string':
+        bytes += obj.length * 2;
+        break;
+      case 'boolean':
+        bytes += 4;
+        break;
+      case 'object':
+        var objClass = Object.prototype.toString.call(obj).slice(8, -1);
+        if(objClass === 'Object' || objClass === 'Array') {
+          for(var key in obj) {
+            if(!obj.hasOwnProperty(key)) continue;
+            sizeOf(obj[key]);
+          }
+        } else bytes += obj.toString().length * 2;
+        break;
+      }
+    }
+    return bytes;
+  };
+
+  function formatByteSize(bytes) {
+    if(bytes < 1024) return bytes + " bytes";
+    else if(bytes < 1048576) return(bytes / 1024).toFixed(3) + " KiB";
+    else if(bytes < 1073741824) return(bytes / 1048576).toFixed(3) + " MiB";
+    else return(bytes / 1073741824).toFixed(3) + " GiB";
+  };
+
+  return formatByteSize(sizeOf(obj));
+};

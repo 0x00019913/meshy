@@ -4,7 +4,8 @@
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
 //  scene: optional, used for visualizing the octree
-Octree = function(depth, origin, size, faces, vertices, scene) {
+//  fillLater: true if will manually add the geometry later
+Octree = function(depth, origin, size, faces, vertices, scene, fillLater) {
   this.depth = depth;
   this.origin = origin;
   this.size = size;
@@ -16,19 +17,25 @@ Octree = function(depth, origin, size, faces, vertices, scene) {
 
   this.node = new TreeNode(depth, origin, size);
 
-  // add geometry
-  for (var i=0; i<faces.length; i++) {
-    var face = faces[i];
-    this.node.addFace({
-      verts: [vertices[face.a], vertices[face.b], vertices[face.c]],
-      normal: face.normal
-    },
-    i);
+  // fill out the tree with geometry if not doing it later
+  if (!fillLater) {
+    for (var i=0; i<faces.length; i++) {
+      this.addFace(i);
+    }
   }
 
   // for visualizing the octree, optional
   this.scene = scene;
   this.density = 0;
+}
+
+Octree.prototype.addFace = function(i) {
+  var face = this.faces[i];
+  this.node.addFace({
+    verts: faceGetVerts(face, this.vertices),
+    normal: face.normal
+  },
+  i);
 }
 
 Octree.prototype.numLeaves = function() {
@@ -40,11 +47,10 @@ Octree.prototype.numLeaves = function() {
 // params:
 //  p: ray origin (THREE.Vector3)
 //  d: ray direction, assumed normalized (THREE.Vector3)
-//  faces, vertices: need these to get geometry for intersection testing
 // (variable names are as per the convention of "An efficient Parametric
 // Algorithm for Octree Traversal")
-Octree.prototype.castRay = function(p, d, faces, vertices) {
-  return this.node.castRay(p, d, faces, vertices);
+Octree.prototype.castRay = function(p, d) {
+  return this.node.castRay(p, d, this.faces, this.vertices);
 }
 
 Octree.prototype.visualize = function(drawLines, depthLimit) {

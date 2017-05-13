@@ -28,6 +28,7 @@ Stage = function() {
   this.renderer = null;
   this.axisWidget = null;
   this.printout = new Printout();
+  this.progressBarContainer = document.getElementById("progressBarContainer");
 
   // verify that WebGL is enabled
   if (!Detector.webgl) {
@@ -149,6 +150,11 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
+  var thicknessFolder = this.gui.addFolder("Mesh Thickness");
+  this.thicknessThreshold = 0.1;
+  thicknessFolder.add(this, "thicknessThreshold", 0);
+  thicknessFolder.add(this, "viewThickness");
+  thicknessFolder.add(this, "clearThicknessView");
   var repairFolder = this.gui.addFolder("Repair (beta)");
   repairFolder.add(this, "generatePatch");
   repairFolder.add(this, "acceptPatch");
@@ -258,6 +264,12 @@ Stage.prototype.startMeasurement = function(type, param) {
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
   this.clearScaleToMeasurementFolder();
+}
+Stage.prototype.viewThickness = function() {
+  if (this.model) this.model.viewThickness(this.thicknessThreshold);
+}
+Stage.prototype.clearThicknessView = function() {
+  if (this.model) this.model.clearThicknessView();
 }
 Stage.prototype.generatePatch = function() {
   if (this.model) this.model.generatePatch();
@@ -480,7 +492,14 @@ Stage.prototype.import = function() {
 // Called from HTML when the import button is clicked. Creates the Model
 // instance and tells it to load the geometry.
 Stage.prototype.handleFile = function(file) {
-  this.model = new Model(this.scene, this.camera, this.container, this.printout, this.infoBox);
+  this.model = new Model(
+    this.scene,
+    this.camera,
+    this.container,
+    this.printout,
+    this.infoBox,
+    this.progressBarContainer
+  );
   this.model.isLittleEndian = this.isLittleEndian;
   this.model.vertexPrecision = this.vertexPrecision;
   this.model.import(file, this.displayMesh.bind(this));
