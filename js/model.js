@@ -640,7 +640,7 @@ Model.prototype.buildOctree = function(d, nextIterator) {
   // run this at every iteration; updates the progress bar
   function onProgress(i) {
     var bar = this.getIterator("octree").bar;
-    if (bar) bar.animate(i/this.faces.length);
+    if (bar) bar.set(i/this.faces.length);
   }
 
   function onDone() {
@@ -703,7 +703,7 @@ Model.prototype.viewThickness = function(threshold) {
 
   function onProgress(i) {
     var bar = this.getIterator("thickness").bar;
-    bar.animate(i/this.faces.length);
+    if (bar) bar.set(i/this.faces.length);
   }
 }
 
