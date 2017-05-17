@@ -370,14 +370,25 @@ Model.prototype.calcCenterOfMass = function() {
 
 // Calculate cross-section.
 Model.prototype.calcCrossSection = function(axis, pos) {
-  var crossSectionArea = 0;
-  var segments = [];
+  var crossSection = 0;
+  // for finding the range of the cross-section; axis1 and axis2 are the two
+  // axes that
+  var axis1 = cycleAxis(axis);
+  var minAxis1 = Infinity, maxAxis1 = -Infinity;
+  var axis2 = cycleAxis(axis1);
+  var minAxis2 = Infinity, maxAxis2 = -Infinity;
+
   for (var i=0; i<this.count; i++) {
     var face = this.faces[i];
     var segment = this.faceIntersection(face, axis, pos);
     if (segment && segment.length==2) {
-      segments.push(segment);
-      // Algorithm is like this:
+      // update the min and max
+      minAxis1 = Math.min(minAxis1, segment[0][axis1]);
+      maxAxis1 = Math.max(maxAxis1, segment[0][axis1]);
+      minAxis2 = Math.min(minAxis2, segment[0][axis2]);
+      maxAxis2 = Math.max(maxAxis2, segment[0][axis2]);
+
+      // Calculate cross-section. Algorithm is like this:
       // 1. shift segment endpoints down to 0 on axis,
       // 2. calculate area of the triangle formed by segment and origin,
       // 3. multiply by sign, accumulate for all triangles
@@ -385,11 +396,14 @@ Model.prototype.calcCrossSection = function(axis, pos) {
       segment[1][axis] = 0;
       var area = segment[0].cross(segment[1]).multiplyScalar(1/2).length();
       var sign = Math.sign(segment[1].dot(face.normal));
-      crossSectionArea += sign * area;
+      crossSection += sign * area;
     }
   }
 
-  return crossSectionArea;
+  var result = { crossSection: crossSection};
+  result[axis1+"size"] = maxAxis1-minAxis1;
+  result[axis2+"size"] = maxAxis2-minAxis2;
+  return result;
 }
 
 // Calculate triangle area via cross-product.
@@ -624,7 +638,7 @@ Model.prototype.buildOctree = function(d, nextIterator) {
     {
       f: this.octree.addFace.bind(this.octree),
       n: this.faces.length,
-      batchSize: 2000,
+      batchSize: Math.max(1, this.faces.length/50),
       onProgress: onProgress.bind(this),
       onDone: onDone.bind(this)
     },
@@ -660,7 +674,7 @@ Model.prototype.viewThickness = function(threshold) {
     {
       f: viewFaceThickness.bind(this),
       n: this.faces.length,
-      batchSize: 2000,
+      batchSize: Math.max(1, this.faces.length/50),
       onDone: onDone.bind(this),
       onProgress: onProgress.bind(this)
     },
@@ -2038,6 +2052,10 @@ Model.prototype.import = function(file, callback) {
 Model.prototype.dispose = function() {
   if (!this.scene) return;
   this.removePatchMesh();
+
+  // stop any current non-blocking calculations
+  this.stopIterator();
+
   for (var i=this.scene.children.length-1; i>=0; i--) {
     var child = this.scene.children[i];
     if (child.name=="model" || child.name=="targetPlane") {

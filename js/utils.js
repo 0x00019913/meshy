@@ -46,6 +46,12 @@ function vector3ArgMax(v) {
 function vector3ArgMin(v) {
   return v.x<v.y ? (v.x<v.z ? 'x' : 'z') : (v.y<v.z ? 'y' : 'z');
 }
+// cycle axis label to the next axis
+function cycleAxis(axis) {
+  if (axis=='x') return 'y';
+  else if (axis=='y') return 'z';
+  else return 'x';
+}
 
 
 // bool checks

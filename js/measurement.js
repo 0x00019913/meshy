@@ -137,6 +137,11 @@ Measurement.prototype.activate = function(type, params) {
     }
     this.measurementPoints = 1;
     this.values = { crossSection: null };
+    // store size fields for the two axes in the measuring plane
+    var nextAxis = cycleAxis(params.axis);
+    this.values[nextAxis+"size"] = null;
+    nextAxis = cycleAxis(nextAxis);
+    this.values[nextAxis+"size"] = null;
     // this.planeParams will henceforth be the source of truth for the plane
     // marker; update it and call this.setPlaneMarker() to position it.
     this.planeParams = params;
@@ -277,7 +282,10 @@ Measurement.prototype.calculateMeasurement = function() {
       case "crossSection":
         var pos = this.planeMarkers[0].position[this.planeParams.axis];
         this.planeParams.center[this.planeParams.axis] = pos;
-        this.values.crossSection = this.planeParams.fn(this.planeParams.axis, pos);
+        var crossSectionResult = this.planeParams.fn(this.planeParams.axis, pos);
+        // copy values returned by the cross-section function into this.values
+        for (var key in crossSectionResult) this.values[key] = crossSectionResult[key];
+
         break;
     }
 
