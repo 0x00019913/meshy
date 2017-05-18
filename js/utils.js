@@ -28,6 +28,13 @@ var axisToVector3Map = {
   z: new THREE.Vector3(0,0,1),
 }
 
+// cycle axis label to the next axis
+function cycleAxis(axis) {
+  if (axis=='x') return 'y';
+  else if (axis=='y') return 'z';
+  else return 'x';
+}
+
 // special vectors
 function getZeroVector() { return new THREE.Vector3(0,0,0); }
 function getOneVector() { return new THREE.Vector3(1,1,1); }
@@ -46,11 +53,10 @@ function vector3ArgMax(v) {
 function vector3ArgMin(v) {
   return v.x<v.y ? (v.x<v.z ? 'x' : 'z') : (v.y<v.z ? 'y' : 'z');
 }
-// cycle axis label to the next axis
-function cycleAxis(axis) {
-  if (axis=='x') return 'y';
-  else if (axis=='y') return 'z';
-  else return 'x';
+function clamp(x, minVal, maxVal) {
+  if (x<minVal) x = minVal;
+  else if (x>maxVal) x = maxVal;
+  return x;
 }
 
 
