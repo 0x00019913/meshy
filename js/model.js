@@ -638,7 +638,7 @@ Model.prototype.buildOctree = function(d, nextIterator) {
     {
       f: this.octree.addFace.bind(this.octree),
       n: this.faces.length,
-      batchSize: clamp(this.faces.length/50, 1, 4500),
+      batchSize: clamp(this.faces.length/100, 1, 5000),
       onProgress: onProgress.bind(this),
       onDone: onDone.bind(this)
     },
@@ -674,7 +674,7 @@ Model.prototype.viewThickness = function(threshold) {
     {
       f: viewFaceThickness.bind(this),
       n: this.faces.length,
-      batchSize: clamp(this.faces.length/50, 1, 4500),
+      batchSize: clamp(this.faces.length/100, 1, 5000),
       onDone: onDone.bind(this),
       onProgress: onProgress.bind(this)
     },
