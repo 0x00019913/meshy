@@ -32,7 +32,6 @@ Stage = function() {
 
   // verify that WebGL is enabled
   if (!Detector.webgl) {
-    Detector.addGetWebGLMessage();
     var webGLWarning = document.createElement("div");
     webGLWarning.innerHTML = "Welp! Your browser doesn't support WebGL. This page will remain blank."
     webGLWarning.style.paddingTop = "100px";
@@ -62,6 +61,7 @@ Stage.prototype.generateUI = function() {
   this.filenameController = exportFolder.add(this, "filename");
   exportFolder.add(this, "exportOBJ");
   exportFolder.add(this, "exportSTL");
+  exportFolder.add(this, "exportSTLascii");
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
   settingsFolder.add(this, "toggleAxisWidget");
@@ -199,6 +199,7 @@ Stage.prototype.transform = function(op, axis, amount) {
 // Functions corresponding to buttons in the dat.gui.
 Stage.prototype.exportOBJ = function() { this.export("obj"); }
 Stage.prototype.exportSTL = function() { this.export("stl"); }
+Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Stage.prototype.undo = function() { this.undoStack.undo(); }
 
@@ -539,6 +540,10 @@ Stage.prototype.delete = function() {
 // Callback passed to model.import; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success) {
   if (!success) {
+    // it's necessary to clear file input box because it blocks importing
+    // a model with the same name twice in a row
+    this.fileInput.value = "";
+    
     this.model = null;
     return;
   }

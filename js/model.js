@@ -1796,6 +1796,36 @@ Model.prototype.export = function(format, name) {
     blob = new Blob([dv]);
     fname = name+".stl";
   }
+  else if (format=="stlascii") {
+    var indent2 = "  ", indent4 = "    ", indent6 = "      ";
+    var out = "";
+
+    out =  "solid " + name + '\n';
+    for (var tri=0; tri<this.count; tri++) {
+      var faceOut = "";
+      var face = this.faces[tri];
+      faceOut += indent2 + "facet normal" + writeVector3(face.normal) + '\n';
+      faceOut += indent4 + "outer loop" + '\n';
+      for (var vert=0; vert<3; vert++) {
+        var v = this.vertices[face[faceGetSubscript(vert)]];
+        faceOut += indent6 + "vertex" + writeVector3(v) + '\n';
+      }
+      faceOut += indent4 + "endloop" + '\n';
+      faceOut += indent2 + "endfacet" + '\n';
+
+      out += faceOut;
+    }
+    out += "endsolid";
+
+    function writeVector3(v) {
+      line = "";
+      for (var i=0; i<3; i++) line += " " + v.getComponent(i).toFixed(6);
+      return line;
+    }
+
+    blob = new Blob([out], { type: 'text/plain' });
+    fname = name+".stl";
+  }
   else if (format=="obj") {
     var out = "";
 
@@ -1872,15 +1902,53 @@ Model.prototype.import = function(file, callback) {
     }
     callback(success);
   };
-  if (this.format=="stl") fr.readAsArrayBuffer(file);
+
+  if (this.format=="stl") {
+    // check STL type (read it once and run the necessary checks) - if binary
+    // (not ascii), read as array; if ascii, read as text
+
+    // make a secondary FileReader
+    var fr1 = new FileReader();
+    // the .onload will either load geometry as text or as array
+    fr1.onload = function() {
+      if (isBinary(fr1.result)) fr.readAsArrayBuffer(file);
+      else {
+        _this.format = "stlascii";
+        fr.readAsText(file);
+      }
+    }
+    // start up the secondary FileReader
+    fr1.readAsArrayBuffer(file);
+
+    // returns true if binary; else, return false
+    function isBinary(result) {
+      var dv = new DataView(result, 0);
+      // an ascii STL file will begin with these characters
+      var solid = "solid ".split("");
+      var isBinary = false;
+
+      // check that the file begins with the string "solid "
+      for (var i=0; i<solid.length; i++) {
+        if (String.fromCharCode(dv.getUint8(i))!=solid[i]) {
+          isBinary = true;
+          break;
+        }
+      }
+
+      return isBinary;
+    }
+  }
+  // if OBJ, read as ascii characters
   else if (this.format=="obj") fr.readAsText(file);
+  // else, we don't support this format
   else {
     var error = "Format '"+this.format+"' is not supported.";
     this.printout.error(error);
     callback(false);
   }
 
-  var parseResult = function(result) {
+  function parseResult(result) {
+    // if binary STL
     if (_this.format=="stl") {
       // mimicking
       // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
@@ -1892,7 +1960,6 @@ Model.prototype.import = function(file, callback) {
       var n = dv.getUint32(0, isLittleEndian);
 
       offset = 4;
-      _this.vertices = [];
       // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
       // mimics the code found in the THREE.Geometry class
       var vertexMap = {};
@@ -1901,7 +1968,7 @@ Model.prototype.import = function(file, callback) {
       for (var tri=0; tri<n; tri++) {
         var face = new THREE.Face3();
 
-        face.normal = getVector3(dv, offset, isLittleEndian);
+        face.normal = getVector3(dv, offset, isLittleEndian).normalize();
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
@@ -1933,13 +2000,77 @@ Model.prototype.import = function(file, callback) {
         );
       }
     }
+    // if ascii STL
+    else if (_this.format=="stlascii") {
+      var len = result.length;
+      // position in the file
+      var i = 0;
+      var lineNum = 0;
+
+      // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
+      // mimics the code found in the THREE.Geometry class
+      var vertexMap = {};
+      var p = Math.pow(10, _this.vertexPrecision);
+
+      // read the characters of the file
+      while (i<len) {
+        var line = getLine();
+        if (line.startsWith("facet normal ")) {
+          var face = new THREE.Face3();
+          // get the face normal from the line
+          face.normal = getVector3(line.substring(13)).normalize();
+
+          getLine(); // clear the "outer loop" line
+
+          var numVerts = 0;
+          // read off the three vertices
+          for (var vert=0; vert<3; vert++) {
+            var vline = getLine();
+            // if the line doesn't begin with "vertex ", break
+            if (!vline.startsWith("vertex ")) break;
+
+            var vertex = getVector3(vline.substring(7));
+            var idx = vertexMapIdx(vertexMap, vertex, _this.vertices, p);
+
+            face[faceGetSubscript(vert)] = idx;
+            numVerts++;
+          }
+
+          if (numVerts!=3) {
+            throw "incorrect number of vertices at line "+lineNum+" of '"+file.name+"'";
+          }
+
+          getLine(); // clear the "endloop" line
+          getLine(); // clear the "endfacet" line
+          _this.add(face);
+        }
+      }
+
+      function getLine() {
+        var i0 = i, ri;
+        do {
+          ri = result[i];
+          i++;
+        } while (ri!='\n' && i<len);
+        lineNum++;
+        return result.substring(i0, i).trim();
+      }
+      function getVector3(s) {
+        var vector = new THREE.Vector3();
+        var split = s.split(' ');
+        // read off three numbers
+        for (var j=0; j<3; j++) vector.setComponent(j, parseFloat(split[j]));
+        return vector;
+      }
+    }
+    // if OBJ
     else if (_this.format=="obj") {
-      _this.count = 0;
-      _this.vertices = [];
       var len = result.length;
       var hasVertNormals = false;
       var vertexNormals = [];
       var i = 0;
+      var lineNum = 0;
+
       while (i<len) {
         // get a line from the file string
         var line = getLine();
@@ -1969,6 +2100,7 @@ Model.prototype.import = function(file, callback) {
           ri = result[i];
           i++;
         } while (ri!='\n' && i<len);
+        lineNum++;
         return result.substring(i0, i).trim();
       }
       function getVector3(s) {
@@ -2013,6 +2145,9 @@ Model.prototype.import = function(file, callback) {
             triIndices.push([polyIndices[0],polyIndices[1],polyIndices[3]]);
             triIndices.push([polyIndices[3],polyIndices[1],polyIndices[2]]);
           }
+        }
+        else if (polyIndices.length<3) {
+          throw "not enough face indices at line "+lineNum+" of '"+file.name+"'";
         }
         for (var tri=0; tri<triIndices.length; tri++) {
           var triangle = new THREE.Face3();
