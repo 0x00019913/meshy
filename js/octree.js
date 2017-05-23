@@ -1,10 +1,13 @@
 // Octree constructor
+// Octree instnace ontains the root node for the octree and some data (scene,
+// references to geometry lists) that apply to the entire octree.
 // params:
 //  depth: depth at the root node; child nodes will have smaller depth
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
 //  scene: optional, used for visualizing the octree
-//  fillLater: true if will manually add the geometry later
+//  fillLater: if false, fill the octree with faces upon creation; if true,
+//    manually call addFace(i) to add the ith face
 Octree = function(depth, origin, size, faces, vertices, scene, fillLater) {
   this.depth = depth;
   this.origin = origin;
@@ -29,7 +32,12 @@ Octree = function(depth, origin, size, faces, vertices, scene, fillLater) {
   this.density = 0;
 }
 
+// add the ith face to the octree
 Octree.prototype.addFace = function(i) {
+  // check for invalid i
+  if (i>this.faces.length) return;
+
+  // add face to the octree
   var face = this.faces[i];
   this.node.addFace({
     verts: faceGetVerts(face, this.vertices),
@@ -38,6 +46,7 @@ Octree.prototype.addFace = function(i) {
   i);
 }
 
+// total number of leaf nodes
 Octree.prototype.numLeaves = function() {
   return this.node.numLeaves();
 }
@@ -50,14 +59,24 @@ Octree.prototype.numLeaves = function() {
 // (variable names are as per the convention of "An efficient Parametric
 // Algorithm for Octree Traversal")
 Octree.prototype.castRay = function(p, d) {
-  return this.node.castRay(p, d, this.faces, this.vertices);
+  if (!this.raycaster) this.raycaster = new Raycaster();
+  return this.raycaster.castRay(this.node, p, d, this.faces, this.vertices);
 }
 
+// visualize the octree
+// params:
+//  drawLines: if true, draw an outline along the edges of every cube; if false,
+//    just draw a point in the center of
+//  depthLimit: if provided, draw nodes at this depth (depth at leaf nodes is
+//    0); if not provided, draw the leaf nodes
 Octree.prototype.visualize = function(drawLines, depthLimit) {
   if (!this.scene) return;
+  this.unvisualize();
 
   var outlineGeo = new THREE.Geometry();
+  // populate the geometry object
   this.node.visualize(outlineGeo, drawLines, depthLimit);
+
   // if drawLines, then outline child nodes with lines; else, draw a point in
   // each one's center
   if (drawLines) {
@@ -95,6 +114,18 @@ Octree.prototype.visualize = function(drawLines, depthLimit) {
   this.scene.add(boxMesh);
 }
 
+// remove visualization
+Octree.prototype.unvisualize = function() {
+  if (!this.scene) return;
+
+  for (var i=this.scene.children.length-1; i>=0; i--) {
+    var child = this.scene.children[i];
+    if (child.name=="octree") {
+      this.scene.remove(child);
+    }
+  }
+}
+
 Octree.prototype.calculateEdgeIntersections = function() {
   this.node.calculateEdgeIntersections(this.faces, this.vertices);
 }
@@ -106,7 +137,18 @@ Octree.prototype.visualizeBorderEdges = function() {
   this.node.visualizeBorderEdges(borderGeo);
   var borderMat = new THREE.LineBasicMaterial({color: 0x00ff00});
   var borderMesh = new THREE.LineSegments(borderGeo, borderMat);
+  borderMesh.name = "octree";
   this.scene.add(borderMesh);
+}
+Octree.prototype.unvisualizeBorderEdges = function() {
+  if (!this.scene) return;
+
+  for (var i=this.scene.children.length-1; i>=0; i--) {
+    var child = this.scene.children[i];
+    if (child.name=="octreeBorderEdges") {
+      this.scene.remove(child);
+    }
+  }
 }
 
 
@@ -190,248 +232,6 @@ TreeNode.prototype.axisToBit = function(axis) {
   return axis=='x' ? 1 : (axis=='y' ? 2 : 4);
 }
 
-// return the point where the ray hits a face that has a normal with a positive
-// component along the ray direction;; if no hit, return null
-// params:
-//  p: ray origin (THREE.Vector3)
-//  d: ray direction, assumed normalized (THREE.Vector3)
-//  vertices: vertex array; need this to get vertices out of a face
-// (variable names are as per the convention of "An Efficient Parametric
-// Algorithm for Octree Traversal")
-TreeNode.prototype.castRay = function(p, d, faces, vertices) {
-  // correct d for values equal to -0: the negative sign breaks our math
-  if (d.x==-0) d.x = 0;
-  if (d.y==-0) d.y = 0;
-  if (d.z==-0) d.z = 0;
-
-  // get the enter and exit t parameters for the root node
-  var t0 = this.origin.clone().sub(p).divide(d);
-  var t1 = this.origin.clone().addScalar(this.size).sub(p).divide(d);
-
-  // direction sign vector: 1 if d is increasing along an axis, -1 if
-  // decreasing, 0 if constant
-  var dir = new THREE.Vector3(
-    Math.sign(d.x),
-    Math.sign(d.y),
-    Math.sign(d.z)
-  );
-  // swap t0 and t1 values for the axes on which the ray is decreasing
-  if (dir.x<0) {
-    var tmp = t0.x;
-    t0.x = t1.x;
-    t1.x = tmp;
-  }
-  if (dir.y<0) {
-    var tmp = t0.y;
-    t0.y = t1.y;
-    t1.y = tmp;
-  }
-  if (dir.z<0) {
-    var tmp = t0.z;
-    t0.z = t1.z;
-    t1.z = tmp;
-  }
-
-  // get the point where the ray exits the far end of the root node
-  var rayEnd = p.clone().add(d.clone().multiplyScalar(vector3Min(t1)));
-
-  // intersection-checking function to be passed to the ray-casting process:
-  // if the ray intersects the given face, return the distance from the ray
-  // origin to the intersection point; else, return 0
-  var hitTest = function(faceIdx, intersect) {
-    var face = faces[faceIdx];
-    // normal must have positive component along d
-    if (face.normal.dot(d)<=0) return 0;
-
-    // if correct normal, test intersection
-    var v1 = vertices[face.a];
-    var v2 = vertices[face.b];
-    var v3 = vertices[face.c];
-
-    // get the intersection of the face with the ray
-    var intersection = triSegmentIntersection(v1, v2, v3, p, rayEnd);
-
-    // if intersection exists, compute distance from ray source and return;
-    // else, return 0
-    if (intersection) return intersection;
-    else return null;
-  }
-
-  // cast the ray and get the point at which it hits
-  var hit = this.castRayProc(t0, t1, dir, p, hitTest);
-
-  return hit;
-}
-
-// returns the distane from the ray origin to the closest face it hits
-TreeNode.prototype.castRayProc = function(t0, t1, dir, p, hitTest) {
-  var _this = this;
-
-  // if at a leaf node
-  if (this.depth==0) {
-    for (var i=0; i<this.children.length; i++) {
-      // check for intersection between a face and the ray
-      var faceIdx = this.children[i];
-
-      // get the distance to the face
-      // (note that there may be multiple suitable faces in the node, but, given
-      // a sufficiently fine octree, the impact of only taking the first one
-      // should be negligible)
-      var hit = hitTest(faceIdx);
-      if (hit) return hit;
-    }
-
-    return null;
-  }
-  // if not at a leaf node, need to propagate the ray intersection testing to
-  // each child node the ray crosses (in the order it crosses them)
-  else {
-    // t at the middle of the node
-    var tm = t0.clone().add(t1).divideScalar(2.0);
-    // adjusting for the case of axis-asligned rays
-    var nodeCenter = this.origin.clone().addScalar(this.size/2.0);
-    if (isInfinite(t0.x)) tm.x = p.x<nodeCenter.x ? Infinity : -Infinity;
-    if (isInfinite(t0.y)) tm.y = p.y<nodeCenter.y ? Infinity : -Infinity;
-    if (isInfinite(t0.z)) tm.z = p.z<nodeCenter.z ? Infinity : -Infinity;
-
-    // find the node among the eight children which the ray enters first
-
-    // first child index
-    var currentChildIdx = 0;
-    // if decreasing along an axis, the node will be hit from the far side on
-    // that axis
-    if (dir.x<0) currentChildIdx += 1;
-    if (dir.y<0) currentChildIdx += 2;
-    if (dir.z<0) currentChildIdx += 4;
-    // axis normal to the plane on which the ray enters the node ('x', etc.)
-    var axis = vector3ArgMax(t0);
-    // given an entry plane, four candidate children may be crossed first; use
-    // the t values at entry and at middle to figure out the correct child
-    if (axis=='x') {
-      if (tm.y<t0.x) currentChildIdx += dir.y*2;
-      if (tm.z<t0.x) currentChildIdx += dir.z*4;
-    }
-    else if (axis=='y') {
-      if (tm.x<t0.y) currentChildIdx += dir.x;
-      if (tm.z<t0.y) currentChildIdx += dir.z*4;
-    }
-    else if (axis=='z') {
-      if (tm.x<t0.z) currentChildIdx += dir.x;
-      if (tm.y<t0.z) currentChildIdx += dir.y*2;
-    }
-    // correct for axis-aligned ray direction
-    if (dir.x==0) {
-      if (p.x<nodeCenter.x) currentChildIdx &= ~1; // unset x bit
-      else currentChildIdx |= 1;
-    }
-    if (dir.y==0) {
-      if (p.y<nodeCenter.y) currentChildIdx &= ~2; // unset x bit
-      else currentChildIdx |= 2;
-    }
-    if (dir.z==0) {
-      if (p.z<nodeCenter.z) currentChildIdx &= ~4; // unset x bit
-      else currentChildIdx |= 4;
-    }
-
-    // walk through the current node, recursing on the child nodes in the
-    // order the ray hits them
-    while (currentChildIdx>-1) {
-      var child = this.children[currentChildIdx];
-      var childParams = getNodeParams(currentChildIdx, t0, tm, t1, dir);
-
-      // child node may be undefined; if so, skip recursion and go to next child
-      if (child) {
-        var hit = child.castRayProc(childParams.t0, childParams.t1, dir, p, hitTest);
-        // if a child node has returned a collision, return that; the return
-        // value will propagate up the recursion
-        if (hit) return hit;
-      }
-
-      currentChildIdx = getNextChild(currentChildIdx, childParams.t1, dir);
-    }
-  }
-
-  return null;
-
-
-  // node traversal functions
-
-  // get the params of a node given its parent params
-  function getNodeParams(idx, t0, tm, t1, dir) {
-    // make a new pair of vectors to hold the new bounds
-    var t0c = t0.clone();
-    var t1c = t1.clone();
-
-    var xmask = 1&idx;
-    var ymask = 2&idx;
-    var zmask = 4&idx;
-
-    // move the params inward as necessary to fit to the child node
-
-    // if axis-aligned on x
-    if (dir.x==0) {
-      // need to make sure that entrance t is -Infinity and exit t is Infinity
-      if (xmask) t0c.x = -Infinity;
-      else t1c.x = Infinity;
-    }
-    // if not axis-aligned on x
-    else {
-      // check if the child is far or near on the axis from the ray origin
-      var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
-      // if child is near on the axis, move t1 down to the middle;
-      // if child is far on the axis, move t0 up to the middle
-      if (xnear) t1c.x = tm.x;
-      else t0c.x = tm.x;
-    }
-
-    if (dir.y==0) {
-      if (ymask) t0c.y = -Infinity;
-      else t1c.y = Infinity;
-    }
-    else {
-      var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
-      if (ynear) t1c.y = tm.y;
-      else t0c.y = tm.y;
-    }
-
-    if (dir.z==0) {
-      if (zmask) t0c.z = -Infinity;
-      else t1c.z = Infinity;
-    }
-    else {
-      var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
-      if (znear) t1c.z = tm.z;
-      else t0c.z = tm.z;
-    }
-
-    return { t0: t0c, t1: t1c };
-  }
-
-  // given a child we know we've visited, get the next child
-  function getNextChild(idx, t1, dir) {
-    // axis normal to the plane through which the ray exits the node
-    var exitAxis = vector3ArgMin(t1);
-
-    var xmask = 1&idx;
-    var ymask = 2&idx;
-    var zmask = 4&idx;
-    // bits signifying whether we're in a near node (hit by the ray sooner) or
-    // in a far node
-    var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
-    var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
-    var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
-
-    // can only advance to another child if we're in a near node on an axis and
-    // the exit face is to the far node on the same axis
-    if (xnear && exitAxis=='x') return idx + dir.x;
-    if (ynear && exitAxis=='y') return idx + dir.y*2;
-    if (znear && exitAxis=='z') return idx + dir.z*4;
-
-    // if can't advance, return -1
-    return -1;
-  }
-}
-
 // store a mask in each leaf node that indicates edge intersections
 // params:
 //  faces, vertices: pass these in to convert face indices to faces to vertices
@@ -489,8 +289,9 @@ TreeNode.prototype.numLeaves = function() {
   }
 }
 
+// populate a THREE.Geometry with points or line segments signifying the nodes
+// of the tree
 TreeNode.prototype.visualize = function(geo, drawLines, depthLimit) {
-
   if (this.depth==0 || (depthLimit!==undefined && this.depth==depthLimit)) {
     if (drawLines) {
       var v = this.nodeVertices();
@@ -525,6 +326,7 @@ TreeNode.prototype.visualize = function(geo, drawLines, depthLimit) {
   }
 }
 
+// populate a THREE.Geometry with segments signifying border edges
 TreeNode.prototype.visualizeBorderEdges = function(geo) {
   if (this.depth==0) {
     if (!this.edgeMask) return;
@@ -559,6 +361,282 @@ TreeNode.prototype.visualizeBorderEdges = function(geo) {
     }
   }
 }
+
+
+// Raycaster constructor - made it a separate class b/c we want to have the
+// various ray-related functions exist in this singleton instead of being
+// defined locally
+Raycaster = function() {
+  this.p = null;
+  this.d = null;
+  this.dir = null;
+
+  this.faces = null;
+  this.vertices = null;
+
+  this.rayEnd = null;
+}
+
+// return the point where the ray hits a face that has a normal with a positive
+// component along the ray direction;; if no hit, return null
+// params:
+//  node: starting node in the octree
+//  p: ray origin (THREE.Vector3)
+//  d: ray direction, assumed normalized (THREE.Vector3)
+//  vertices: vertex array; need this to get vertices out of a face
+// (variable names are as per the convention of "An Efficient Parametric
+// Algorithm for Octree Traversal")
+Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
+  this.p = p;
+  this.d = d;
+  this.faces = faces;
+  this.vertices = vertices;
+
+  // correct d for values equal to -0: the negative sign breaks our math
+  if (d.x==-0) d.x = 0;
+  if (d.y==-0) d.y = 0;
+  if (d.z==-0) d.z = 0;
+
+  // get the enter and exit t parameters for the root node
+  var t0 = node.origin.clone().sub(p).divide(d);
+  var t1 = node.origin.clone().addScalar(node.size).sub(p).divide(d);
+
+  // direction sign vector: 1 if d is increasing along an axis, -1 if
+  // decreasing, 0 if constant
+  var dir = new THREE.Vector3(
+    Math.sign(d.x),
+    Math.sign(d.y),
+    Math.sign(d.z)
+  );
+  // swap t0 and t1 values for the axes on which the ray is decreasing
+  if (dir.x<0) {
+    var tmp = t0.x;
+    t0.x = t1.x;
+    t1.x = tmp;
+  }
+  if (dir.y<0) {
+    var tmp = t0.y;
+    t0.y = t1.y;
+    t1.y = tmp;
+  }
+  if (dir.z<0) {
+    var tmp = t0.z;
+    t0.z = t1.z;
+    t1.z = tmp;
+  }
+  this.dir = dir;
+
+  // get the point where the ray exits the far end of the root node
+  this.rayEnd = p.clone().add(d.clone().multiplyScalar(vector3Min(t1)));
+
+  // cast the ray and get the point at which it hits
+  var hit = this.castRayProc(node, t0, t1);
+
+  return hit;
+}
+
+// intersection-checking function to be passed to the ray-casting process:
+// if the ray intersects the given face, return the distance from the ray
+// origin to the intersection point; else, return 0
+// params:
+//  faceIdx: index of a face in this.faces
+Raycaster.prototype.hitTest = function(faceIdx) {
+  var face = this.faces[faceIdx];
+  // normal must have positive component along d
+  if (face.normal.dot(this.d)<=0) return 0;
+
+  // if correct normal, test intersection
+  var v1 = this.vertices[face.a];
+  var v2 = this.vertices[face.b];
+  var v3 = this.vertices[face.c];
+
+  // get the intersection of the face with the ray
+  var intersection = triSegmentIntersection(v1, v2, v3, this.p, this.rayEnd);
+
+  // if intersection exists, compute distance from ray source and return it;
+  // else, return 0
+  if (intersection) return intersection;
+  else return null;
+}
+
+// returns the distance from the ray origin to the closest face it hits
+// params:
+//  node: node object in which we're casting the ray
+//  t0, t1: params of the node
+Raycaster.prototype.castRayProc = function(node, t0, t1) {
+  // if at a leaf node
+  if (node.depth==0) {
+    var children = node.children;
+    for (var i=0; i<children.length; i++) {
+      // check for intersection between a face and the ray
+      var faceIdx = children[i];
+
+      // get the distance to the face
+      // (note that there may be multiple suitable faces in the node, but, given
+      // a sufficiently fine octree, the impact of only taking the first one
+      // should be negligible)
+      var hit = this.hitTest(faceIdx);
+      if (hit) return hit;
+    }
+
+    return null;
+  }
+  // if not at a leaf node, need to propagate the ray intersection testing to
+  // each child node the ray crosses (in the order it crosses them)
+  else {
+    var dir = this.dir;
+    var p = this.p;
+    // t at the middle of the node
+    var tm = t0.clone().add(t1).divideScalar(2.0);
+    // adjusting for the case of axis-asligned rays
+    var nodeCenter = node.origin.clone().addScalar(node.size/2.0);
+    if (isInfinite(t0.x)) tm.x = p.x<nodeCenter.x ? Infinity : -Infinity;
+    if (isInfinite(t0.y)) tm.y = p.y<nodeCenter.y ? Infinity : -Infinity;
+    if (isInfinite(t0.z)) tm.z = p.z<nodeCenter.z ? Infinity : -Infinity;
+
+    // find the node among the eight children which the ray enters first
+
+    // first child index
+    var currentChildIdx = 0;
+    // if decreasing along an axis, the node will be hit from the far side on
+    // that axis
+    if (dir.x<0) currentChildIdx += 1;
+    if (dir.y<0) currentChildIdx += 2;
+    if (dir.z<0) currentChildIdx += 4;
+    // axis normal to the plane on which the ray enters the node ('x', etc.)
+    var axis = vector3ArgMax(t0);
+    // given an entry plane, four candidate children may be crossed first; use
+    // the t values at entry and at middle to figure out the correct child
+    if (axis=='x') {
+      if (tm.y<t0.x) currentChildIdx += dir.y*2;
+      if (tm.z<t0.x) currentChildIdx += dir.z*4;
+    }
+    else if (axis=='y') {
+      if (tm.x<t0.y) currentChildIdx += dir.x;
+      if (tm.z<t0.y) currentChildIdx += dir.z*4;
+    }
+    else if (axis=='z') {
+      if (tm.x<t0.z) currentChildIdx += dir.x;
+      if (tm.y<t0.z) currentChildIdx += dir.y*2;
+    }
+    // correct for axis-aligned ray direction
+    if (dir.x==0) {
+      if (p.x<nodeCenter.x) currentChildIdx &= ~1; // unset x bit
+      else currentChildIdx |= 1;
+    }
+    if (dir.y==0) {
+      if (p.y<nodeCenter.y) currentChildIdx &= ~2; // unset x bit
+      else currentChildIdx |= 2;
+    }
+    if (dir.z==0) {
+      if (p.z<nodeCenter.z) currentChildIdx &= ~4; // unset x bit
+      else currentChildIdx |= 4;
+    }
+
+    // walk through the current node, recursing on the child nodes in the
+    // order the ray hits them
+    while (currentChildIdx>-1) {
+      var child = node.children[currentChildIdx];
+      var childParams = this.getChildParams(currentChildIdx, t0, tm, t1);
+
+      // child node may be undefined; if so, skip recursion and go to next child
+      if (child) {
+        var hit = this.castRayProc(child, childParams.t0, childParams.t1);
+        // if a child node has returned a collision, return that; the return
+        // value will propagate up the recursion
+        if (hit) return hit;
+      }
+
+      currentChildIdx = this.getNextChild(currentChildIdx, childParams.t1);
+    }
+  }
+
+  return null;
+}
+// get the params of a node given its parent params
+// params:
+//  idx: index of child in parent
+//  t0, tm, t1: parent params
+Raycaster.prototype.getChildParams = function(idx, t0, tm, t1) {
+  var dir = this.dir;
+
+  // make a new pair of vectors to hold the new bounds
+  var t0c = t0.clone();
+  var t1c = t1.clone();
+
+  var xmask = 1&idx;
+  var ymask = 2&idx;
+  var zmask = 4&idx;
+
+  // move the params inward as necessary to fit to the child node
+
+  // if axis-aligned on x
+  if (dir.x==0) {
+    // need to make sure that entrance t is -Infinity and exit t is Infinity
+    if (xmask) t0c.x = -Infinity;
+    else t1c.x = Infinity;
+  }
+  // if not axis-aligned on x
+  else {
+    // check if the child is far or near on the axis from the ray origin
+    var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
+    // if child is near on the axis, move t1 down to the middle;
+    // if child is far on the axis, move t0 up to the middle
+    if (xnear) t1c.x = tm.x;
+    else t0c.x = tm.x;
+  }
+
+  if (dir.y==0) {
+    if (ymask) t0c.y = -Infinity;
+    else t1c.y = Infinity;
+  }
+  else {
+    var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
+    if (ynear) t1c.y = tm.y;
+    else t0c.y = tm.y;
+  }
+
+  if (dir.z==0) {
+    if (zmask) t0c.z = -Infinity;
+    else t1c.z = Infinity;
+  }
+  else {
+    var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
+    if (znear) t1c.z = tm.z;
+    else t0c.z = tm.z;
+  }
+
+  return { t0: t0c, t1: t1c };
+}
+
+// given the index of a child we know we've visited, get the next child
+Raycaster.prototype.getNextChild = function(idx, t1) {
+  var dir = this.dir;
+
+  // axis normal to the plane through which the ray exits the node
+  var exitAxis = vector3ArgMin(t1);
+
+  var xmask = 1&idx;
+  var ymask = 2&idx;
+  var zmask = 4&idx;
+  // bits signifying whether we're in a near node (hit by the ray sooner) or
+  // in a far node
+  var xnear = (!xmask && dir.x>0) || (xmask && dir.x<0);
+  var ynear = (!ymask && dir.y>0) || (ymask && dir.y<0);
+  var znear = (!zmask && dir.z>0) || (zmask && dir.z<0);
+
+  // can only advance to another child if we're in a near node on an axis and
+  // the exit face is to the far node on the same axis
+  if (xnear && exitAxis=='x') return idx + dir.x;
+  if (ynear && exitAxis=='y') return idx + dir.y*2;
+  if (znear && exitAxis=='z') return idx + dir.z*4;
+
+  // if can't advance, return -1
+  return -1;
+}
+
+
+// INTERSECTION TESTING FUNCTIONS
 
 // return true if cube intersects triangle
 // uses the standard 13 SAT intersection tests

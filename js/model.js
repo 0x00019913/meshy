@@ -674,7 +674,7 @@ Model.prototype.viewThickness = function(threshold) {
     {
       f: viewFaceThickness.bind(this),
       n: this.faces.length,
-      batchSize: clamp(this.faces.length/100, 1, 5000),
+      batchSize: clamp(this.faces.length/25, 1, 5000),
       onDone: onDone.bind(this),
       onProgress: onProgress.bind(this)
     },
@@ -945,8 +945,8 @@ Model.prototype.rayTest = function(repeats) {
     var d = face.normal.clone().multiplyScalar(-1);
     var hit = _this.octree.castRay(p, d, _this.faces, _this.vertices);
     if (!hit) return 0;
-    //showLine(p, hit);
-    //showLine(hit);
+    showLine(p, hit);
+    showLine(hit);
     return hit.distanceTo(p);
   }
 
