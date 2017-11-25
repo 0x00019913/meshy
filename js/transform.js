@@ -11,6 +11,7 @@
 
 // Constructor - transformation type, axis, amount, model object, and a printout
 // to output messages for the user.
+// Amount can be either a number or a Vector3.
 function Transform(op, axis, amount, model, printout) {
   this.printout = printout ? printout : console;
 
@@ -21,47 +22,77 @@ function Transform(op, axis, amount, model, printout) {
   }
   this.model = model;
   this.dynamic = false;
+  this.amount = new THREE.Vector3(); // init to (0, 0, 0)
+
   switch (op) {
     case "floor":
       this.op = "translate";
       this.axis = axis;
       if (axis=="all") {
-        this.amount = [-1*model.xmin, -1*model.ymin, -1*model.zmin];
+        this.amount.x = -1*model.xmin;
+        this.amount.y = -1*model.ymin;
+        this.amount.z = -1*model.zmin;
       }
       else {
-        this.amount = -1 * model[axis+"min"];
+        this.amount[axis] = -1 * model[axis+"min"];
       }
       break;
     case "center":
       this.op = "translate";
       this.axis = axis;
       if (axis=="all") {
-        this.amount = [-1*model.getCenterx(), -1*model.getCentery(), -1*model.getCenterz()];
+        this.amount.x = -1*model.getCenterx();
+        this.amount.y = -1*model.getCentery();
+        this.amount.z = -1*model.getCenterz();
       }
       else {
-        this.amount = -1 * model["getCenter"+axis]();
+        this.amount[axis] = -1 * model["getCenter"+axis]();
       }
+      break;
+    case "mirror":
+      this.op = "mirror";
+      this.axis = axis;
       break;
     case "translate":
       this.op = "translate";
       this.axis = axis;
-      this.amount = amount;
+      if (amount.isVector3) this.amount.copy(amount);
+      else this.amount[axis] = amount;
       break;
     case "rotate":
       this.op = "rotate";
-      this.axis = axis;
-      this.amount = amount;
-      break;
-    case "scale":
-      var isBadScale = amount<=0 || (amount.length && (amount[0]<=0 || amount[1]<=0 || amount[2]<=0));
-      if (isBadScale) {
+      if (axis=="all") {
         this.op = "noop";
-        this.reason = "Cannot scale by 0 or negative numbers: " + amount;
+        this.reason = "Cannot rotate on multiple axes at once.";
         return this;
       }
+      this.axis = axis;
+      if (amount.isVector3) this.amount.copy(amount);
+      else this.amount[axis] = amount;
+      break;
+    case "scale":
+      var isBadScale;
+      if (amount.isVector3) isBadScale = amount.x<=0 || amount.y<=0 || amount.z<=0
+      else isBadScale = amount<=0;
+
+      if (isBadScale) {
+        this.op = "noop";
+        this.reason = "Can only scale by positive numbers: " + amount;
+        return this;
+      }
+
       this.op = "scale";
       this.axis = axis;
-      this.amount = amount;
+      // if amount is vector, use it as is; else, allow scaling on all axes
+      // to be specified as a number (then scale on all axes by that number)
+      if (amount.isVector3) this.amount.copy(amount);
+      else {
+        if (axis=="all") this.amount.set(amount, amount, amount);
+        else {
+          this.amount.set(1,1,1);
+          this.amount[axis] = amount;
+        }
+      }
       break;
   }
   return this;
@@ -75,25 +106,16 @@ Transform.prototype = {
     if (this.op=="noop") {
       return null;
     }
+
     var amount;
     if (this.op=="scale") {
-      if (this.axis=="all") {
-        amount = [1/this.amount[0], 1/this.amount[1], 1/this.amount[2]];
-      }
-      else {
-        amount = 1/this.amount;
-      }
+      amount = new THREE.Vector3(1,1,1).divide(this.amount);
     }
     else { // translations and rotations
-      if (this.axis=="all") {
-        amount = [-1*this.amount[0], -1*this.amount[1], -1*this.amount[2]]
-      }
-      else {
-        amount = -1*this.amount;
-      }
+      amount = new THREE.Vector3(-1,-1,-1).multiply(this.amount);
     }
+
     var inv = new this.constructor(this.op, this.axis, amount, this.model);
-    inv.inverse = true;
     return inv;
   },
 
@@ -104,36 +126,16 @@ Transform.prototype = {
         this.printout.warn(this.reason);
         return;
       case "translate":
-        if (this.axis=="all") {
-          this.model.translate("x", this.amount[0]);
-          this.model.translate("y", this.amount[1]);
-          this.model.translate("z", this.amount[2]);
-        }
-        else {
-          this.model.translate(this.axis, this.amount);
-        }
+        this.model.translate(this.axis, this.amount);
         break;
       case "rotate":
-        if (this.axis=="all") {
-          // apply in reverse order if inverting rotation
-          var axisOrder = this.inverse ? ["z","y","x"] : ["x","y","z"];
-          this.model.rotate(axisOrder[0], this.amount[0]);
-          this.model.rotate(axisOrder[1], this.amount[1]);
-          this.model.rotate(axisOrder[2], this.amount[2]);
-        }
-        else {
-          this.model.rotate(this.axis, this.amount);
-        }
+        this.model.rotate(this.axis, this.amount);
         break;
       case "scale":
-        if (this.axis=="all") {
-          this.model.scale("x", this.amount[0]);
-          this.model.scale("y", this.amount[0]);
-          this.model.scale("z", this.amount[0]);
-        }
-        else {
-          this.model.scale(this.axis, this.amount);
-        }
+        this.model.scale(this.axis, this.amount);
+        break;
+      case "mirror":
+        this.model.mirror(this.axis);
         break;
     }
   },
@@ -142,6 +144,9 @@ Transform.prototype = {
   // pressing a button to perform a discrete transformation), but I decided
   // to not use it because WebGL is weighty enough without moving hundreds of
   // thousands of vertices in real time.
+
+  // this will come back when I move to transforming the matrix as opposed to
+  // the vertices themselves
 
   /* Intended pattern for dynamic updates (not using because updating in
       real time in WebGL is slow for large meshes):

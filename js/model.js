@@ -161,24 +161,42 @@ Model.prototype.setVertexPrecision = function(precision) {
 
 /* TRANSFORMATIONS */
 
-// Translate the model on axis ("x"/"y"/"z") by amount.
+// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
 Model.prototype.translate = function(axis, amount) {
-  this.printout.log("translation by "+amount+" units on "+axis+" axis");
-  for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i][axis] += amount;
+  // float precision for printout
+  var d = 4;
+
+  // if we're translating on all axes
+  if (axis=="all") {
+    var amountString = amount.x.toFixed(d)+", "+amount.y.toFixed(d)+", "+amount.z.toFixed(d);
+    this.printout.log("translation by ("+amountString+") units on x, y, z");
   }
+  // if we're translating on only one axis
+  else {
+    this.printout.log("translation by "+amount[axis].toFixed(d)+" units on "+axis+" axis");
+  }
+
+  for (var v=0; v<this.vertices.length; v++) this.vertices[v].add(amount);
+  if (this.centerOfMass) this.centerOfMass.add(amount);
+  for (var i=0; i<3; i++) {
+    var a = vector3ComponentToAxis(i);
+    if (amount[a]===0) continue;
+
+    this[a+"min"] += amount[a];
+    this[a+"max"] += amount[a];
+
+    this.measurement.translate(a, amount);
+  }
+
+  // set tags and clean up
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
   this.plainMesh.geometry.boundingSphere = null;
   this.plainMesh.geometry.boundingBox = null;
-  //transform bounds
-  this[axis+"min"] += amount;
-  this[axis+"max"] += amount;
 
   if (this.centerOfMass) {
-    // transform center of mass
-    this.centerOfMass[axis] += amount;
+    // transform center of mass indicator
     this.positionTargetPlanes(this.centerOfMass);
   }
 
@@ -190,23 +208,24 @@ Model.prototype.translate = function(axis, amount) {
 
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
-
-  this.measurement.translate(axis, amount);
 }
 
 // Rotate the model on axis ("x"/"y"/"z") by "amount" degrees.
 Model.prototype.rotate = function(axis, amount) {
-  this.printout.log("rotation by "+amount+" degrees about "+axis+" axis");
+  var degree = amount[axis]*Math.PI/180.0;
+
+  this.printout.log("rotation by "+amount[axis]+" degrees about "+axis+" axis");
   this.resetBounds();
-  amount = amount*Math.PI/180.0;
-  var axisVector = axisToVector3Map[axis];
+  // need a Vector3 for rotating vertices
+  var axisVector = axisToVector3(axis);
+
   for (var i=0; i<this.vertices.length; i++) {
     var vertex = this.vertices[i];
-    vertex.applyAxisAngle(axisVector, amount);
+    vertex.applyAxisAngle(axisVector, degree);
     this.updateBoundsV(vertex);
   }
   for (var i=0; i<this.count; i++) {
-    this.faces[i].normal.applyAxisAngle(axisVector, amount);
+    this.faces[i].normal.applyAxisAngle(axisVector, degree);
   }
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
@@ -215,7 +234,7 @@ Model.prototype.rotate = function(axis, amount) {
   this.plainMesh.geometry.boundingBox = null;
   if (this.centerOfMass) {
     // transform center of mass
-    this.centerOfMass.applyAxisAngle(axisToVector3Map[axis],amount);
+    this.centerOfMass.applyAxisAngle(axisToVector3(axis),degree);
     this.positionTargetPlanes(this.centerOfMass);
   }
 
@@ -230,15 +249,30 @@ Model.prototype.rotate = function(axis, amount) {
 
   // size argument is necessary for resizing things that aren't rotationally
   // symmetric
-  this.measurement.rotate(axis, amount, this.getSize());
+  this.measurement.rotate(axis, degree, this.getSize());
 }
 
 // Scale the model on axis ("x"/"y"/"z") by amount.
 Model.prototype.scale = function (axis, amount) {
-  this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
-  for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i][axis] *= amount;
+  // float precision for printout
+  var d = 4;
+
+  // if we're scaling on all axes
+  if (axis=="all") {
+    var amountString = amount.x.toFixed(d)+", "+amount.y.toFixed(d)+", "+amount.z.toFixed(d);
+    this.printout.log("scale by a factor of ("+amountString+") units on x, y, z");
   }
+  // if we're scaling on only one axis
+  else {
+    var amountString = amount[axis].toFixed(d);
+    this.printout.log("scale by a factor of "+amountString+" units on "+axis+" axis");
+  }
+  //this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
+  for (var i=0; i<this.vertices.length; i++) {
+    this.vertices[i].multiply(amount);
+  }
+  // normals may shift as a result of the scaling, so recompute
+  this.plainMesh.geometry.computeFaceNormals();
 
   this.plainMesh.geometry.verticesNeedUpdate = true;
   this.plainMesh.geometry.normalsNeedUpdate = true;
@@ -246,11 +280,14 @@ Model.prototype.scale = function (axis, amount) {
   this.plainMesh.geometry.boundingBox = null;
   this.surfaceArea = null;
   this.volume = null;
-  this[axis+"min"] *= amount;
-  this[axis+"max"] *= amount;
+  for (var i=0; i<3; i++) {
+    var a = vector3ComponentToAxis(i);
+    this[a+"min"] *= amount[a];
+    this[a+"max"] *= amount[a];
+  }
   if (this.centerOfMass) {
     // transform center of mass
-    this.centerOfMass[axis] *= amount;
+    this.centerOfMass[axis].multiply(amount);
     this.positionTargetPlanes(this.centerOfMass);
   }
 
@@ -264,6 +301,48 @@ Model.prototype.scale = function (axis, amount) {
   this.clearThicknessView();
 
   this.measurement.scale(axis, amount);
+}
+
+// Mirror the mesh along an axis.
+Model.prototype.mirror = function(axis) {
+  this.printout.log("mirror along "+axis+" axis");
+  for (var i=0; i<this.vertices.length; i++) {
+    this.vertices[i][axis] *= -1;
+  }
+  // flip the normal component and also flip the winding order
+  for (var i=0; i<this.faces.length; i++) {
+    var face = this.faces[i];
+    var tmp = face.a;
+    face.a = face.b;
+    face.b = tmp;
+    face.normal[axis] *= -1;
+  }
+
+  this.plainMesh.geometry.verticesNeedUpdate = true;
+  this.plainMesh.geometry.elementsNeedUpdate = true;
+  this.plainMesh.geometry.boundingSphere = null;
+  this.plainMesh.geometry.boundingBox = null;
+  // swap the min/max and negate
+  var tmp = this[axis+"min"];
+  this[axis+"min"] = -1*this[axis+"max"];
+  this[axis+"max"] = -1*tmp;
+
+  if (this.centerOfMass) {
+    // transform center of mass
+    this.centerOfMass[axis] *= -1;
+    this.positionTargetPlanes(this.centerOfMass);
+  }
+
+  this.removePatchMesh();
+
+  // invalidate the octree and stop any active iterators
+  this.octree = null;
+  this.stopIterator();
+
+  // erase the vertex colors signifying thickness
+  this.clearThicknessView();
+
+  this.measurement.scale(axis, -1);
 }
 
 /* MEASUREMENT */

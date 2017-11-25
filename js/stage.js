@@ -129,6 +129,10 @@ Stage.prototype.generateUI = function() {
   ringSizeFolder.add(this, "newRingSize", ringSizes);
   ringSizeFolder.add(this, "scaleToRingSize");
   ringSizeFolder.add(this, "mDeactivate");
+  var mirrorFolder = transformFolder.addFolder("Mirror");
+  mirrorFolder.add(this, "mirrorX");
+  mirrorFolder.add(this, "mirrorY");
+  mirrorFolder.add(this, "mirrorZ");
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
@@ -212,8 +216,7 @@ Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotatio
 Stage.prototype.scaleX = function() { this.transform("scale","x",this.xScale); }
 Stage.prototype.scaleY = function() { this.transform("scale","y",this.yScale); }
 Stage.prototype.scaleZ = function() { this.transform("scale","z",this.zScale); }
-Stage.prototype.scaleAll = function() {
-  this.transform("scale","all",[this.allScale, this.allScale, this.allScale]); }
+Stage.prototype.scaleAll = function() { this.transform("scale","all",this.allScale); }
 Stage.prototype.scaleToXSize = function() { this.scaleToSize("x",this.newXSize); }
 Stage.prototype.scaleToYSize = function() { this.scaleToSize("y",this.newYSize); }
 Stage.prototype.scaleToZSize = function() { this.scaleToSize("z",this.newZSize); }
@@ -222,7 +225,7 @@ Stage.prototype.scaleToSize = function(axis, value) {
     var currentSize = this.model["getSize"+axis]();
     if (currentSize>0) {
       var ratio = value/currentSize;
-      if (this.scaleOnAllAxes) this.transform("scale","all",[ratio,ratio,ratio]);
+      if (this.scaleOnAllAxes) this.transform("scale","all",ratio);
       else this.transform("scale",axis,ratio);
     }
     else {
@@ -236,10 +239,13 @@ Stage.prototype.scaleToMeasurement = function() {
     if (currentValue) {
       var ratio = this.newMeasurementValue/currentValue;
       if (this.measurementToScale=="crossSection") ratio = Math.sqrt(ratio);
-      this.transform("scale","all",[ratio,ratio,ratio]);
+      this.transform("scale","all",ratio);
     }
   }
 }
+Stage.prototype.mirrorX = function() { this.transform("mirror","x",null); }
+Stage.prototype.mirrorY = function() { this.transform("mirror","y",null); }
+Stage.prototype.mirrorZ = function() { this.transform("mirror","z",null); }
 Stage.prototype.floorX = function() { this.transform("floor","x",null); }
 Stage.prototype.floorY = function() { this.transform("floor","y",null); }
 Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
@@ -406,6 +412,9 @@ Stage.prototype.initViewport = function() {
     if (e.key=="z" && e.ctrlKey) {
       _this.undo();
     }
+    else if (e.key=="f") {
+      _this.cameraToModel();
+    }
   }
 
   function animate() {
@@ -543,7 +552,7 @@ Stage.prototype.displayMesh = function(success) {
     // it's necessary to clear file input box because it blocks importing
     // a model with the same name twice in a row
     this.fileInput.value = "";
-    
+
     this.model = null;
     return;
   }

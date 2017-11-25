@@ -22,10 +22,17 @@ function splitFilename(fullName) {
 // Vector3 stuff
 
 // for turning "x" etc. into a normalized Vector3 along axis
-var axisToVector3Map = {
-  x: new THREE.Vector3(1,0,0),
-  y: new THREE.Vector3(0,1,0),
-  z: new THREE.Vector3(0,0,1),
+var axisToVector3 = function(axis){
+  var v = new THREE.Vector3();
+  v[axis] = 1;
+  return v;
+}
+
+// turn 0/1/2 component into 'x'/'y'/'z' label
+var vector3ComponentToAxis = function(component) {
+  if (component==0) return 'x';
+  else if (component==1) return 'y';
+  else return 'z';
 }
 
 // cycle axis label to the next axis

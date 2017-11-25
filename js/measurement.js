@@ -393,7 +393,7 @@ Measurement.prototype.setCircleConnector = function(circle) {
 Measurement.prototype.setPlaneMarker = function() {
   var marker = this.planeMarkers[0];
   marker.position.copy(getZeroVector());
-  marker.lookAt(axisToVector3Map[this.planeParams.axis]);
+  marker.lookAt(axisToVector3(this.planeParams.axis));
   marker.position.copy(this.planeParams.center);
   var size = this.planeParams.size.clone();
   // want the marker to extrude past the bounds of the model
@@ -405,8 +405,8 @@ Measurement.prototype.setPlaneMarker = function() {
   // vector into the same orientation and *then* use it to scale. (But, if it's
   // already aligned with z, don't need to do anything.)
   if (this.planeParams.axis != "z") {
-    var axisVector = axisToVector3Map[this.planeParams.axis];
-    var rotationAngle = axisToVector3Map["z"].clone().cross(axisVector);
+    var axisVector = axisToVector3(this.planeParams.axis);
+    var rotationAngle = axisToVector3("z").clone().cross(axisVector);
     // one dimension of the scale goes negative after rotation without this
     size.y *= -1;
     size.applyAxisAngle(rotationAngle, Math.PI/2);
@@ -439,7 +439,7 @@ Measurement.prototype.translate = function(axis, amount) {
   // if plane measurement, just translate plane
   if (this.isPlanarMeasurement()) {
     for (var i=0; i<this.planeMarkers.length; i++) {
-      this.planeParams.center[axis] += amount;
+      this.planeParams.center.add(amount);
       this.setPlaneMarker();
     }
   }
@@ -448,7 +448,7 @@ Measurement.prototype.translate = function(axis, amount) {
     // translate markers
     for (var i=0; i<this.markers.length; i++) {
       var marker = this.markers[i];
-      if (marker.visible) marker.position[axis] += amount;
+      if (marker.visible) marker.position.add(amount);
     }
 
     // translate line conectors if linear measurement
@@ -456,8 +456,8 @@ Measurement.prototype.translate = function(axis, amount) {
       for (var i=0; i<this.lineConnectors.length; i++) {
         var connector = this.lineConnectors[i];
         if (connector.visible) {
-          connector.geometry.vertices[0][axis] += amount;
-          connector.geometry.vertices[1][axis] += amount;
+          connector.geometry.vertices[0].add(amount);
+          connector.geometry.vertices[1].add(amount);
           connector.geometry.verticesNeedUpdate = true;
         }
       }
@@ -466,7 +466,7 @@ Measurement.prototype.translate = function(axis, amount) {
     else {
       for (var i=0; i<this.circleConnectors.length; i++) {
         var connector = this.circleConnectors[i];
-        if (connector.visible) connector.position[axis] += amount;
+        if (connector.visible) connector.position.add(amount);
       }
     }
   }
@@ -478,7 +478,7 @@ Measurement.prototype.translate = function(axis, amount) {
 Measurement.prototype.rotate = function(axis, amount, size) {
   if (!this.active) return;
 
-  var axisVector = axisToVector3Map[axis];
+  var axisVector = axisToVector3(axis);
   if (this.isPlanarMeasurement()) {
     // If rotating in the same plane as the planar measurement, can just rotate
     // the plane marker and everything's good.
@@ -535,16 +535,16 @@ Measurement.prototype.scale = function(axis, amount) {
   if (!this.active) return;
 
   if (this.isPlanarMeasurement()) {
-    this.planeParams.center[axis] *= amount;
-    this.planeParams.size[axis] *= amount;
+    this.planeParams.center.multiply(amount);
+    this.planeParams.size.multiply(amount);
     this.setPlaneMarker();
   }
   else {
     // scale markers
-    var axisVector = axisToVector3Map[axis];
+    var axisVector = axisToVector3(axis);
     for (var i=0; i<this.markers.length; i++) {
       var marker = this.markers[i];
-      if (marker.visible) marker.position[axis] *= amount;
+      if (marker.visible) marker.position.multiply(amount);
     }
 
     // scale line conectors if linear measurement
@@ -552,8 +552,8 @@ Measurement.prototype.scale = function(axis, amount) {
       for (var i=0; i<this.lineConnectors.length; i++) {
         var connector = this.lineConnectors[i];
         if (connector.visible) {
-          connector.geometry.vertices[0][axis] *= amount;
-          connector.geometry.vertices[1][axis] *= amount;
+          connector.geometry.vertices[0].multiply(amount);
+          connector.geometry.vertices[1].multiply(amount);
           connector.geometry.verticesNeedUpdate = true;
         }
       }
