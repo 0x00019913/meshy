@@ -197,7 +197,7 @@ Stage.prototype.setVertexPrecision = function() {
 Stage.prototype.transform = function(op, axis, amount) {
   var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
-  if (inv) this.undoStack.push(inv);
+  this.undoStack.push(transform, inv);
   transform.apply();
 }
 
@@ -207,6 +207,7 @@ Stage.prototype.exportSTL = function() { this.export("stl"); }
 Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Stage.prototype.undo = function() { this.undoStack.undo(); }
+Stage.prototype.redo = function() { this.undoStack.redo(); }
 
 Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
 Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
@@ -409,15 +410,15 @@ Stage.prototype.initViewport = function() {
     _this.renderer.setSize(width, height);
   }
 
+  // keyboard controls
   function onKeyDown(e) {
-    if (e.key=="z" && e.ctrlKey) {
-      _this.undo();
+    if (e.ctrlKey) {
+      if (e.key=="z") _this.undo();
+      else if (e.key=="y") _this.redo();
     }
-    else if (e.key=="f") {
-      _this.cameraToModel();
-    }
-    else if (e.key=="c") {
-      _this.toggleCOM();
+    else {
+      if (e.key=="f") _this.cameraToModel();
+      else if (e.key=="c") _this.toggleCOM();
     }
   }
 

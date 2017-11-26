@@ -190,26 +190,45 @@ Transform.prototype = {
 // Constructor - initialized with a printout object.
 function UndoStack(printout) {
   this.printout = printout ? printout : console;
-  // stack of inverse transformations
+  // stack of transformations
   this.history = [];
+  this.pos = -1
 }
 
 UndoStack.prototype = {
   constructor: UndoStack,
 
-  // Pop the most recent inverse transform and apply it.
+  // Get the inverse transform at current positition and apply it.
   undo: function() {
-    if (this.history.length==0) {
+    if (this.pos < 0) {
       this.printout.warn("No undo history available.");
       return;
     }
-    var inv = this.history.pop();
-    inv.apply();
+    var inverse = this.history[this.pos--].inverse;
+    inverse.apply();
+  },
+
+  // Get the transform at the next position and apply it.
+  redo: function() {
+    if (this.pos >= this.history.length-1) {
+      this.printout.warn("No redo history available.");
+      return;
+    }
+    var transform = this.history[++this.pos].transform;
+    transform.apply();
   },
 
   // Put a new inverse transform onto the stack.
-  push: function(inv) {
-    if (inv) this.history.push(inv);
+  push: function(transform, inverse) {
+    if (this.pos < this.history.length-1) {
+      // effectively deletes all entries after this.pos
+      this.history.length = this.pos + 1;
+    }
+    if (transform && inverse) this.history.push({
+      transform: transform,
+      inverse: inverse
+    });
+    this.pos++;
   },
 
   // Clear the stack.
