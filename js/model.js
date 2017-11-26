@@ -36,17 +36,12 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   // octree
   this.octree = null;
 
-  // for slicing
-  this.sliceCount = null;
-  this.numSlices = 30;
-  this.delta = null;
-  this.segmentLists = null;
-
   // for display
   this.wireframe = false;
   this.currentMesh = null;
   this.plainMesh = null;
   this.slicedMesh = null;
+  this.mode = "plain";
   this.scene = scene;
   this.camera = camera;
   this.container = container;
@@ -653,25 +648,24 @@ Model.prototype.positionTargetPlanes = function(point) {
   this.targetPlanes[2].verticesNeedUpdate = true;
 }
 
-// Render the THREE mesh; currently, only the "plain" mode is supported.
-Model.prototype.render = function(scene, mode) {
-  this.scene = scene;
+// Set the mode.
+Model.prototype.setMode = function(scene, mode) {
+  this.mode = mode;
+  // remove any current meshes in the scene
+  this.removeMeshByName("model");
 
   if (mode == "plain") {
-    this.makePlainMesh(scene);
+    if (!this.plainMesh) this.makePlainMesh();
     this.currentMesh = this.plainMesh;
   }
   else if (mode == "sliced") {
-    if (!this.segmentLists) {
-      this.segmentLists = this.slice();
-    }
-    this.renderSlicedModel(scene);
+    if (!this.slicedMesh) this.makeSlicedMesh();
     this.currentMesh = this.slicedMesh;
   }
 }
 
 // Create the plain mesh (as opposed to another display mode).
-Model.prototype.makePlainMesh = function(scene) {
+Model.prototype.makePlainMesh = function() {
   if (this.plainMesh) return;
   /* set up camera, put in model */
   var geo = new THREE.Geometry();
@@ -680,8 +674,10 @@ Model.prototype.makePlainMesh = function(scene) {
   this.plainMesh = new THREE.Mesh(geo, this.materials.plainMesh);
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
-  scene.add(this.plainMesh);
+  this.scene.add(this.plainMesh);
 }
+
+
 
 // use the geometry to build an octree; this is quite computationally expensive
 // params:
@@ -1086,11 +1082,7 @@ Model.prototype.cancelPatch = function() {
 Model.prototype.removePatchMesh = function() {
   this.patchMesh = null;
 
-  if (!this.scene) return;
-  for (var i=this.scene.children.length-1; i>=0; i--) {
-    var child = this.scene.children[i];
-    if (child.name=="patch" || child.name=="borderVerts") this.scene.remove(child);
-  }
+  removeMeshByName(this.scene, "patch");
 }
 
 // the algorithm is like this:
@@ -1972,6 +1964,7 @@ Model.prototype.import = function(file, callback) {
     try {
       parseResult(fr.result);
       success = true;
+      _this.makePlainMesh();
       _this.printout.log("Imported file: " + file.name);
     } catch(e) {
       _this.printout.error("Error importing: " + e);
@@ -2021,6 +2014,7 @@ Model.prototype.import = function(file, callback) {
     var error = "Format '"+this.format+"' is not supported.";
     this.printout.error(error);
     callback(false);
+    return;
   }
 
   function parseResult(result) {
@@ -2267,17 +2261,16 @@ Model.prototype.dispose = function() {
   // stop any current non-blocking calculations
   this.stopIterator();
 
-  for (var i=this.scene.children.length-1; i>=0; i--) {
-    var child = this.scene.children[i];
-    if (child.name=="model" || child.name=="targetPlane") {
-      this.scene.remove(child);
-    }
-  }
+  removeMeshByName(this.scene, "model");
+  removeMeshByName(this.scene, "targetPlane");
+
+  // remove measurement markers, etc. from the scene
+  this.measurement.dispose();
 }
 
-// CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS, PROBABLY DOESN'T WORK.
+// OLD CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS, PROBABLY DOESN'T WORK.
 
-// UNUSED, make this workable later.
+// UNUSED, TODO: make this workable later.
 Model.prototype.renderSlicedModel = function(scene) {
   this.segmentLists = this.slice();
   var geo = new THREE.Geometry();

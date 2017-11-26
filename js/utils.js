@@ -123,6 +123,18 @@ function vertexHash(v, p) {
   return Math.round(v.x*p)+'_'+Math.round(v.y*p)+'_'+Math.round(v.z*p);
 }
 
+// Remove all meshes with a particular name from a scene.
+function removeMeshByName(scene, name) {
+  if (!scene) return;
+  
+  for (var i=scene.children.length-1; i>=0; i--) {
+    var child = scene.children[i];
+    if (child.name == name) {
+      scene.remove(child);
+    }
+  }
+}
+
 // for vertex hash maps
 
 // gets the index of a vertex in a hash map, adding it to the map and vertex

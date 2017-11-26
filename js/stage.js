@@ -296,6 +296,9 @@ Stage.prototype.acceptPatch = function() {
 Stage.prototype.cancelPatch = function() {
   if (this.model) this.model.cancelPatch();
 }
+Stage.prototype.activateSliceMode = function() {
+  if (this.model) this.model.activateSliceMode();
+}
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearScaleToMeasurementFolder();
   if (this.model) this.scalableMeasurements = this.model.getScalableMeasurements();
@@ -568,7 +571,11 @@ Stage.prototype.displayMesh = function(success) {
     this.model = null;
     return;
   }
-  this.model.render(this.scene, "plain");
+  // failsafe
+  if (!this.model) {
+    removeMeshByName(this.scene, "model");
+    return;
+  }
   this.cameraToModel();
   this.filename = this.model.filename;
   this.setMeshColor();

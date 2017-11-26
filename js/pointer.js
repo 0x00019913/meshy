@@ -142,3 +142,7 @@ Pointer.prototype.update = function() {
     this.intersection = null;
   }
 }
+
+Pointer.prototype.dispose = function() {
+  removeMeshByName(this.scene, "cursor");
+}

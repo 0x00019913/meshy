@@ -576,3 +576,10 @@ Measurement.prototype.showOutput = function() {
     this.printout.log(this.values);
   }
 }
+
+Measurement.prototype.dispose = function() {
+  removeMeshByName(this.scene, "marker");
+  removeMeshByName(this.scene, "connector");
+
+  this.pointer.dispose();
+}
