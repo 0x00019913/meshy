@@ -17,7 +17,13 @@ Stage = function() {
 
   // geometry
   this.model = null;
-  this.fileInput = document.getElementById("file");
+  var fileInput = document.createElement("input");
+  fileInput.id = "file";
+  fileInput.type = "file";
+  fileInput.onchange = function() { stage.handleFile(this.files[0]); };
+  document.body.appendChild(fileInput);
+  this.fileInput = fileInput;
+
   this.isLittleEndian = true;
   this.vertexPrecision = 5;
 

@@ -29,21 +29,17 @@ function Transform(op, axis, amount, model, printout) {
       this.op = "translate";
       this.axis = axis;
       if (axis=="all") {
-        this.amount.x = -1*model.xmin;
-        this.amount.y = -1*model.ymin;
-        this.amount.z = -1*model.zmin;
+        this.amount.copy(model.min).multiplyScalar(-1);
       }
       else {
-        this.amount[axis] = -1 * model[axis+"min"];
+        this.amount[axis] = -1 * model.min[axis]
       }
       break;
     case "center":
       this.op = "translate";
       this.axis = axis;
       if (axis=="all") {
-        this.amount.x = -1*model.getCenterx();
-        this.amount.y = -1*model.getCentery();
-        this.amount.z = -1*model.getCenterz();
+        this.amount.copy(model.getCenter()).multiplyScalar(-1);
       }
       else {
         this.amount[axis] = -1 * model["getCenter"+axis]();
@@ -233,6 +229,7 @@ UndoStack.prototype = {
 
   // Clear the stack.
   clear: function() {
-    this.history = [];
+    this.history.length = 0;
+    this.pos = -1;
   }
 }
