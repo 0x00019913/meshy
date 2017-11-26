@@ -205,7 +205,7 @@ UndoStack.prototype = {
       return;
     }
     var inverse = this.history[this.pos--].inverse;
-    inverse.apply();
+    if (inverse) inverse.apply();
   },
 
   // Get the transform at the next position and apply it.

@@ -536,7 +536,7 @@ Measurement.prototype.scale = function(amount) {
 
   if (this.isPlanarMeasurement()) {
     this.planeParams.center.multiply(amount);
-    this.planeParams.size.multiply(amount);
+    this.planeParams.size.multiply(vector3Abs(amount));
     this.setPlaneMarker();
   }
   else {

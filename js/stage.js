@@ -165,13 +165,14 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
   this.gui.add(this, "undo");
+  this.gui.add(this, "redo");
   this.gui.add(this, "delete");
 
   this.infoBox = new InfoBox();
   this.infoBox.add("Polycount", this, ["model","count"]);
-  this.infoBox.addMultiple("x range", this, [["model","xmin"], ["model","xmax"]]);
-  this.infoBox.addMultiple("y range", this, [["model","ymin"], ["model","ymax"]]);
-  this.infoBox.addMultiple("z range", this, [["model","zmin"], ["model","zmax"]]);
+  this.infoBox.addMultiple("x range", this, [["model","getxmin"], ["model","getxmax"]]);
+  this.infoBox.addMultiple("y range", this, [["model","getymin"], ["model","getymax"]]);
+  this.infoBox.addMultiple("z range", this, [["model","getzmin"], ["model","getzmax"]]);
   this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
   this.infoBox.addMultiple("Size", this, [["model", "getSizex"],["model", "getSizey"],["model", "getSizez"]]);
   this.infoBox.add("Surface area", this, ["model","surfaceArea"],"[calculate]");
@@ -197,7 +198,7 @@ Stage.prototype.setVertexPrecision = function() {
 Stage.prototype.transform = function(op, axis, amount) {
   var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
-  this.undoStack.push(transform, inv);
+  if (inv) this.undoStack.push(transform, inv);
   transform.apply();
 }
 

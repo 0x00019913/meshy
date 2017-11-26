@@ -65,6 +65,13 @@ function clamp(x, minVal, maxVal) {
   else if (x>maxVal) x = maxVal;
   return x;
 }
+function vector3Abs(v) {
+  var result = new THREE.Vector3();
+  result.x = Math.abs(v.x);
+  result.y = Math.abs(v.y);
+  result.z = Math.abs(v.z);
+  return result;
+}
 
 
 // bool checks

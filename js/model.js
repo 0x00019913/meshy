@@ -164,6 +164,13 @@ Model.prototype.setVertexPrecision = function(precision) {
   this.vertexPrecision = precision;
   this.p = Math.pow(10, precision);
 }
+// Return individual mins and maxes.
+Model.prototype.getxmin = function() { return this.min.x; }
+Model.prototype.getymin = function() { return this.min.y; }
+Model.prototype.getzmin = function() { return this.min.z; }
+Model.prototype.getxmax = function() { return this.max.x; }
+Model.prototype.getymax = function() { return this.max.y; }
+Model.prototype.getzmax = function() { return this.max.z; }
 
 /* TRANSFORMATIONS */
 
@@ -270,7 +277,6 @@ Model.prototype.scale = function (axis, amount) {
     var amountString = amount[axis].toFixed(d);
     this.printout.log("scale by a factor of "+amountString+" units on "+axis+" axis");
   }
-  //this.printout.log("scale by a factor of "+amount+" along "+axis+" axis");
   for (var i=0; i<this.vertices.length; i++) {
     this.vertices[i].multiply(amount);
   }
@@ -287,7 +293,7 @@ Model.prototype.scale = function (axis, amount) {
   this.max.multiply(amount);
   if (this.centerOfMass) {
     // transform center of mass
-    this.centerOfMass[axis].multiply(amount);
+    this.centerOfMass.multiply(amount);
     this.positionTargetPlanes(this.centerOfMass);
   }
 
@@ -310,7 +316,7 @@ Model.prototype.mirror = function(axis) {
   var scaleVector = new THREE.Vector3(1,1,1);
   scaleVector[axis] = -1;
   for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i][axis].multiply(scaleVector);
+    this.vertices[i].multiply(scaleVector);
   }
   // flip the normal component and also flip the winding order
   for (var i=0; i<this.faces.length; i++) {
@@ -562,7 +568,7 @@ Model.prototype.faceIntersection = function(face, axis, pos) {
 // Toggle wireframe.
 Model.prototype.toggleWireframe = function() {
   this.wireframe = !this.wireframe;
-  this.printout.log("wireframe is " + (this.wireframe ? "on" : "off"));
+  this.printout.log("Wireframe is " + (this.wireframe ? "on" : "off") + ".");
   if (this.plainMesh) {
     this.plainMesh.material.wireframe = this.wireframe;
   }
@@ -581,7 +587,7 @@ Model.prototype.setMeshColor = function(color) {
 Model.prototype.toggleCenterOfMass = function() {
   this.calcCenterOfMass();
   this.showCenterOfMass = !this.showCenterOfMass;
-  this.printout.log("COM indicator is "+(this.showCenterOfMass ? "on" : "off"));
+  this.printout.log("Center of mass indicator is "+(this.showCenterOfMass ? "on" : "off")+".");
   var visible = this.showCenterOfMass;
   this.positionTargetPlanes(this.centerOfMass);
   this.scene.traverse(function(o) {
