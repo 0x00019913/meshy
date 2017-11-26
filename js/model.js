@@ -27,6 +27,8 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.setVertexPrecision(5);
 
   // calculated stuff
+  this.min = new THREE.Vector3();
+  this.max = new THREE.Vector3();
   this.resetBounds(); // sets bounds to Infinity
   this.surfaceArea = null;
   this.volume = null;
@@ -54,11 +56,23 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.targetPlanes = null;
   this.showCenterOfMass = false;
 
+  // all materials used in the model
+  this.materials = {
+    plainMesh: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: THREE.FaceColors
+    }),
+    patch: new THREE.MeshStandardMaterial({
+      color: 0x44ff44,
+      wireframe: false
+    }),
+    targetPlane: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide
+    })
+  };
+
   // for patching the mesh
-  this.patchMat = new THREE.MeshStandardMaterial({
-    color: 0x44ff44,
-    wireframe: false
-  });
   this.patchMesh = null;
 
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
@@ -79,12 +93,12 @@ Model.prototype.add = function(face) {
 
 // All bounds to Infinity.
 Model.prototype.resetBounds = function() {
-  this.xmin = Infinity;
-  this.xmax = -Infinity;
-  this.ymin = Infinity;
-  this.ymax = -Infinity;
-  this.zmin = Infinity;
-  this.zmax = -Infinity;
+  this.min.x = Infinity;
+  this.min.y = Infinity;
+  this.min.z = Infinity;
+  this.max.x = -Infinity;
+  this.max.y = -Infinity;
+  this.max.z = -Infinity;
 }
 
 // Update the bounds with a new face.
@@ -95,23 +109,15 @@ Model.prototype.updateBoundsF = function(face) {
 
 // Update bounds with a new vertex.
 Model.prototype.updateBoundsV = function(v) {
-  this.xmin = v.x<this.xmin ? v.x : this.xmin;
-  this.xmax = v.x>this.xmax ? v.x : this.xmax;
-  this.ymin = v.y<this.ymin ? v.y : this.ymin;
-  this.ymax = v.y>this.ymax ? v.y : this.ymax;
-  this.zmin = v.z<this.zmin ? v.z : this.zmin;
-  this.zmax = v.z>this.zmax ? v.z : this.zmax;
+  this.min.min(v);
+  this.max.max(v);
 }
 
 // Get the bounds as one object.
 Model.prototype.getBounds = function() {
   return {
-    xmin: this.xmin,
-    xmax: this.xmax,
-    ymin: this.ymin,
-    ymax: this.ymax,
-    zmin: this.zmin,
-    zmax: this.zmax
+    min: this.min,
+    max: this.max
   };
 }
 
@@ -120,17 +126,17 @@ Model.prototype.getCenter = function() {
   return new THREE.Vector3(this.getCenterx(), this.getCentery(), this.getCenterz());
 }
 // Get individual coords of the center.
-Model.prototype.getCenterx = function() { return (this.xmax+this.xmin)/2; }
-Model.prototype.getCentery = function() { return (this.ymax+this.ymin)/2; }
-Model.prototype.getCenterz = function() { return (this.zmax+this.zmin)/2; }
+Model.prototype.getCenterx = function() { return (this.max.x+this.min.x)/2; }
+Model.prototype.getCentery = function() { return (this.max.y+this.min.y)/2; }
+Model.prototype.getCenterz = function() { return (this.max.z+this.min.z)/2; }
 // Get a list representing the size of the model in every direction.
 Model.prototype.getSize = function() {
   return new THREE.Vector3(this.getSizex(), this.getSizey(), this.getSizez());
 }
 // Get individual sizes of the model.
-Model.prototype.getSizex = function() { return (this.xmax-this.xmin); }
-Model.prototype.getSizey = function() { return (this.ymax-this.ymin); }
-Model.prototype.getSizez = function() { return (this.zmax-this.zmin); }
+Model.prototype.getSizex = function() { return (this.max.x-this.min.x); }
+Model.prototype.getSizey = function() { return (this.max.y-this.min.y); }
+Model.prototype.getSizez = function() { return (this.max.z-this.min.z); }
 // Largest dimension of the model.
 Model.prototype.getMaxSize = function() {
   var size = this.getSize();
@@ -176,17 +182,8 @@ Model.prototype.translate = function(axis, amount) {
     this.printout.log("translation by "+amount[axis].toFixed(d)+" units on "+axis+" axis");
   }
 
+  // translate vertices
   for (var v=0; v<this.vertices.length; v++) this.vertices[v].add(amount);
-  if (this.centerOfMass) this.centerOfMass.add(amount);
-  for (var i=0; i<3; i++) {
-    var a = vector3ComponentToAxis(i);
-    if (amount[a]===0) continue;
-
-    this[a+"min"] += amount[a];
-    this[a+"max"] += amount[a];
-
-    this.measurement.translate(a, amount);
-  }
 
   // set tags and clean up
 
@@ -195,7 +192,11 @@ Model.prototype.translate = function(axis, amount) {
   this.plainMesh.geometry.boundingSphere = null;
   this.plainMesh.geometry.boundingBox = null;
 
+  this.min.add(amount);
+  this.max.add(amount);
+
   if (this.centerOfMass) {
+    this.centerOfMass.add(amount)
     // transform center of mass indicator
     this.positionTargetPlanes(this.centerOfMass);
   }
@@ -208,6 +209,8 @@ Model.prototype.translate = function(axis, amount) {
 
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
+
+  this.measurement.translate(amount);
 }
 
 // Rotate the model on axis ("x"/"y"/"z") by "amount" degrees.
@@ -280,11 +283,8 @@ Model.prototype.scale = function (axis, amount) {
   this.plainMesh.geometry.boundingBox = null;
   this.surfaceArea = null;
   this.volume = null;
-  for (var i=0; i<3; i++) {
-    var a = vector3ComponentToAxis(i);
-    this[a+"min"] *= amount[a];
-    this[a+"max"] *= amount[a];
-  }
+  this.min.multiply(amount);
+  this.max.multiply(amount);
   if (this.centerOfMass) {
     // transform center of mass
     this.centerOfMass[axis].multiply(amount);
@@ -300,14 +300,17 @@ Model.prototype.scale = function (axis, amount) {
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
 
-  this.measurement.scale(axis, amount);
+  this.measurement.scale(amount);
 }
 
 // Mirror the mesh along an axis.
 Model.prototype.mirror = function(axis) {
   this.printout.log("mirror along "+axis+" axis");
+
+  var scaleVector = new THREE.Vector3(1,1,1);
+  scaleVector[axis] = -1;
   for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i][axis] *= -1;
+    this.vertices[i][axis].multiply(scaleVector);
   }
   // flip the normal component and also flip the winding order
   for (var i=0; i<this.faces.length; i++) {
@@ -323,9 +326,9 @@ Model.prototype.mirror = function(axis) {
   this.plainMesh.geometry.boundingSphere = null;
   this.plainMesh.geometry.boundingBox = null;
   // swap the min/max and negate
-  var tmp = this[axis+"min"];
-  this[axis+"min"] = -1*this[axis+"max"];
-  this[axis+"max"] = -1*tmp;
+  var tmp = this.min[axis];
+  this.min[axis] = -1*this.max[axis];
+  this.max[axis] = -1*tmp;
 
   if (this.centerOfMass) {
     // transform center of mass
@@ -342,7 +345,7 @@ Model.prototype.mirror = function(axis) {
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
 
-  this.measurement.scale(axis, -1);
+  this.measurement.scale(scaleVector);
 }
 
 /* MEASUREMENT */
@@ -594,7 +597,7 @@ Model.prototype.generateTargetPlanes = function() {
     new THREE.PlaneGeometry(size,size).rotateX(Math.PI/2), // normal y
     new THREE.PlaneGeometry(size,size) // normal z
   ];
-  var planeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  var planeMat = this.materials.targetPlane;
   planeMat.transparent = true;
   planeMat.opacity = 0.5;
   var planeMeshes = [
@@ -621,24 +624,23 @@ Model.prototype.positionTargetPlanes = function(point) {
   // by 0.1 times its size
   var extendFactor = 0.1;
   var size = this.getSize().multiplyScalar(extendFactor);
-  var xmin = this.xmin-size.x, xmax = this.xmax+size.x;
-  var ymin = this.ymin-size.y, ymax = this.ymax+size.y;
-  var zmin = this.zmin-size.z, zmax = this.zmax+size.z;
+  var min = this.min.clone().sub(size);
+  var max = this.max.clone().add(size);
 
-  vX[0].set(point.x, ymin, zmin);
-  vX[1].set(point.x, ymin, zmax);
-  vX[2].set(point.x, ymax, zmin);
-  vX[3].set(point.x, ymax, zmax);
+  vX[0].set(point.x, min.y, min.z);
+  vX[1].set(point.x, min.y, max.z);
+  vX[2].set(point.x, max.y, min.z);
+  vX[3].set(point.x, max.y, max.z);
 
-  vY[0].set(xmin, point.y, zmin);
-  vY[1].set(xmin, point.y, zmax);
-  vY[2].set(xmax, point.y, zmin);
-  vY[3].set(xmax, point.y, zmax);
+  vY[0].set(min.x, point.y, min.z);
+  vY[1].set(min.x, point.y, max.z);
+  vY[2].set(max.x, point.y, min.z);
+  vY[3].set(max.x, point.y, max.z);
 
-  vZ[0].set(xmin, ymin, point.z);
-  vZ[1].set(xmin, ymax, point.z);
-  vZ[2].set(xmax, ymin, point.z);
-  vZ[3].set(xmax, ymax, point.z);
+  vZ[0].set(min.x, min.y, point.z);
+  vZ[1].set(min.x, max.y, point.z);
+  vZ[2].set(max.x, min.y, point.z);
+  vZ[3].set(max.x, max.y, point.z);
 
   this.targetPlanes[0].verticesNeedUpdate = true;
   this.targetPlanes[1].verticesNeedUpdate = true;
@@ -669,11 +671,7 @@ Model.prototype.makePlainMesh = function(scene) {
   var geo = new THREE.Geometry();
   geo.vertices = this.vertices;
   geo.faces = this.faces;
-  var mat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    vertexColors: THREE.FaceColors
-  });
-  this.plainMesh = new THREE.Mesh(geo, mat);
+  this.plainMesh = new THREE.Mesh(geo, this.materials.plainMesh);
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
   scene.add(this.plainMesh);
@@ -1098,13 +1096,6 @@ Model.prototype.generatePatch = function() {
   // remove any existing patch
   this.removePatchMesh();
 
-  // for visualizing verts; unused, but leaving it here as debugging code
-  var borderGeo = new THREE.Geometry();
-  var borderMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.07});
-  var borderMesh = new THREE.Points(borderGeo, borderMat);
-  borderMesh.name = "borderVerts";
-  this.scene.add(borderMesh);
-
   // get the hash table detailing vertex adjacency
   var adjacencyMap = this.generateAdjacencyMap(this.vertices, this.faces, true, true);
 
@@ -1130,7 +1121,7 @@ Model.prototype.generatePatch = function() {
   var patchGeo = new THREE.Geometry();
   patchGeo.vertices = patchVertices;
   patchGeo.faces = patchFaces;
-  this.patchMesh = new THREE.Mesh(patchGeo, this.patchMat);
+  this.patchMesh = new THREE.Mesh(patchGeo, this.materials.patch);
   this.patchMesh.name = "patch";
   this.scene.add(this.patchMesh);
 

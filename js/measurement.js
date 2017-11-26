@@ -433,7 +433,7 @@ Measurement.prototype.rescale = function() {
 }
 
 // Translate the markers and the connectors.
-Measurement.prototype.translate = function(axis, amount) {
+Measurement.prototype.translate = function(amount) {
   if (!this.active) return;
 
   // if plane measurement, just translate plane
@@ -531,7 +531,7 @@ Measurement.prototype.rotate = function(axis, amount, size) {
 }
 
 // Scale the markers and recalculate the connectors.
-Measurement.prototype.scale = function(axis, amount) {
+Measurement.prototype.scale = function(amount) {
   if (!this.active) return;
 
   if (this.isPlanarMeasurement()) {
@@ -541,7 +541,6 @@ Measurement.prototype.scale = function(axis, amount) {
   }
   else {
     // scale markers
-    var axisVector = axisToVector3(axis);
     for (var i=0; i<this.markers.length; i++) {
       var marker = this.markers[i];
       if (marker.visible) marker.position.multiply(amount);
