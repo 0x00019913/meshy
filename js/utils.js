@@ -109,11 +109,18 @@ function objectIsEmpty(obj) {
 // THREE.Face3- and THREE.Vector3-related functions
 // get THREE.Face3 vertices
 function faceGetVerts(face, vertices) {
-    return [
-      vertices[face.a],
-      vertices[face.b],
-      vertices[face.c]
-    ];
+  return [
+    vertices[face.a],
+    vertices[face.b],
+    vertices[face.c]
+  ];
+}
+function faceGetBounds(face, axis, vertices) {
+  var verts = faceGetVerts(face, vertices);
+  return {
+    max: Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis])),
+    min: Math.min(verts[0][axis], Math.min(verts[1][axis], verts[2][axis]))
+  };
 }
 // Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
 function faceGetSubscript(idx) {
@@ -126,7 +133,7 @@ function vertexHash(v, p) {
 // Remove all meshes with a particular name from a scene.
 function removeMeshByName(scene, name) {
   if (!scene) return;
-  
+
   for (var i=scene.children.length-1; i>=0; i--) {
     var child = scene.children[i];
     if (child.name == name) {
@@ -163,6 +170,25 @@ function vertexArrayToMap(map, vertices, p) {
   for (var v=0; v<vertices.length; v++) {
     map[vertexHash(vertices[v], p)] = v;
   }
+}
+
+// intersection between line segment and plane normal to axis
+function segmentPlaneIntersection(axis, plane, va, vb) {
+  // va assumed lower on axis than vb; if not, make it so
+  if (va[axis] > vb[axis]) {
+    var tmp = va;
+    va = vb;
+    vb = tmp;
+  }
+
+  // if equal, just return va
+  if (va[axis] == vb[axis]) return va;
+
+  // calculate linear interpolation factor; note that, as checked above, the
+  // denominator will be positive
+  var t = (plane - va[axis]) / (vb[axis] - va[axis]);
+  // interpolate
+  return va.clone().multiplyScalar(1-t).add(vb.clone().multiplyScalar(t));
 }
 
 

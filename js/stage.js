@@ -69,9 +69,11 @@ Stage.prototype.generateUI = function() {
   exportFolder.add(this, "exportOBJ");
   exportFolder.add(this, "exportSTL");
   exportFolder.add(this, "exportSTLascii");
+
   var settingsFolder = this.gui.addFolder("Settings");
   settingsFolder.add(this, "toggleFloor");
   settingsFolder.add(this, "toggleAxisWidget");
+
   var displayFolder = this.gui.addFolder("Mesh Display");
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
@@ -79,10 +81,13 @@ Stage.prototype.generateUI = function() {
   this.meshColor = "#ffffff";
   this.meshColorController =
     displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
+
   var technicalFolder = settingsFolder.addFolder("Technical");
   technicalFolder.add(this, "isLittleEndian");
   technicalFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
+
   var transformFolder = this.gui.addFolder("Transform");
+
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
   translateFolder.add(this, "xTranslation");
@@ -93,6 +98,7 @@ Stage.prototype.generateUI = function() {
   this.zTranslation = 0;
   translateFolder.add(this, "zTranslation");
   translateFolder.add(this, "translateZ");
+
   var rotateFolder = transformFolder.addFolder("Rotate");
   this.xRotation = 0;
   rotateFolder.add(this, "xRotation");
@@ -103,7 +109,9 @@ Stage.prototype.generateUI = function() {
   this.zRotation = 0;
   rotateFolder.add(this, "zRotation");
   rotateFolder.add(this, "rotateZ");
+
   var scaleFolder = transformFolder.addFolder("Scale");
+
   var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
   this.xScale = 1;
   scaleByFactorFolder.add(this, "xScale", 0);
@@ -117,6 +125,7 @@ Stage.prototype.generateUI = function() {
   this.allScale = 1;
   scaleByFactorFolder.add(this, "allScale", 0);
   scaleByFactorFolder.add(this, "scaleAll");
+
   var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
   this.scaleOnAllAxes = true;
   scaleToSizeFolder.add(this, "scaleOnAllAxes");
@@ -129,30 +138,37 @@ Stage.prototype.generateUI = function() {
   this.newZSize = 1;
   scaleToSizeFolder.add(this, "newZSize", 0);
   scaleToSizeFolder.add(this, "scaleToZSize");
+
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
+
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size");
   ringSizeFolder.add(this, "mCircle");
   this.newRingSize = 0;
   ringSizeFolder.add(this, "newRingSize", ringSizes);
   ringSizeFolder.add(this, "scaleToRingSize");
   ringSizeFolder.add(this, "mDeactivate");
+
   var mirrorFolder = transformFolder.addFolder("Mirror");
   mirrorFolder.add(this, "mirrorX");
   mirrorFolder.add(this, "mirrorY");
   mirrorFolder.add(this, "mirrorZ");
+
   var floorFolder = transformFolder.addFolder("Floor");
   floorFolder.add(this, "floorX");
   floorFolder.add(this, "floorY");
   floorFolder.add(this, "floorZ");
+
   var centerFolder = transformFolder.addFolder("Center");
   centerFolder.add(this, "centerAll");
   centerFolder.add(this, "centerX");
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
+
   var calculationFolder = this.gui.addFolder("Calculate");
   calculationFolder.add(this, "calcSurfaceArea");
   calculationFolder.add(this, "calcVolume");
   calculationFolder.add(this, "calcCenterOfMass");
+
   var measurementFolder = this.gui.addFolder("Measure");
   measurementFolder.add(this, "mLength");
   measurementFolder.add(this, "mAngle");
@@ -161,15 +177,21 @@ Stage.prototype.generateUI = function() {
   measurementFolder.add(this, "mCrossSectionY");
   measurementFolder.add(this, "mCrossSectionZ");
   measurementFolder.add(this, "mDeactivate");
+
   var thicknessFolder = this.gui.addFolder("Mesh Thickness");
   this.thicknessThreshold = 0.1;
   thicknessFolder.add(this, "thicknessThreshold", 0);
   thicknessFolder.add(this, "viewThickness");
   thicknessFolder.add(this, "clearThicknessView");
+
   var repairFolder = this.gui.addFolder("Repair (beta)");
   repairFolder.add(this, "generatePatch");
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
+
+  this.sliceFolder = this.gui.addFolder("Slice");
+  this.buildSliceFolderInactive();
+
   this.gui.add(this, "undo");
   this.gui.add(this, "redo");
   this.gui.add(this, "delete");
@@ -202,6 +224,7 @@ Stage.prototype.setVertexPrecision = function() {
 // Set up an arbitrary transform, create its inverse and push it onto the
 // undo stack, apply the transform.
 Stage.prototype.transform = function(op, axis, amount) {
+  this.deactivateSliceMode();
   var transform = new Transform(op, axis, amount, this.model, this.printout);
   var inv = transform.makeInverse();
   if (inv) this.undoStack.push(transform, inv);
@@ -213,8 +236,14 @@ Stage.prototype.exportOBJ = function() { this.export("obj"); }
 Stage.prototype.exportSTL = function() { this.export("stl"); }
 Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
-Stage.prototype.undo = function() { this.undoStack.undo(); }
-Stage.prototype.redo = function() { this.undoStack.redo(); }
+Stage.prototype.undo = function() {
+  this.deactivateSliceMode();
+  this.undoStack.undo();
+}
+Stage.prototype.redo = function() {
+  this.deactivateSliceMode();
+  this.undoStack.redo();
+}
 
 Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
 Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
@@ -279,7 +308,7 @@ Stage.prototype.startMeasurement = function(type, param) {
 }
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
-  this.clearScaleToMeasurementFolder();
+  this.clearFolder(this.scaleToMeasurementFolder);
 }
 Stage.prototype.viewThickness = function() {
   if (this.model) this.model.viewThickness(this.thicknessThreshold);
@@ -288,19 +317,53 @@ Stage.prototype.clearThicknessView = function() {
   if (this.model) this.model.clearThicknessView();
 }
 Stage.prototype.generatePatch = function() {
+  this.deactivateSliceMode();
   if (this.model) this.model.generatePatch();
 }
 Stage.prototype.acceptPatch = function() {
+  this.deactivateSliceMode();
   if (this.model) this.model.acceptPatch();
 }
 Stage.prototype.cancelPatch = function() {
   if (this.model) this.model.cancelPatch();
 }
+Stage.prototype.buildSliceFolderInactive = function() {
+  this.clearFolder(this.sliceFolder);
+  this.sliceHeight = .05;
+  this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
+  this.sliceFolder.add(this, "activateSliceMode");
+}
+Stage.prototype.buildSliceFolderActive = function() {
+  if (!this.model) return;
+
+  var numSlices = this.model.getNumSlices();
+  if (numSlices!==null) {
+    this.clearFolder(this.sliceFolder);
+    this.currentSlice = numSlices;
+    this.sliceController = this.sliceFolder.add(this, "currentSlice", 0, numSlices).step(1);
+    this.sliceFolder.add(this, "setSlice");
+    this.sliceFolder.add(this, "deactivateSliceMode");
+  }
+}
 Stage.prototype.activateSliceMode = function() {
-  if (this.model) this.model.activateSliceMode();
+  if (this.model) {
+    this.model.activateSliceMode(this.sliceHeight);
+    this.buildSliceFolderActive();
+  }
+}
+Stage.prototype.deactivateSliceMode = function() {
+  if (this.model) {
+    this.buildSliceFolderInactive();
+    this.model.deactivateSliceMode();
+  }
+}
+Stage.prototype.setSlice = function() {
+  if (this.model) {
+    this.model.setSlice(this.currentSlice);
+  }
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
-  this.clearScaleToMeasurementFolder();
+  this.clearFolder(this.scaleToMeasurementFolder);
   if (this.model) this.scalableMeasurements = this.model.getScalableMeasurements();
   if (this.scalableMeasurements && this.scalableMeasurements.length>0) {
     this.measurementToScale = this.scalableMeasurements[0];
@@ -310,8 +373,7 @@ Stage.prototype.buildScaleToMeasurementFolder = function() {
     this.scaleToMeasurementFolder.add(this, "scaleToMeasurement");
   }
 }
-Stage.prototype.clearScaleToMeasurementFolder = function () {
-  var folder = this.scaleToMeasurementFolder;
+Stage.prototype.clearFolder = function(folder) {
   for (var i=folder.__controllers.length-1; i>=0; i--) {
     folder.remove(folder.__controllers[i]);
   }
@@ -546,6 +608,8 @@ Stage.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks importing
   // a model with the same name twice in a row
   this.fileInput.value = "";
+
+  this.deactivateSliceMode();
 
   this.mDeactivate();
   if (this.model) {

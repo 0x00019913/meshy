@@ -40,7 +40,8 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.wireframe = false;
   this.currentMesh = null;
   this.plainMesh = null;
-  this.slicedMesh = null;
+  this.sliceMesh = null;
+  this.sliceData = null;
   this.mode = "plain";
   this.scene = scene;
   this.camera = camera;
@@ -56,6 +57,14 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     plainMesh: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: THREE.FaceColors
+    }),
+    sliceMesh: new THREE.MeshStandardMaterial({
+      color: 0x6666ff,
+      vertexColors: THREE.FaceColors
+    }),
+    sliceMeshFlat: new THREE.MeshBasicMaterial({
+      color: 0x6666ff,
+      side: THREE.BackSide
     }),
     patch: new THREE.MeshStandardMaterial({
       color: 0x44ff44,
@@ -649,32 +658,47 @@ Model.prototype.positionTargetPlanes = function(point) {
 }
 
 // Set the mode.
-Model.prototype.setMode = function(scene, mode) {
+Model.prototype.setMode = function(mode) {
   this.mode = mode;
   // remove any current meshes in the scene
-  this.removeMeshByName("model");
+  removeMeshByName(this.scene, "model");
 
   if (mode == "plain") {
     if (!this.plainMesh) this.makePlainMesh();
     this.currentMesh = this.plainMesh;
   }
-  else if (mode == "sliced") {
-    if (!this.slicedMesh) this.makeSlicedMesh();
-    this.currentMesh = this.slicedMesh;
+  else if (mode == "slice") {
+    if (!this.sliceMesh) this.makeSliceMesh();
+    this.currentMesh = this.sliceMesh;
   }
+
+  this.scene.add(this.currentMesh);
 }
 
 // Create the plain mesh (as opposed to another display mode).
 Model.prototype.makePlainMesh = function() {
   if (this.plainMesh) return;
-  /* set up camera, put in model */
+
+  /* make mesh and put it into the scene */
   var geo = new THREE.Geometry();
   geo.vertices = this.vertices;
   geo.faces = this.faces;
   this.plainMesh = new THREE.Mesh(geo, this.materials.plainMesh);
   this.plainMesh.name = "model";
   this.plainMesh.frustumCulled = false;
-  this.scene.add(this.plainMesh);
+}
+
+Model.prototype.makeSliceMesh = function() {
+  if (this.sliceMesh) return;
+
+  var geo = new THREE.Geometry();
+  geo.vertices = this.vertices.slice();
+  // slice mesh initialized with no faces; these will be built later
+  geo.faces = [];
+  this.sliceMesh = new THREE.Mesh(geo, this.materials.sliceMesh);
+  this.sliceMesh.name = "model";
+  this.sliceMesh.frustumCulled = false;
+  this.scene.add(this.sliceMesh);
 }
 
 
@@ -1811,6 +1835,206 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 }
 
 
+/* SLICING */
+
+// Turn on slice mode:
+//  swap the mesh out for a separate mesh which we'll use for slicing
+//  build height information for each face
+Model.prototype.activateSliceMode = function(sliceHeight) {
+  if (this.mode == "slice") return;
+  this.setMode("slice");
+
+  var faceData = [];
+  for (var i=0; i<this.faces.length; i++) {
+    var face = this.faces[i];
+    // always slice on y axis
+    var faceBounds = faceGetBounds(face, "y", this.vertices);
+
+    // store min and max for each face, init state to 0 (fully visible)
+    faceData.push({
+      face: face,
+      max: faceBounds.max,
+      min: faceBounds.min,
+      state: 0
+    });
+  }
+
+  // sort by mins
+  faceData.sort(function(a,b) {
+    if (a.max<b.max) return -1;
+    else if (a.max>b.max) return 1;
+    else return 0;
+  });
+
+  // set the face array on this.sliceMesh
+  var faces = this.sliceMesh.geometry.faces;
+  for (var i=0; i<faceData.length; i++) faces.push(faceData[i].face);
+  this.sliceMesh.geometry.elementsNeedUpdate = true;
+
+  // slices are displaced by half a slice height from mesh extremes, hence -1
+  var numSlices = Math.ceil(this.getSizey()/sliceHeight) + 1;
+
+  // to facilitate bookkeeping, set up a separate mesh to contain sliced faces
+  // and the patch
+  var slicePatchGeo = new THREE.Geometry();
+  var slicePatchMesh = new THREE.Mesh(slicePatchGeo, this.materials.sliceMesh);
+  slicePatchMesh.name = "model";
+  slicePatchMesh.frustumCulled = false;
+  this.scene.add(slicePatchMesh);
+
+  // this is a terrible, terrible hack and I'd like to remove it as soon as
+  // possible - I'm making a clone of the slice mesh and the slice patch mesh,
+  // setting them to a flat backside material, and that's that; the effect is
+  // that, when looking into a sliced mesh, it looks like there's a flat patch
+  // on the top
+  var sliceInteriorMesh = this.sliceMesh.clone();
+  sliceInteriorMesh.material = this.materials.sliceMeshFlat;
+  this.scene.add(sliceInteriorMesh);
+  var sliceInteriorPatchMesh = slicePatchMesh.clone();
+  sliceInteriorPatchMesh.material = this.materials.sliceMeshFlat;
+  this.scene.add(sliceInteriorPatchMesh);
+
+  // store the following:
+  //  faceData for height and state info;
+  //  slice height and the number of slices (interdependent)
+  //  the current slice index (from 0 to numSlices)
+  this.sliceData = {
+    faceData: faceData,
+    sliceHeight: sliceHeight,
+    numSlices: numSlices,
+    currentSlice: numSlices,
+    slicePatchMesh: slicePatchMesh
+  }
+}
+
+// Get the number of slices if available.
+Model.prototype.getNumSlices = function() {
+  if (this.sliceData) return this.sliceData.numSlices;
+  return null;
+}
+
+// Turn off slice mode: delete slice mesh and slice data; set mode to "plain".
+Model.prototype.deactivateSliceMode = function() {
+  this.setMode("plain");
+
+  this.sliceMesh = null;
+  this.sliceData = null;
+}
+
+// Set slice to a particular number in the range [0, sliceData.numSlices+1].
+// The bottommost slice is half a slice height below the mesh's y-min; topmost
+//  slice is half a slice height above the mesh's y-max
+Model.prototype.setSlice = function(newSlice) {
+  if (!this.sliceData) return;
+
+  // the world-space height of the slice plane
+  var sliceLevel = this.min.y + (newSlice-0.5) * this.sliceData.sliceHeight;
+
+  var currentSlice = this.sliceData.currentSlice;
+  var increase = newSlice > currentSlice;
+
+  var geo = this.sliceMesh.geometry;
+  var faces = geo.faces;
+  var slicePatchMesh = this.sliceData.slicePatchMesh;
+  var slicePatchGeo = slicePatchMesh.geometry;
+
+  var faceData = this.sliceData.faceData;
+  var numFacesBelowSlice = 0;
+
+  // slice is below the mesh, so just remove the faces in sliceMesh and return
+  if (newSlice == 0) {
+    faces.length = 0;
+    this.sliceMesh.geometry.elementsNeedUpdate = true;
+    return;
+  }
+
+  var slicedFaces = [];
+
+  for (var i=0; i<faceData.length; i++) {
+    var f = faceData[i];
+
+    // face will be visible;
+    if (f.max < sliceLevel) {
+      numFacesBelowSlice++;
+
+      if (i >= faces.length) faces.push(f.face);
+    }
+    else if (f.max > sliceLevel && f.min < sliceLevel) {
+      slicedFaces.push(f.face);
+    }
+  }
+  faces.length = numFacesBelowSlice;
+  this.sliceMesh.geometry.elementsNeedUpdate = true;
+
+  // handle the sliced faces: slice them and insert them (and assicated verts)
+  // into slicePatchMesh
+  var p = this.p;
+  var patchMap = {};
+  var patchVertices = [];
+  var patchFaces = [];
+  for (var f=0; f<slicedFaces.length; f++) {
+    var verts = faceGetVerts(slicedFaces[f], this.vertices);
+    var va = verts[0], vb = verts[1];
+    verts.sort(yCompare);
+    // check if the winding order got flipped by sorting (default is CCW)
+    var ccw = (verts[0]==va && verts[1]==vb);
+    ccw = ccw || (verts[1]==va && verts[2]==vb);
+    ccw = ccw || (verts[2]==va && verts[0]==vb);
+
+    // in the following, A is the bottom vert, B is the middle vert, and XY
+    // are the points there the triangle intersects the X-Y segment
+
+    // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
+    if (verts[1].y > sliceLevel) {
+      var AB = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[1]);
+      var AC = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[2]);
+      var idxA = vertexMapIdx(patchMap, verts[0], patchVertices, p);
+      var idxAB = vertexMapIdx(patchMap, AB, patchVertices, p);
+      var idxAC = vertexMapIdx(patchMap, AC, patchVertices, p);
+      var newFace;
+      if (ccw) newFace = new THREE.Face3(idxA, idxAB, idxAC);
+      else newFace = new THREE.Face3(idxA, idxAC, idxAB);
+      patchFaces.push(newFace);
+    }
+    // else, slice into two triangles: A-B-AC and B-BC-AC
+    else {
+      var AC = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[2]);
+      var BC = segmentPlaneIntersection("y", sliceLevel, verts[1], verts[2]);
+      var idxA = vertexMapIdx(patchMap, verts[0], patchVertices, p);
+      var idxB = vertexMapIdx(patchMap, verts[1], patchVertices, p);
+      var idxAC = vertexMapIdx(patchMap, AC, patchVertices, p);
+      var idxBC = vertexMapIdx(patchMap, BC, patchVertices, p);
+      var newFace1, newFace2;
+      if (ccw) {
+        newFace1 = new THREE.Face3(idxA, idxB, idxAC);
+        newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
+      }
+      else {
+        newFace1 = new THREE.Face3(idxA, idxAC, idxB);
+        newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
+      }
+      patchFaces.push(newFace1);
+      patchFaces.push(newFace2);
+    }
+  }
+
+  slicePatchGeo.vertices = patchVertices;
+  slicePatchGeo.faces = patchFaces;
+  slicePatchGeo.computeFaceNormals();
+  slicePatchGeo.computeVertexNormals();
+  slicePatchGeo.elementsNeedUpdate = true;
+
+  this.sliceData.currentSlice = newSlice;
+
+  function yCompare(va,vb) {
+    var ay = va.y, by = vb.y;
+    if (ay<by) return -1;
+    else if (ay>by) return 1;
+    else return 0;
+  }
+}
+
+
 /* IMPORT AND EXPORT */
 
 // Generate file output representing the model and save it.
@@ -1964,7 +2188,8 @@ Model.prototype.import = function(file, callback) {
     try {
       parseResult(fr.result);
       success = true;
-      _this.makePlainMesh();
+      // set mode to plain mesh, which creates the mesh and puts it in the scene
+      _this.setMode("plain");
       _this.printout.log("Imported file: " + file.name);
     } catch(e) {
       _this.printout.error("Error importing: " + e);
@@ -2269,8 +2494,8 @@ Model.prototype.dispose = function() {
 }
 
 // OLD CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS, PROBABLY DOESN'T WORK.
-
-// UNUSED, TODO: make this workable later.
+// TODO: make this workable later or replace entirely.
+/*
 Model.prototype.renderSlicedModel = function(scene) {
   this.segmentLists = this.slice();
   var geo = new THREE.Geometry();
@@ -2335,3 +2560,4 @@ Model.prototype.slice = function() {
   }
   return segmentLists;
 }
+*/
