@@ -158,7 +158,7 @@ Also calculates the size of the cross-section along the two axes lying in the me
 
 Visualizes approximate mesh thickness below the specified threshold. This is done by casting a ray along each face's negative normal and measuring the distance it travels before hitting the inside of the mesh.
 
-Any part of the mesh that's below the threshold $$\tau$$ is shown in red, interpolated linearly from full white to full red over the $$[\tau, 0]$$ interval.
+Any part of the mesh that's below the threshold `t` is shown in red, interpolated linearly from full white to full red over the `[t, 0]` interval.
 
 The UI is accessible while this is happening (the octree for the mesh is initially built if not already present, and mesh thickness is calculated), but performing any transformation or deleting the mesh cancels any ongoing calculation. The advantage of leaving the UI accessible is that 1. the user can do measurements and calculations in the meantime and 2. the entire tool doesn't lock up indefinitely without any feedback.
 
