@@ -327,12 +327,14 @@ Stage.prototype.acceptPatch = function() {
 Stage.prototype.cancelPatch = function() {
   if (this.model) this.model.cancelPatch();
 }
+// build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
   this.sliceHeight = .05;
   this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
   this.sliceFolder.add(this, "activateSliceMode");
 }
+// build the Slice folder for when slice mode is on
 Stage.prototype.buildSliceFolderActive = function() {
   if (!this.model) return;
 
