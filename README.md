@@ -1,9 +1,6 @@
-* TOC
-{:toc}
+`Meshy` is my browser-based tool for performing measurements and transformations on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
 
-<a href="https://0x00019913.github.io/meshy/">`Meshy`</a> is my browser-based tool for performing measurements and transformations on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
-
-> More features in development at the time of writing: volumetric mesh repair, decimation, optimizations (particularly the raycasting mechanism), more import/export formats, UI improvements.
+> More features in development at the time of writing: slicing, optimizations, more import/export formats, UI improvements.
 
 # Requirements
 
@@ -11,15 +8,19 @@ A computer with a GPU and a browser capable of running WebGL, with Javascript en
 
 # General use
 
-The user can upload a mesh. At any given time, the tool can contain one mesh (the mesh can be comprised of multiple islands, but the geometry must all come from one file). The user can perform standard transformations (translations, rotations, scaling, floor, center) with respect to the axes, use any of `meshy`'s calculation, measurement, and repair tools, export the mesh, and change some viewport settings. The user can delete the mesh and then upload another.
+The user can upload a mesh. At any given time, the tool can contain one mesh (the mesh can be comprised of multiple islands, but the geometry must all come from one file). The user can perform standard transformations (translations, rotations, scaling, floor, center, mirror) with respect to the axes, use any of `meshy`'s calculation, measurement, and repair tools, export the mesh, and change some viewport settings. The user can delete the mesh and then upload another.
 
 # Interface and controls
 
-The main viewport uses mouse controls:
+The main viewport uses mouse and keyboard controls:
 
 * left-click and drag to rotate the camera
 * scroll wheel to zoom
 * middle mouse button to pan
+* `F` to center the camera on the mesh
+* `C` turns on the center-of-mass indicator
+* `ctrl+z` to undo
+* `ctrl+y` or `ctrl+shift+z` to redo
 
 The information box on the top left indicates computed quantities. Note that surface area, volume, and center of mass are left uncalculated to save computing power until the user manually presses the button to calculate them.
 
@@ -59,7 +60,7 @@ OBJ files will export a list of vertices and a list of triangles. Quads are not 
 
 The user can toggle the axis widget and the floor grid.
 
-(Probably irrelevant for all cases but should still be documented: under Settings > Technical is a "vertex precision" field, set to 5 by default. This is used for importing STL files - I'm using a hash table to get a list of unique vertices from a list of faces. [(See here for details.)]({{ site.baseurl }}{% post_url 2017-03-08-meshy-design-notes %}) A 3-vector like `[1.28573568, 0.00584586, 10.86187359]` turns into a hash like `"128574_585_1086187"`. More precision means more digits - increasing this number makes long hashes, decreasing it might incorrectly merge vertices. If your mesh is very, very small, you might need to increase this precision.)
+(Probably irrelevant for all cases but should still be documented: under Settings > Technical is a "vertex precision" field, set to 5 by default. This is used for importing STL files - I'm using a hash table to get a list of unique vertices from a list of faces. (<a href="https://0x00019913.github.io/2017/03/08/meshy-design-notes/">See here for an early writeup on this subject.</a>) A 3-vector like `[1.28573568, 0.00584586, 10.86187359]` turns into a hash like `"128574_585_1086187"`. More precision means more digits - increasing this number makes long hashes, decreasing it might incorrectly merge vertices. If your mesh is very, very small, you might need to increase this precision.)
 
 # Mesh Display
 
@@ -165,8 +166,8 @@ The UI is accessible while this is happening (the octree for the mesh is initial
 
 Possible alternatives to this method, which I may implement eventually:
 
-1. use the full SDF (30 rays in a 120$$^\circ$$ cone) over a randomly picked set of faces, then interpolate the SDF over the remaining surface, and
-2. remesh the model to a much lower resolution such that the polygon distribution is more or less even (presumably via the octree), then do the full SDF over the new model's faces; this seems to vaguely describe Shapeways's internal algorithm and makes a lot of sense to me.
+1. use the full SDF (30 rays in a 120-degree cone) over a randomly picked set of faces, then interpolate the SDF over the remaining surface, and
+2. remesh the model to a much lower resolution such that the polygon distribution is more or less even (presumably via the octree) and details are preserved, then do the full SDF over the new model's faces; this seems to vaguely describe Shapeways's internal algorithm and makes a lot of sense to me.
 
 # Repair (beta)
 
@@ -176,11 +177,19 @@ This algorithm is new and may throw errors (or just fail to patch something). Do
 
 For a broad overview of how it works, see "A robust hole-filling algorithm for triangular mesh", Zhao, Gao, Lin, 2007.
 
+# Slice
+
+At the time of writing, the slicing functionality is rudimentary - the mesh is sliced along one particular plane, with everything above the plane hidden. TODO in the very near future: triangulate the hole and make slices over the entire mesh, exporting them as G-code.
+
 # Undo
 
 *Only the actions under the Transform folder are undoable.* This is because 1. the memory limitations of the typical browser make a more robust undo stack not generally feasible and 2. the sequence of actions performed in `meshy` would, by and large, be minimal and easily replicated in case of a faux pas.
 
-`Ctrl+Z` triggers the undo.
+`ctrl+Z` triggers the undo.
+
+# Redo
+
+`ctrl+y` and `ctrl+shift+z` trigger the redo.
 
 # Delete
 

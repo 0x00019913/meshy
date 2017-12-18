@@ -485,8 +485,13 @@ Stage.prototype.initViewport = function() {
   // keyboard controls
   function onKeyDown(e) {
     if (e.ctrlKey) {
-      if (e.key=="z") _this.undo();
-      else if (e.key=="y") _this.redo();
+      if (e.shiftKey) {
+        if (e.key=="Z") _this.redo();
+      }
+      else {
+        if (e.key=="z") _this.undo();
+        if (e.key=="y") _this.redo();
+      }
     }
     else {
       if (e.key=="f") _this.cameraToModel();
