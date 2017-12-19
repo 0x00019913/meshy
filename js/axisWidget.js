@@ -2,6 +2,7 @@ AxisWidget = function (sourceCamera) {
   this.sourceCamera = sourceCamera;
   this.camera = new THREE.OrthographicCamera(-30,30,30,-30,1,1000);
   this.camera.up = this.sourceCamera.up;
+
   this.container = document.createElement('div');
   document.body.appendChild(this.container);
   this.container.id = "axes";
@@ -41,18 +42,20 @@ AxisWidget = function (sourceCamera) {
       new THREE.TextGeometry("z", params),
       new THREE.TextGeometry("-z", params),
     ];
-    geos[0].rotateY(-Math.PI/2);
+    geos[0].rotateX(Math.PI/2);
+    geos[0].rotateZ(Math.PI/2);
     geos[0].translate(-dist,-2,-2);
-    geos[1].rotateY(Math.PI/2);
-    geos[1].translate(dist,-2,4);
-    geos[2].rotateX(-Math.PI/2);
-    geos[2].rotateY(Math.PI);
-    geos[2].translate(2,dist,-2);
+    geos[1].rotateX(Math.PI/2);
+    geos[1].rotateZ(Math.PI/2);
+    geos[1].translate(dist,-4,-2);
+    geos[2].rotateX(Math.PI/2);
+    geos[2].translate(-2,-dist,-2);
     geos[3].rotateX(Math.PI/2);
-    geos[3].translate(-4,-dist,-2);
-    geos[4].rotateY(Math.PI);
-    geos[4].translate(2,-2,-dist);
-    geos[5].translate(-4,-2,dist);
+    geos[3].rotateZ(Math.PI);
+    geos[3].translate(4,dist,-2);
+    geos[4].translate(-2,-2,dist);
+    geos[5].rotateY(Math.PI);
+    geos[5].translate(4,-2,-dist);
     mats = [
       new THREE.MeshPhongMaterial({color: 0xff3333, shininess: 0}),
       new THREE.MeshPhongMaterial({color: 0x337733, shininess: 0}),
@@ -81,7 +84,9 @@ AxisWidget.prototype.toggleVisibility = function() {
 
 AxisWidget.prototype.update = function() {
   var camPos = this.sourceCamera.getWorldDirection();
-  camPos.y *= -1;
+  var up = this.camera.up.clone();
+  // reflect camera position along camera up axis
+  camPos.sub(up.multiplyScalar(2 * camPos.dot(up)));
   this.camera.position.copy(camPos);
   this.camera.position.setLength(this.size*1.5);
   this.camera.lookAt(this.origin);

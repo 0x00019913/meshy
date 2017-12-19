@@ -98,7 +98,7 @@ Controls = function(camera, domElement, params) {
       _this.theta += _this.thetaRate * dY;
       if (_this.theta < _this.thetaMin) _this.theta = _this.thetaMin;
       if (_this.theta > _this.thetaMax) _this.theta = _this.thetaMax;
-      _this.phi += _this.phiRate * dX;
+      _this.phi -= _this.phiRate * dX;
       if (_this.phi < _this.phiMin) _this.phi = _this.phiMin;
       if (_this.phi > _this.phiMax) _this.phi = _this.phiMax;
     }
@@ -119,14 +119,14 @@ Controls = function(camera, domElement, params) {
       // vector in that plane (larger for larger r), rotate around Z to adjust
       // for theta, then rotate around Y to adjust for phi
       var displacement = new THREE.Vector3(
-        0,
-        dY*_this.yPanRate*_this.r,
-        dX*_this.xPanRate*_this.r
+        -dY*_this.yPanRate*_this.r,
+        -dX*_this.xPanRate*_this.r,
+        0
       );
-      displacement.applyAxisAngle(new THREE.Vector3(0,0,-1),Math.PI/2-_this.theta);
-      displacement.applyAxisAngle(new THREE.Vector3(0,1,0),_this.phi);
+      displacement.applyAxisAngle(new THREE.Vector3(0,1,0), _this.theta);
+      displacement.applyAxisAngle(new THREE.Vector3(0,0,1), _this.phi);
       // minus is necessary; I think it's because we're in a left-handed coord system
-      displacement.x *= -1;
+      //displacement.x *= -1;
       _this.origin.add(displacement);
     }
     if (_this.type==CylCam) {
@@ -213,8 +213,8 @@ Controls.prototype.update = function(params) {
 
   if (this.type==FreeCam) {
     camPos[0] = this.r * Math.cos(this.phi) * Math.sin(this.theta) + this.origin.x;
-    camPos[2] = this.r * Math.sin(this.phi) * Math.sin(this.theta) + this.origin.z;
-    camPos[1] = this.r * Math.cos(this.theta) + this.origin.y;
+    camPos[1] = this.r * Math.sin(this.phi) * Math.sin(this.theta) + this.origin.y;
+    camPos[2] = this.r * Math.cos(this.theta) + this.origin.z;
     this.camera.position.fromArray(camPos);
     this.camera.lookAt(this.origin);
   }

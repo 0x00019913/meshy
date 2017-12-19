@@ -435,6 +435,8 @@ Stage.prototype.initViewport = function() {
     width = container.offsetWidth;
 
     _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 100000);
+    // z axis is up as is customary for 3D printers
+    _this.camera.up.set(0, 0, 1);
 
     _this.scene = new THREE.Scene();
     _this.scene.background = new THREE.Color(0x222222);
@@ -541,23 +543,23 @@ Stage.prototype.initFloor = function() {
     linewidth: 1
   });
 
-  geoPrimary.vertices.push(new THREE.Vector3(0,0,-size));
-  geoPrimary.vertices.push(new THREE.Vector3(0,0,size));
+  geoPrimary.vertices.push(new THREE.Vector3(0,-size,0));
+  geoPrimary.vertices.push(new THREE.Vector3(0,size,0));
   geoPrimary.vertices.push(new THREE.Vector3(-size,0,0));
   geoPrimary.vertices.push(new THREE.Vector3(size,0,0));
   for (var i=-size; i<=size; i++) {
     if (i==0) continue;
     if (i%5==0) {
-      geoSecondary.vertices.push(new THREE.Vector3(i,0,-size));
-      geoSecondary.vertices.push(new THREE.Vector3(i,0,size));
-      geoSecondary.vertices.push(new THREE.Vector3(-size,0,i));
-      geoSecondary.vertices.push(new THREE.Vector3(size,0,i));
+      geoSecondary.vertices.push(new THREE.Vector3(i,-size,0));
+      geoSecondary.vertices.push(new THREE.Vector3(i,size,0));
+      geoSecondary.vertices.push(new THREE.Vector3(-size,i,0));
+      geoSecondary.vertices.push(new THREE.Vector3(size,i,0));
     }
     else {
-      geoTertiary.vertices.push(new THREE.Vector3(i,0,-size));
-      geoTertiary.vertices.push(new THREE.Vector3(i,0,size));
-      geoTertiary.vertices.push(new THREE.Vector3(-size,0,i));
-      geoTertiary.vertices.push(new THREE.Vector3(size,0,i));
+      geoTertiary.vertices.push(new THREE.Vector3(i,-size,0));
+      geoTertiary.vertices.push(new THREE.Vector3(i,size,0));
+      geoTertiary.vertices.push(new THREE.Vector3(-size,i,0));
+      geoTertiary.vertices.push(new THREE.Vector3(size,i,0));
     }
   }
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
