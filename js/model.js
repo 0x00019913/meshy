@@ -661,15 +661,23 @@ Model.prototype.setMode = function(mode, params) {
   this.mode = mode;
   // remove any current meshes in the scene
   removeMeshByName(this.scene, "model");
+  // if active slicer, delete it
+  this.slicer = null;
 
   if (mode == "basic") {
     if (!this.basicMesh) this.makeBasicMesh();
     this.scene.add(this.basicMesh);
   }
   else if (mode == "slice") {
-    this.slicer = new Slicer(this.scene, this.vertices, this.faces, params.sliceHeight);
-    this.scene.add(this.slicer.getPreviewMesh());
-    this.scene.add(this.slicer.getPathMesh());
+    this.slicer = new Slicer(
+      this.vertices,
+      this.faces,
+      {
+        sliceHeight: params.sliceHeight,
+        axis: "z"
+      }
+    );
+    this.scene.add(this.slicer.getMesh());
   }
 }
 
@@ -1839,89 +1847,34 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 //  swap the mesh out for a separate mesh which we'll use for slicing
 //  build height information for each face
 Model.prototype.activateSliceMode = function(sliceHeight) {
-  this.setMode("slice", { sliceHeight: sliceHeight });
-
-  var faceData = [];
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    // always slice on y axis
-    var faceBounds = faceGetBounds(face, "y", this.vertices);
-
-    // store min and max for each face, init state to 0 (fully visible)
-    faceData.push({
-      face: face,
-      max: faceBounds.max,
-      min: faceBounds.min,
-      state: 0
-    });
-  }
-
-  // sort by mins
-  faceData.sort(function(a,b) {
-    if (a.max<b.max) return -1;
-    else if (a.max>b.max) return 1;
-    else return 0;
+  this.setMode("slice", {
+    sliceHeight: sliceHeight
   });
-
-  // set the face array on this.sliceMesh
-  var faces = this.sliceMesh.geometry.faces;
-  for (var i=0; i<faceData.length; i++) faces.push(faceData[i].face);
-  this.sliceMesh.geometry.elementsNeedUpdate = true;
-
-  // slices are displaced by half a slice height from mesh extremes, hence -1
-  var numSlices = Math.ceil(this.getSizey()/sliceHeight) + 1;
-
-  // to facilitate bookkeeping, set up a separate mesh to contain sliced faces
-  // and the patch
-  var slicePatchGeo = new THREE.Geometry();
-  var slicePatchMesh = new THREE.Mesh(slicePatchGeo, this.materials.sliceMesh);
-  slicePatchMesh.name = "model";
-  slicePatchMesh.frustumCulled = false;
-  this.scene.add(slicePatchMesh);
-
-  // this is a terrible, terrible hack and I'd like to remove it as soon as
-  // possible - I'm making a clone of the slice mesh and the slice patch mesh,
-  // setting them to a flat backside material, and that's that; the effect is
-  // that, when looking into a sliced mesh, it looks like there's a flat patch
-  // on the top
-  var sliceInteriorMesh = this.sliceMesh.clone();
-  sliceInteriorMesh.material = this.materials.sliceMeshFlat;
-  this.scene.add(sliceInteriorMesh);
-  var sliceInteriorPatchMesh = slicePatchMesh.clone();
-  sliceInteriorPatchMesh.material = this.materials.sliceMeshFlat;
-  this.scene.add(sliceInteriorPatchMesh);
-
-  // store the following:
-  //  faceData for height and state info;
-  //  slice height and the number of slices (interdependent)
-  //  the current slice index (from 0 to numSlices)
-  this.sliceData = {
-    faceData: faceData,
-    sliceHeight: sliceHeight,
-    numSlices: numSlices,
-    currentSlice: numSlices,
-    slicePatchMesh: slicePatchMesh
-  }
-}
-
-// Get the number of slices if available.
-Model.prototype.getNumSlices = function() {
-  if (this.sliceData) return this.sliceData.numSlices;
-  return null;
 }
 
 // Turn off slice mode: delete slice mesh and slice data; set mode to "basic".
 Model.prototype.deactivateSliceMode = function() {
   this.setMode("basic");
+}
 
-  this.sliceMesh = null;
-  this.sliceData = null;
+Model.prototype.getNumSlices = function() {
+  if (this.slicer) return this.slicer.getNumSlices();
+  else return 0;
+}
+
+Model.prototype.getCurrentSlice = function() {
+  if (this.slicer) return this.slicer.getCurrentSlice();
+  else return 0;
 }
 
 // Set slice to a particular number in the range [0, sliceData.numSlices+1].
 // The bottommost slice is half a slice height below the mesh's y-min; topmost
 //  slice is half a slice height above the mesh's y-max
-Model.prototype.setSlice = function(newSlice) {
+Model.prototype.setSlice = function(slice) {
+  this.slicer.setSlice(slice);
+
+  return;
+
   if (!this.sliceData) return;
 
   // the world-space height of the slice plane

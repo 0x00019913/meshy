@@ -339,11 +339,14 @@ Stage.prototype.buildSliceFolderActive = function() {
   if (!this.model) return;
 
   var numSlices = this.model.getNumSlices();
-  if (numSlices!==null) {
+  if (numSlices !== 0) {
     this.clearFolder(this.sliceFolder);
-    this.currentSlice = numSlices;
-    this.sliceController = this.sliceFolder.add(this, "currentSlice", 0, numSlices).step(1);
-    this.sliceFolder.add(this, "setSlice");
+    this.currentSlice = this.model.getCurrentSlice();
+    this.sliceController = this.sliceFolder.add(
+      this,
+      "currentSlice",
+      0, numSlices
+    ).step(1).onChange(this.setSlice.bind(this));
     this.sliceFolder.add(this, "deactivateSliceMode");
   }
 }

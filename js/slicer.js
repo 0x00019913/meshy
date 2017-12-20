@@ -1,89 +1,139 @@
 /* slicer.js */
-Slicer = function(vertices, faces, sliceHeight) {
+Slicer = function(vertices, faces, params) {
   this.sourceVertices = vertices;
   this.sourceFaces = faces;
-  this.sliceHeight = sliceHeight;
+  this.vertexCount = vertices.length;
+  this.faceCount = faces.length;
+  this.sliceHeight = 0.5;
+  this.axis = "z";
+  this.mode = "preview";
+
+  // set from params
+  if (params) {
+    if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
+    if (params.hasOwnProperty("axis")) this.axis = params.axis;
+    if (params.hasOwnProperty("mode")) this.mode = params.mode;
+  }
+
+  // 1. assume right-handed coords
+  // 2. look along negative this.axis with the other axes pointing up and right
+  // then this.axis1 points right and this.axis2 points up
+  this.axis1 = this.axis=="x" ? "y" : this.axis=="y" ? "z" : "x";
+  this.axis2 = this.axis=="x" ? "z" : this.axis=="y" ? "x" : "y";
 
   this.previewMeshMaterial = new THREE.MeshStandardMaterial({
-    color: 0x6666ff,
-    vertexColors: THREE.FaceColors
+    color: 0x6666ff
+  });
+  this.transparentMaterial = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0
   });
   this.pathMeshMaterial = new THREE.LineBasicMaterial({
     color: 0x888888,
     linewidth: 1
   });
 
+  this.calculateFaceBounds();
+
   this.makePreviewMesh();
   this.makePathMesh();
 }
 
-Slicer.prototype.getPreviewMesh = function() {
-  return this.previewMesh;
+Slicer.prototype.getMesh = function() {
+  if (this.mode=="preview") return this.previewMesh;
+  else if (this.mode=="path") return this.pathMesh;
 }
 
-Slicer.prototype.getPathMesh = function() {
-  return this.pathMesh;
+Slicer.prototype.getNumSlices = function() {
+  return this.numSlices;
 }
 
-Slicer.prototype.makePreviewMesh = function() {
-  this.previewFaceBounds = [];
-  var previewFaceBounds = this.previewFaceBounds;
+Slicer.prototype.getCurrentSlice = function() {
+  return this.currentSlice;
+}
 
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    // always slice on y axis
-    var bounds = faceGetBounds(face, "y", this.vertices);
+Slicer.prototype.setSlice = function(slice) {
+  var sliceLevel = this.min + (slice-0.5) * this.sliceHeight;
+  var faceBounds = this.faceBounds;
 
-    // store min and max for each face, init state to 0 (fully visible)
-    previewFaceBounds.push({
-      face: face,
+  for (var i = this.faceCount-1; i >= 0; i--) {
+    var bounds = faceBounds[i];
+    // if min above slice level, need to hide the face
+    if (bounds.min > sliceLevel) bounds.face.materialIndex = 1;
+    // else min <= slice level
+    else {
+      // if max below slice level, need to show the face
+      if (bounds.max < sliceLevel) bounds.face.materialIndex = 0;
+      // else, face is cut
+      else bounds.face.materialIndex = 1; // todo: accumulate intersected faces here
+    }
+  }
+
+  this.previewMesh.geometry.groupsNeedUpdate = true;
+}
+
+Slicer.prototype.calculateFaceBounds = function() {
+  this.faceBounds = [];
+  var faceBounds = this.faceBounds;
+  var min = Infinity, max = -Infinity;
+
+  for (var i=0; i<this.sourceFaces.length; i++) {
+    var face = this.sourceFaces[i];
+    var bounds = faceGetBounds(face, this.axis, this.sourceVertices);
+
+    max = Math.max(max, bounds.max);
+    min = Math.min(min, bounds.min);
+
+    // store min and max for each face
+    faceBounds.push({
+      face: face.clone(),
       max: bounds.max,
       min: bounds.min
     });
   }
 
-  // sort by mins
-  previewFaceBounds.sort(function(a,b) {
+  // sort by maxes
+  faceBounds.sort(function(a,b) {
     if (a.max<b.max) return -1;
     else if (a.max>b.max) return 1;
     else return 0;
   });
 
-  // set the face array on this.sliceMesh
-  var faces = this.sliceMesh.geometry.faces;
-  for (var i=0; i<previewFaceBounds.length; i++) faces.push(previewFaceBounds[i].face);
-  this.sliceMesh.geometry.elementsNeedUpdate = true;
+  this.min = min;
+  this.max = max;
+  // slices are displaced by half a slice height from mesh extremes, hence +1
+  this.numSlices = Math.ceil((max - min) / this.sliceHeight) + 1;
+  this.currentSlice = this.numSlices;
+}
 
-  // slices are displaced by half a slice height from mesh extremes, hence -1
-  var numSlices = Math.ceil(this.getSizey()/sliceHeight) + 1;
+Slicer.prototype.makePreviewMesh = function() {
+  // create the mesh
+  var geo = new THREE.Geometry();
+  geo.vertices = this.sourceVertices.slice();
+  // slice preview mesh initialized with no faces; these will be built later
+  var faces = [];
+  geo.faces = faces;
 
-  // to facilitate bookkeeping, set up a separate mesh to contain sliced faces
-  // and the patch
-  var slicePatchGeo = new THREE.Geometry();
-  var slicePatchMesh = new THREE.Mesh(slicePatchGeo, this.materials.sliceMesh);
-  slicePatchMesh.name = "model";
-  slicePatchMesh.frustumCulled = false;
-  this.scene.add(slicePatchMesh);
+  // each face in the preview mesh will have one of these materials
+  var faceMaterials = [
+    // set materialIndex = 0 to make a face visible
+    this.previewMeshMaterial,
+    // set materialindex = 1 to hide a face
+    this.transparentMaterial
+  ];
 
-  // store the following:
-  //  faceData for height and state info;
-  //  slice height and the number of slices (interdependent)
-  //  the current slice index (from 0 to numSlices)
-  this.sliceData = {
-    faceData: faceData,
-    sliceHeight: sliceHeight,
-    numSlices: numSlices,
-    currentSlice: numSlices
+  var previewMesh = new THREE.Mesh(geo, faceMaterials);
+  previewMesh.name = "model";
+  previewMesh.frustumCulled = false;
+
+  // set the face array on the mesh
+  for (var i=0; i<this.faceBounds.length; i++) {
+    var face = this.faceBounds[i].face;
+    face.materialIndex = 0; // explicitly set as visible by default
+    faces.push(face);
   }
 
-  var geo = new THREE.Geometry();
-  geo.vertices = this.vertices.slice();
-  // slice preview mesh initialized with no faces; these will be built later
-  geo.faces = [];
-
-  this.previewMesh = new THREE.Mesh(geo, this.previewMeshMaterial);
-  this.previewMesh.name = "model";
-  this.previewMesh.frustumCulled = false;
+  this.previewMesh = previewMesh;
 }
 
 Slicer.prototype.makePathMesh = function() {
