@@ -115,6 +115,15 @@ function faceGetVerts(face, vertices) {
     vertices[face.c]
   ];
 }
+// compute THREE.Face3 normal
+function faceComputeNormal(face, vertices) {
+  var verts = faceGetVerts(face, vertices);
+  var b = verts[1];
+  var ba = verts[0].clone().sub(b);
+  var bc = verts[2].clone().sub(b);
+
+  face.normal.copy(bc.cross(ba).normalize());
+}
 function faceGetBounds(face, axis, vertices) {
   var verts = faceGetVerts(face, vertices);
   return {

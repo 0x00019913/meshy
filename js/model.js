@@ -1871,7 +1871,7 @@ Model.prototype.getCurrentSlice = function() {
 // The bottommost slice is half a slice height below the mesh's y-min; topmost
 //  slice is half a slice height above the mesh's y-max
 Model.prototype.setSlice = function(slice) {
-  this.slicer.setSlice(slice);
+  if (this.slicer) this.slicer.setSlice(slice);
 
   return;
 

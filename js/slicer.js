@@ -56,6 +56,9 @@ Slicer.prototype.setSlice = function(slice) {
   var sliceLevel = this.min + (slice-0.5) * this.sliceHeight;
   var faceBounds = this.faceBounds;
 
+  // array of faces that intersect the slicing plane
+  var slicedFaces = [];
+
   for (var i = this.faceCount-1; i >= 0; i--) {
     var bounds = faceBounds[i];
     // if min above slice level, need to hide the face
@@ -65,11 +68,110 @@ Slicer.prototype.setSlice = function(slice) {
       // if max below slice level, need to show the face
       if (bounds.max < sliceLevel) bounds.face.materialIndex = 0;
       // else, face is cut
-      else bounds.face.materialIndex = 1; // todo: accumulate intersected faces here
+      else {
+        bounds.face.materialIndex = 1;
+        slicedFaces.push(bounds.face);
+      }
     }
   }
 
-  this.previewMesh.geometry.groupsNeedUpdate = true;
+  // update because we changed material indices
+  var previewMesh = this.previewMesh;
+  previewMesh.geometry.groupsNeedUpdate = true;
+
+  // handle the sliced faces: slice them and insert them (and assicated verts)
+  // into previewMesh
+  var vertices = previewMesh.geometry.vertices;
+  var faces = previewMesh.geometry.faces;
+  var axis = this.axis;
+  var compare = axisCompare.bind(this);
+
+  // erase any sliced verts and faces
+  vertices.length = this.vertexCount;
+  faces.length = this.faceCount;
+
+  for (var f = 0; f < slicedFaces.length; f++) {
+    var verts = faceGetVerts(slicedFaces[f], vertices);
+    var va = verts[0], vb = verts[1];
+    verts.sort(compare);
+    // check if the winding order got flipped by sorting (default is CCW)
+    var ccw = (verts[0]==va && verts[1]==vb);
+    ccw = ccw || (verts[1]==va && verts[2]==vb);
+    ccw = ccw || (verts[2]==va && verts[0]==vb);
+
+    // in the following, A is the bottom vert, B is the middle vert, and XY
+    // are the points there the triangle intersects the X-Y segment
+
+    // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
+    if (verts[1][axis] > sliceLevel) {
+      // calculate intersection of A-B and A-C
+      var AB = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
+      var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
+      // get indices of these verts in the vert array before pushing them there
+      var idxA = vertices.length;
+      var idxAB = idxA + 1;
+      var idxAC = idxA + 2;
+      vertices.push(verts[0]);
+      vertices.push(AB);
+      vertices.push(AC);
+
+      // create the new face and push it into the faces array
+      var newFace;
+      if (ccw) newFace = new THREE.Face3(idxA, idxAB, idxAC);
+      else newFace = new THREE.Face3(idxA, idxAC, idxAB);
+      // explicitly visible
+      newFace.materialIndex = 0;
+      // compute normal
+      faceComputeNormal(newFace, vertices);
+
+      faces.push(newFace);
+    }
+    // else, slice into two triangles: A-B-AC and B-BC-AC
+    else {
+      // calculate intersection of A-C and B-C
+      var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
+      var BC = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
+      // get indices of these verts in the vert array before pushing them there
+      var idxA = vertices.length;
+      var idxB = idxA + 1;
+      var idxAC = idxA + 2;
+      var idxBC = idxA + 3;
+      vertices.push(verts[0]);
+      vertices.push(verts[1]);
+      vertices.push(AC);
+      vertices.push(BC);
+
+      // create the new faces and push it into the faces array
+      var newFace1, newFace2;
+      if (ccw) {
+        newFace1 = new THREE.Face3(idxA, idxB, idxAC);
+        newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
+      }
+      else {
+        newFace1 = new THREE.Face3(idxA, idxAC, idxB);
+        newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
+      }
+      // explicitly visible
+      newFace1.materialIndex = 0;
+      newFace2.materialIndex = 0;
+      // compute normals
+      faceComputeNormal(newFace1, vertices);
+      faceComputeNormal(newFace2, vertices);
+
+      faces.push(newFace1);
+      faces.push(newFace2);
+    }
+  }
+
+  previewMesh.geometry.elementsNeedUpdate = true;
+
+  function axisCompare(va,vb) {
+    var axis = this.axis;
+    var acomp = va[axis], bcomp = vb[axis];
+    if (acomp < bcomp) return -1;
+    else if (acomp > bcomp) return 1;
+    else return 0;
+  }
 }
 
 Slicer.prototype.calculateFaceBounds = function() {
