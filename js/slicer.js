@@ -13,6 +13,7 @@ Slicer = function(vertices, faces, params) {
     if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
     if (params.hasOwnProperty("axis")) this.axis = params.axis;
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
+    if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
 
   // 1. assume right-handed coords
@@ -53,6 +54,11 @@ Slicer.prototype.getCurrentSlice = function() {
 }
 
 Slicer.prototype.setSlice = function(slice) {
+  if (this.mode=="preview") this.setPreviewSlice(slice);
+  else if (this.mode=="path") this.setPathSlice(slice);
+}
+
+Slicer.prototype.setPreviewSlice = function(slice) {
   var sliceLevel = this.min + (slice-0.5) * this.sliceHeight;
   var faceBounds = this.faceBounds;
 
@@ -81,23 +87,32 @@ Slicer.prototype.setSlice = function(slice) {
 
   // handle the sliced faces: slice them and insert them (and assicated verts)
   // into previewMesh
+
+  // current vertices and faces
   var vertices = previewMesh.geometry.vertices;
   var faces = previewMesh.geometry.faces;
-  var axis = this.axis;
-  var compare = axisCompare.bind(this);
-
   // erase any sliced verts and faces
   vertices.length = this.vertexCount;
   faces.length = this.faceCount;
 
+  var axis = this.axis;
+  var vertexCount = this.vertexCount;
+  var faceCount = this.faceCount;
+
+  // newly created verts and faces will go here; then append them to the mesh
+  var newVertices = new Array(4 * slicedFaces.length);
+  var newFaces = new Array(2 * slicedFaces.length);
+  // current face/vertex in the new arrays
+  var vidx = 0, fidx = 0;
+
+  // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
-    var verts = faceGetVerts(slicedFaces[f], vertices);
-    var va = verts[0], vb = verts[1];
-    verts.sort(compare);
-    // check if the winding order got flipped by sorting (default is CCW)
-    var ccw = (verts[0]==va && verts[1]==vb);
-    ccw = ccw || (verts[1]==va && verts[2]==vb);
-    ccw = ccw || (verts[2]==va && verts[0]==vb);
+    var slicedFace = slicedFaces[f];
+
+    // get verts sorted on axis; check if this flipped winding order (default is CCW)
+    var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
+    var verts = vertsSorted.verts;
+    var ccw = vertsSorted.ccw;
 
     // in the following, A is the bottom vert, B is the middle vert, and XY
     // are the points there the triangle intersects the X-Y segment
@@ -107,13 +122,14 @@ Slicer.prototype.setSlice = function(slice) {
       // calculate intersection of A-B and A-C
       var AB = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
       var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
-      // get indices of these verts in the vert array before pushing them there
-      var idxA = vertices.length;
+
+      // get indices of these verts in the final vert array before pushing them there
+      var idxA = vertexCount + vidx;
       var idxAB = idxA + 1;
       var idxAC = idxA + 2;
-      vertices.push(verts[0]);
-      vertices.push(AB);
-      vertices.push(AC);
+      newVertices[vidx++] = verts[0];
+      newVertices[vidx++] = AB;
+      newVertices[vidx++] = AC;
 
       // create the new face and push it into the faces array
       var newFace;
@@ -121,10 +137,8 @@ Slicer.prototype.setSlice = function(slice) {
       else newFace = new THREE.Face3(idxA, idxAC, idxAB);
       // explicitly visible
       newFace.materialIndex = 0;
-      // compute normal
-      faceComputeNormal(newFace, vertices);
 
-      faces.push(newFace);
+      newFaces[fidx++] = newFace;
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -132,14 +146,14 @@ Slicer.prototype.setSlice = function(slice) {
       var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
       var BC = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
       // get indices of these verts in the vert array before pushing them there
-      var idxA = vertices.length;
+      var idxA = vertexCount + vidx;
       var idxB = idxA + 1;
       var idxAC = idxA + 2;
       var idxBC = idxA + 3;
-      vertices.push(verts[0]);
-      vertices.push(verts[1]);
-      vertices.push(AC);
-      vertices.push(BC);
+      newVertices[vidx++] = verts[0];
+      newVertices[vidx++] = verts[1];
+      newVertices[vidx++] = AC;
+      newVertices[vidx++] = BC;
 
       // create the new faces and push it into the faces array
       var newFace1, newFace2;
@@ -154,24 +168,21 @@ Slicer.prototype.setSlice = function(slice) {
       // explicitly visible
       newFace1.materialIndex = 0;
       newFace2.materialIndex = 0;
-      // compute normals
-      faceComputeNormal(newFace1, vertices);
-      faceComputeNormal(newFace2, vertices);
 
-      faces.push(newFace1);
-      faces.push(newFace2);
+      newFaces[fidx++] = newFace1;
+      newFaces[fidx++] = newFace2;
     }
   }
 
-  previewMesh.geometry.elementsNeedUpdate = true;
-
-  function axisCompare(va,vb) {
-    var axis = this.axis;
-    var acomp = va[axis], bcomp = vb[axis];
-    if (acomp < bcomp) return -1;
-    else if (acomp > bcomp) return 1;
-    else return 0;
+  newVertices.length = vidx;
+  newFaces.length = fidx;
+  previewMesh.geometry.vertices = vertices.concat(newVertices);
+  for (var f=0; f<fidx; f++) {
+    faceComputeNormal(newFaces[f], previewMesh.geometry.vertices);
   }
+  previewMesh.geometry.faces = faces.concat(newFaces);
+
+  previewMesh.geometry.elementsNeedUpdate = true;
 }
 
 Slicer.prototype.calculateFaceBounds = function() {

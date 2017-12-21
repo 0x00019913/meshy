@@ -19,6 +19,14 @@ function splitFilename(fullName) {
 }
 
 
+// swapping
+function swap(arr, i, j) {
+  var tmp = arr[i];
+  arr[i] = arr[j];
+  arr[j] = tmp;
+}
+
+
 // Vector3 stuff
 
 // for turning "x" etc. into a normalized Vector3 along axis
@@ -114,6 +122,44 @@ function faceGetVerts(face, vertices) {
     vertices[face.b],
     vertices[face.c]
   ];
+}
+// get THREE.Face3 vertices and sort them in ascending order on axis
+function faceGetVertsSorted(face, vertices, axis) {
+  var verts = faceGetVerts(face, vertices);
+  var ccw = true;
+  var a = verts[0][axis];
+  var b = verts[1][axis];
+  var c = verts[2][axis];
+
+  if (c > a) {
+    if (b > c) {
+      swap (verts, 1, 2);
+      ccw = false;
+    }
+    else if (a > b) {
+      swap (verts, 0, 1);
+      ccw = false;
+    }
+  }
+  else {
+    if (b > a) {
+      swap (verts, 0, 2);
+      swap (verts, 1, 2);
+    }
+    else if (c > b) {
+      swap (verts, 0, 2);
+      swap (verts, 0, 1);
+    }
+    else {
+      swap (verts, 0, 2);
+      ccw = false;
+    }
+  }
+
+  return {
+    verts: verts,
+    ccw: ccw
+  };
 }
 // compute THREE.Face3 normal
 function faceComputeNormal(face, vertices) {

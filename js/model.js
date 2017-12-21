@@ -39,9 +39,8 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   // for display
   this.wireframe = false;
   this.basicMesh = null;
-  this.sliceMesh = null;
-  this.sliceData = null;
   this.mode = "basic";
+  this.slicer = null;
   this.scene = scene;
   this.camera = camera;
   this.container = container;
@@ -56,14 +55,6 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     basicMesh: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: THREE.FaceColors
-    }),
-    sliceMesh: new THREE.MeshStandardMaterial({
-      color: 0x6666ff,
-      vertexColors: THREE.FaceColors
-    }),
-    sliceMeshFlat: new THREE.MeshBasicMaterial({
-      color: 0x6666ff,
-      side: THREE.BackSide
     }),
     patch: new THREE.MeshStandardMaterial({
       color: 0x44ff44,
@@ -692,19 +683,6 @@ Model.prototype.makeBasicMesh = function() {
   this.basicMesh = new THREE.Mesh(geo, this.materials.basicMesh);
   this.basicMesh.name = "model";
   this.basicMesh.frustumCulled = false;
-}
-
-Model.prototype.makeSliceMesh = function() {
-  if (this.sliceMesh) return;
-
-  var geo = new THREE.Geometry();
-  geo.vertices = this.vertices.slice();
-  // slice mesh initialized with no faces; these will be built later
-  geo.faces = [];
-  this.sliceMesh = new THREE.Mesh(geo, this.materials.sliceMesh);
-  this.sliceMesh.name = "model";
-  this.sliceMesh.frustumCulled = false;
-  this.scene.add(this.sliceMesh);
 }
 
 
@@ -1843,16 +1821,14 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 /* SLICING */
 
-// Turn on slice mode:
-//  swap the mesh out for a separate mesh which we'll use for slicing
-//  build height information for each face
+// Turn on slice mode: set mode to "slice", passing sliceHeight
 Model.prototype.activateSliceMode = function(sliceHeight) {
   this.setMode("slice", {
     sliceHeight: sliceHeight
   });
 }
 
-// Turn off slice mode: delete slice mesh and slice data; set mode to "basic".
+// Turn off slice mode: set mode to "basic".
 Model.prototype.deactivateSliceMode = function() {
   this.setMode("basic");
 }
@@ -1867,121 +1843,8 @@ Model.prototype.getCurrentSlice = function() {
   else return 0;
 }
 
-// Set slice to a particular number in the range [0, sliceData.numSlices+1].
-// The bottommost slice is half a slice height below the mesh's y-min; topmost
-//  slice is half a slice height above the mesh's y-max
 Model.prototype.setSlice = function(slice) {
   if (this.slicer) this.slicer.setSlice(slice);
-
-  return;
-
-  if (!this.sliceData) return;
-
-  // the world-space height of the slice plane
-  var sliceLevel = this.min.y + (newSlice-0.5) * this.sliceData.sliceHeight;
-
-  var currentSlice = this.sliceData.currentSlice;
-  var increase = newSlice > currentSlice;
-
-  var geo = this.sliceMesh.geometry;
-  var faces = geo.faces;
-  var slicePatchMesh = this.sliceData.slicePatchMesh;
-  var slicePatchGeo = slicePatchMesh.geometry;
-
-  var faceData = this.sliceData.faceData;
-  var numFacesBelowSlice = 0;
-
-  // slice is below the mesh, so just remove the faces in sliceMesh and return
-  if (newSlice == 0) {
-    faces.length = 0;
-    this.sliceMesh.geometry.elementsNeedUpdate = true;
-    return;
-  }
-
-  var slicedFaces = [];
-
-  for (var i=0; i<faceData.length; i++) {
-    var f = faceData[i];
-
-    // face will be visible;
-    if (f.max < sliceLevel) {
-      numFacesBelowSlice++;
-
-      if (i >= faces.length) faces.push(f.face);
-    }
-    else if (f.max > sliceLevel && f.min < sliceLevel) {
-      slicedFaces.push(f.face);
-    }
-  }
-  faces.length = numFacesBelowSlice;
-  this.sliceMesh.geometry.elementsNeedUpdate = true;
-
-  // handle the sliced faces: slice them and insert them (and assicated verts)
-  // into slicePatchMesh
-  var p = this.p;
-  var patchMap = {};
-  var patchVertices = [];
-  var patchFaces = [];
-  for (var f=0; f<slicedFaces.length; f++) {
-    var verts = faceGetVerts(slicedFaces[f], this.vertices);
-    var va = verts[0], vb = verts[1];
-    verts.sort(yCompare);
-    // check if the winding order got flipped by sorting (default is CCW)
-    var ccw = (verts[0]==va && verts[1]==vb);
-    ccw = ccw || (verts[1]==va && verts[2]==vb);
-    ccw = ccw || (verts[2]==va && verts[0]==vb);
-
-    // in the following, A is the bottom vert, B is the middle vert, and XY
-    // are the points there the triangle intersects the X-Y segment
-
-    // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
-    if (verts[1].y > sliceLevel) {
-      var AB = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[1]);
-      var AC = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[2]);
-      var idxA = vertexMapIdx(patchMap, verts[0], patchVertices, p);
-      var idxAB = vertexMapIdx(patchMap, AB, patchVertices, p);
-      var idxAC = vertexMapIdx(patchMap, AC, patchVertices, p);
-      var newFace;
-      if (ccw) newFace = new THREE.Face3(idxA, idxAB, idxAC);
-      else newFace = new THREE.Face3(idxA, idxAC, idxAB);
-      patchFaces.push(newFace);
-    }
-    // else, slice into two triangles: A-B-AC and B-BC-AC
-    else {
-      var AC = segmentPlaneIntersection("y", sliceLevel, verts[0], verts[2]);
-      var BC = segmentPlaneIntersection("y", sliceLevel, verts[1], verts[2]);
-      var idxA = vertexMapIdx(patchMap, verts[0], patchVertices, p);
-      var idxB = vertexMapIdx(patchMap, verts[1], patchVertices, p);
-      var idxAC = vertexMapIdx(patchMap, AC, patchVertices, p);
-      var idxBC = vertexMapIdx(patchMap, BC, patchVertices, p);
-      var newFace1, newFace2;
-      if (ccw) {
-        newFace1 = new THREE.Face3(idxA, idxB, idxAC);
-        newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
-      }
-      else {
-        newFace1 = new THREE.Face3(idxA, idxAC, idxB);
-        newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
-      }
-      patchFaces.push(newFace1);
-      patchFaces.push(newFace2);
-    }
-  }
-
-  slicePatchGeo.vertices = patchVertices;
-  slicePatchGeo.faces = patchFaces;
-  slicePatchGeo.computeFaceNormals();
-  slicePatchGeo.computeVertexNormals();
-  slicePatchGeo.elementsNeedUpdate = true;
-
-  this.sliceData.currentSlice = newSlice;
-
-  function yCompare(va,vb) {
-    var ay = va.y, by = vb.y;
-    if (ay<by) return -1;
-    else if (ay>by) return 1;
-    else return 0;
-  }
 }
 
 
