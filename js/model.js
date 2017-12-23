@@ -38,9 +38,15 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // for display
   this.wireframe = false;
-  this.basicMesh = null;
+
+  // current mode and the meshes it switches in and out
   this.mode = "basic";
-  this.slicer = null;
+  this.basicMesh = null;
+  this.sliceMode = "preview";
+  this.slicer = null; // instance of module responsible for slicing
+  this.slicePreviewMesh = null;
+  this.slicePathMesh = null;
+
   this.scene = scene;
   this.camera = camera;
   this.container = container;
@@ -55,6 +61,17 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     basicMesh: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: THREE.FaceColors
+    }),
+    slicePreviewMesh: new THREE.MeshStandardMaterial({
+      color: 0x6666ff
+    }),
+    slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0
+    }),
+    slicePathMesh: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
     }),
     patch: new THREE.MeshStandardMaterial({
       color: 0x44ff44,
@@ -652,23 +669,26 @@ Model.prototype.setMode = function(mode, params) {
   this.mode = mode;
   // remove any current meshes in the scene
   removeMeshByName(this.scene, "model");
-  // if active slicer, delete it
-  this.slicer = null;
 
+  // basic mode - display the normal, plain mesh
   if (mode == "basic") {
     if (!this.basicMesh) this.makeBasicMesh();
     this.scene.add(this.basicMesh);
   }
+  // slicing mode - init slicer and display a model in preview mode by default
   else if (mode == "slice") {
     this.slicer = new Slicer(
       this.vertices,
       this.faces,
       {
         sliceHeight: params.sliceHeight,
-        axis: "z"
+        axis: "z",
+        mode: this.sliceMode
       }
     );
-    this.scene.add(this.slicer.getMesh());
+
+    this.makeSliceMesh();
+    this.addSliceMesh();
   }
 }
 
@@ -683,6 +703,79 @@ Model.prototype.makeBasicMesh = function() {
   this.basicMesh = new THREE.Mesh(geo, this.materials.basicMesh);
   this.basicMesh.name = "model";
   this.basicMesh.frustumCulled = false;
+}
+
+// Create a slice mesh for the current slice mode.
+Model.prototype.makeSliceMesh = function() {
+  if (this.sliceMode=="preview") this.makeSlicePreviewMesh();
+  else if (this.sliceMode=="path") this.makeSlicePathMesh();
+
+  this.setSliceMeshGeometry();
+}
+
+Model.prototype.addSliceMesh = function() {
+  if (this.sliceMode=="preview") {
+    if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
+  }
+  else if (this.sliceMode=="path") {
+    if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
+  }
+}
+
+// Set the geometry on the current slice mesh.
+Model.prototype.setSliceMeshGeometry = function() {
+  if (!this.slicer) return;
+
+  var sliceGeometry = this.slicer.getGeometry();
+  var sliceVertices = sliceGeometry.vertices;
+  var sliceFaces = sliceGeometry.faces;
+
+  var mesh;
+
+  if (this.sliceMode=="preview") mesh = this.slicePreviewMesh;
+  else if (this.sliceMode=="path") mesh = this.slicePathMesh;
+
+  if (mesh) {
+    mesh.geometry.vertices = sliceVertices;
+    mesh.geometry.faces = sliceFaces;
+
+    mesh.geometry.groupsNeedUpdate = true;
+    mesh.geometry.elementsNeedUpdate = true;
+  }
+}
+
+// Create the slice-mode preview mesh.
+Model.prototype.makeSlicePreviewMesh = function(vertices, faces) {
+  if (this.slicePreviewMesh) return;
+
+  var geo = new THREE.Geometry();
+
+  // each face in the preview mesh will have one of these materials
+  var faceMaterials = [
+    // set materialIndex = 0 to make a face visible
+    this.materials.slicePreviewMesh,
+    // set materialindex = 1 to hide a face
+    this.materials.slicePreviewMeshTransparent
+  ];
+
+  var mesh = new THREE.Mesh(geo, faceMaterials);
+  mesh.name = "model";
+  mesh.frustumCulled = false;
+
+  this.slicePreviewMesh = mesh;
+}
+
+// Create the slice-mode path visualization mesh.
+Model.prototype.makeSlicePathMesh = function(vertices, faces) {
+  if (this.slicePathMesh) return;
+
+  var geo = new THREE.Geometry();
+
+  var mesh = new THREE.LineSegments(geo, this.materials.slicePathMesh);
+  mesh.name = "model";
+  mesh.frustumCulled = false;
+
+  this.slicePathMesh = mesh;
 }
 
 
@@ -1821,8 +1914,11 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 /* SLICING */
 
-// Turn on slice mode: set mode to "slice", passing sliceHeight
+// Turn on slice mode: set mode to "slice", passing sliceHeight. Slice mode
+// defaults to "preview".
 Model.prototype.activateSliceMode = function(sliceHeight) {
+  this.sliceMode = "preview";
+
   this.setMode("slice", {
     sliceHeight: sliceHeight
   });
@@ -1831,6 +1927,9 @@ Model.prototype.activateSliceMode = function(sliceHeight) {
 // Turn off slice mode: set mode to "basic".
 Model.prototype.deactivateSliceMode = function() {
   this.setMode("basic");
+  this.slicer = null;
+  this.slicePreviewMesh = null;
+  this.slicePathMesh = null;
 }
 
 Model.prototype.getNumSlices = function() {
@@ -1844,7 +1943,22 @@ Model.prototype.getCurrentSlice = function() {
 }
 
 Model.prototype.setSlice = function(slice) {
-  if (this.slicer) this.slicer.setSlice(slice);
+  if (!this.slicer) return;
+
+  this.slicer.setSlice(slice);
+
+  this.setSliceMeshGeometry();
+}
+
+Model.prototype.setSliceMode = function(sliceMode) {
+  if (this.sliceMode == sliceMode || !this.slicer) return;
+
+  removeMeshByName(scene, "model");
+
+  this.sliceMode = sliceMode;
+
+  this.makeSliceMesh();
+  this.addSliceMesh();
 }
 
 

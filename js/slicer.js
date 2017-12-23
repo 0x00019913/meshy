@@ -1,9 +1,13 @@
 /* slicer.js */
-Slicer = function(vertices, faces, params) {
-  this.sourceVertices = vertices;
-  this.sourceFaces = faces;
-  this.vertexCount = vertices.length;
-  this.faceCount = faces.length;
+Slicer = function(sourceVertices, sourceFaces, params) {
+  this.sourceVertices = sourceVertices;
+  this.sourceFaces = sourceFaces;
+  this.sourceVertexCount = sourceVertices.length;
+  this.sourceFaceCount = sourceFaces.length;
+
+  this.previewVertices = [];
+  this.previewFaces = [];
+
   this.sliceHeight = 0.5;
   this.axis = "z";
   this.mode = "preview";
@@ -22,27 +26,21 @@ Slicer = function(vertices, faces, params) {
   this.axis1 = this.axis=="x" ? "y" : this.axis=="y" ? "z" : "x";
   this.axis2 = this.axis=="x" ? "z" : this.axis=="y" ? "x" : "y";
 
-  this.previewMeshMaterial = new THREE.MeshStandardMaterial({
-    color: 0x6666ff
-  });
-  this.transparentMaterial = new THREE.MeshBasicMaterial({
-    transparent: true,
-    opacity: 0
-  });
-  this.pathMeshMaterial = new THREE.LineBasicMaterial({
-    color: 0x888888,
-    linewidth: 1
-  });
-
   this.calculateFaceBounds();
 
-  this.makePreviewMesh();
-  this.makePathMesh();
+  this.makePreviewGeometry();
+  this.makePathGeometry();
 }
 
-Slicer.prototype.getMesh = function() {
-  if (this.mode=="preview") return this.previewMesh;
-  else if (this.mode=="path") return this.pathMesh;
+Slicer.prototype.getGeometry = function() {
+  if (this.mode=="preview") return {
+    vertices: this.previewVertices,
+    faces: this.previewFaces
+  };
+  else if (this.mode=="path") return {
+    vertices: this.pathVertices,
+    faces: this.pathFaces
+  };
 }
 
 Slicer.prototype.getNumSlices = function() {
@@ -65,7 +63,7 @@ Slicer.prototype.setPreviewSlice = function(slice) {
   // array of faces that intersect the slicing plane
   var slicedFaces = [];
 
-  for (var i = this.faceCount-1; i >= 0; i--) {
+  for (var i = this.sourceFaceCount-1; i >= 0; i--) {
     var bounds = faceBounds[i];
     // if min above slice level, need to hide the face
     if (bounds.min > sliceLevel) bounds.face.materialIndex = 1;
@@ -81,25 +79,23 @@ Slicer.prototype.setPreviewSlice = function(slice) {
     }
   }
 
-  // update because we changed material indices
-  var previewMesh = this.previewMesh;
-  previewMesh.geometry.groupsNeedUpdate = true;
-
   // handle the sliced faces: slice them and insert them (and assicated verts)
   // into previewMesh
 
   // current vertices and faces
-  var vertices = previewMesh.geometry.vertices;
-  var faces = previewMesh.geometry.faces;
+  var vertices = this.previewVertices;
+  var faces = this.previewFaces;
+  // local vars for ease of access
+  var vertexCount = this.sourceVertexCount;
+  var faceCount = this.sourceFaceCount;
   // erase any sliced verts and faces
-  vertices.length = this.vertexCount;
-  faces.length = this.faceCount;
+  vertices.length = vertexCount;
+  faces.length = faceCount;
 
   var axis = this.axis;
-  var vertexCount = this.vertexCount;
-  var faceCount = this.faceCount;
 
-  // newly created verts and faces will go here; then append them to the mesh
+  // newly created verts and faces will go here; then append them to the mesh;
+  // max of 2 times that many faces and 4 times that many verts
   var newVertices = new Array(4 * slicedFaces.length);
   var newFaces = new Array(2 * slicedFaces.length);
   // current face/vertex in the new arrays
@@ -174,15 +170,21 @@ Slicer.prototype.setPreviewSlice = function(slice) {
     }
   }
 
+  // erase whatever we allocated and didn't need
   newVertices.length = vidx;
   newFaces.length = fidx;
-  previewMesh.geometry.vertices = vertices.concat(newVertices);
-  for (var f=0; f<fidx; f++) {
-    faceComputeNormal(newFaces[f], previewMesh.geometry.vertices);
-  }
-  previewMesh.geometry.faces = faces.concat(newFaces);
 
-  previewMesh.geometry.elementsNeedUpdate = true;
+  // append the new vertices to the vertex array
+  vertices = vertices.concat(newVertices);
+  this.previewVertices = vertices;
+
+  // recompute the normals for all the faces we created
+  for (var f=0; f<fidx; f++) {
+    faceComputeNormal(newFaces[f], vertices);
+  }
+
+  // append the new faces to the face array
+  this.previewFaces = faces.concat(newFaces);
 }
 
 Slicer.prototype.calculateFaceBounds = function() {
@@ -219,42 +221,28 @@ Slicer.prototype.calculateFaceBounds = function() {
   this.currentSlice = this.numSlices;
 }
 
-Slicer.prototype.makePreviewMesh = function() {
-  // create the mesh
-  var geo = new THREE.Geometry();
-  geo.vertices = this.sourceVertices.slice();
-  // slice preview mesh initialized with no faces; these will be built later
-  var faces = [];
-  geo.faces = faces;
-
-  // each face in the preview mesh will have one of these materials
-  var faceMaterials = [
-    // set materialIndex = 0 to make a face visible
-    this.previewMeshMaterial,
-    // set materialindex = 1 to hide a face
-    this.transparentMaterial
-  ];
-
-  var previewMesh = new THREE.Mesh(geo, faceMaterials);
-  previewMesh.name = "model";
-  previewMesh.frustumCulled = false;
+Slicer.prototype.makePreviewGeometry = function() {
+  this.previewVertices = this.sourceVertices.slice();
+  this.previewFaces = [];
 
   // set the face array on the mesh
   for (var i=0; i<this.faceBounds.length; i++) {
     var face = this.faceBounds[i].face;
     face.materialIndex = 0; // explicitly set as visible by default
-    faces.push(face);
+    this.previewFaces.push(face);
   }
-
-  this.previewMesh = previewMesh;
 }
 
-Slicer.prototype.makePathMesh = function() {
-  var geo = new THREE.Geometry();
-  geo.vertices = [];
-  geo.faces = [];
+Slicer.prototype.makePathGeometry = function() {
+  return;
 
-  this.pathMesh = new THREE.LineSegments(geo, this.pathMeshMaterial);
-  this.pathMesh.name = "model";
-  this.pathMesh.frustumCulled = false;
+  this.previewVertices = this.sourceVertices.slice();
+  this.previewFaces = [];
+
+  // set the face array on the mesh
+  for (var i=0; i<this.faceBounds.length; i++) {
+    var face = this.faceBounds[i].face;
+    face.materialIndex = 0; // explicitly set as visible by default
+    this.previewFaces.push(face);
+  }
 }
