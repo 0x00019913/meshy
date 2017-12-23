@@ -240,13 +240,13 @@ Model.prototype.rotate = function(axis, amount) {
   // need a Vector3 for rotating vertices
   var axisVector = axisToVector3(axis);
 
-  for (var i=0; i<this.vertices.length; i++) {
-    var vertex = this.vertices[i];
+  for (var v=0; v<this.vertices.length; v++) {
+    var vertex = this.vertices[v];
     vertex.applyAxisAngle(axisVector, degree);
     this.updateBoundsV(vertex);
   }
-  for (var i=0; i<this.count; i++) {
-    this.faces[i].normal.applyAxisAngle(axisVector, degree);
+  for (var f=0; f<this.count; f++) {
+    this.faces[f].normal.applyAxisAngle(axisVector, degree);
   }
 
   this.basicMesh.geometry.verticesNeedUpdate = true;
@@ -288,8 +288,8 @@ Model.prototype.scale = function (axis, amount) {
     var amountString = amount[axis].toFixed(d);
     this.printout.log("scale by a factor of "+amountString+" units on "+axis+" axis");
   }
-  for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i].multiply(amount);
+  for (var v=0; v<this.vertices.length; v++) {
+    this.vertices[v].multiply(amount);
   }
   // normals may shift as a result of the scaling, so recompute
   this.basicMesh.geometry.computeFaceNormals();
@@ -326,12 +326,12 @@ Model.prototype.mirror = function(axis) {
 
   var scaleVector = new THREE.Vector3(1,1,1);
   scaleVector[axis] = -1;
-  for (var i=0; i<this.vertices.length; i++) {
-    this.vertices[i].multiply(scaleVector);
+  for (var v=0; v<this.vertices.length; v++) {
+    this.vertices[v].multiply(scaleVector);
   }
   // flip the normal component and also flip the winding order
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
+  for (var f=0; f<this.faces.length; f++) {
+    var face = this.faces[f];
     var tmp = face.a;
     face.a = face.b;
     face.b = tmp;
@@ -363,6 +363,20 @@ Model.prototype.mirror = function(axis) {
   this.clearThicknessView();
 
   this.measurement.scale(scaleVector);
+}
+
+Model.prototype.flipNormals = function() {
+  // flip the normal component and also flip the winding order
+  for (var f=0; f<this.faces.length; f++) {
+    var face = this.faces[f];
+    var tmp = face.a;
+    face.a = face.b;
+    face.b = tmp;
+    face.normal.multiplyScalar(-1);
+  }
+
+  this.basicMesh.geometry.elementsNeedUpdate = true;
+  this.basicMesh.geometry.normalsNeedUpdate = true;
 }
 
 /* MEASUREMENT */

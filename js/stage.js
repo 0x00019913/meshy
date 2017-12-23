@@ -164,6 +164,8 @@ Stage.prototype.generateUI = function() {
   centerFolder.add(this, "centerY");
   centerFolder.add(this, "centerZ");
 
+  transformFolder.add(this, "flipNormals");
+
   var calculationFolder = this.gui.addFolder("Calculate");
   calculationFolder.add(this, "calcSurfaceArea");
   calculationFolder.add(this, "calcVolume");
@@ -291,6 +293,7 @@ Stage.prototype.centerAll = function() { this.transform("center","all",null); }
 Stage.prototype.centerX = function() { this.transform("center","x",null); }
 Stage.prototype.centerY = function() { this.transform("center","y",null); }
 Stage.prototype.centerZ = function() { this.transform("center","z",null); }
+Stage.prototype.flipNormals = function() { if (this.model) this.model.flipNormals(); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
 Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
