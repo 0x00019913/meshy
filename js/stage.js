@@ -350,8 +350,17 @@ Stage.prototype.buildSliceFolderActive = function() {
       "currentSlice",
       0, numSlices
     ).step(1).onChange(this.setSlice.bind(this));
+    this.sliceMode = this.model.getSliceMode();
+    this.sliceFolder.add(
+      this,
+      "sliceMode",
+      ["preview", "path"]
+    ).onChange(this.setSliceMode.bind(this));
     this.sliceFolder.add(this, "deactivateSliceMode");
   }
+}
+Stage.prototype.setSliceMode = function() {
+  if (this.model) this.model.setSliceMode(this.sliceMode);
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {

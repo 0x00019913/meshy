@@ -5,12 +5,16 @@ Slicer = function(sourceVertices, sourceFaces, params) {
   this.sourceVertexCount = sourceVertices.length;
   this.sourceFaceCount = sourceFaces.length;
 
-  this.previewVertices = [];
-  this.previewFaces = [];
+  this.previewVertices = null;
+  this.previewFaces = null;
+
+  this.pathVertices = null;
 
   this.sliceHeight = 0.5;
   this.axis = "z";
   this.mode = "preview";
+  this.previewGeometryReady = false;
+  this.pathGeometryReady = false;
 
   // set from params
   if (params) {
@@ -28,8 +32,24 @@ Slicer = function(sourceVertices, sourceFaces, params) {
 
   this.calculateFaceBounds();
 
-  this.makePreviewGeometry();
-  this.makePathGeometry();
+  this.setMode(this.mode);
+}
+
+Slicer.prototype.setMode = function(mode) {
+  this.mode = mode;
+
+  if (mode=="preview") {
+    if (!this.previewGeometryReady) this.makePreviewGeometry();
+  }
+  else if (this.mode=="path") {
+    if (!this.pathGeometryReady) this.makePathGeometry();
+  }
+
+  this.setSlice(this.currentSlice);
+}
+
+Slicer.prototype.getMode = function() {
+  return this.mode;
 }
 
 Slicer.prototype.getGeometry = function() {
@@ -38,8 +58,7 @@ Slicer.prototype.getGeometry = function() {
     faces: this.previewFaces
   };
   else if (this.mode=="path") return {
-    vertices: this.pathVertices,
-    faces: this.pathFaces
+    vertices: this.pathVertices
   };
 }
 
@@ -52,11 +71,14 @@ Slicer.prototype.getCurrentSlice = function() {
 }
 
 Slicer.prototype.setSlice = function(slice) {
-  if (this.mode=="preview") this.setPreviewSlice(slice);
-  else if (this.mode=="path") this.setPathSlice(slice);
+  this.currentSlice = slice;
+  if (this.mode=="preview") this.setPreviewSlice();
+  else if (this.mode=="path") this.setPathSlice();
 }
 
-Slicer.prototype.setPreviewSlice = function(slice) {
+Slicer.prototype.setPreviewSlice = function() {
+  var slice = this.currentSlice;
+
   var sliceLevel = this.min + (slice-0.5) * this.sliceHeight;
   var faceBounds = this.faceBounds;
 
@@ -187,6 +209,11 @@ Slicer.prototype.setPreviewSlice = function(slice) {
   this.previewFaces = faces.concat(newFaces);
 }
 
+Slicer.prototype.setPathSlice = function() {
+  var slice = this.currentSlice;
+  // todo
+}
+
 Slicer.prototype.calculateFaceBounds = function() {
   this.faceBounds = [];
   var faceBounds = this.faceBounds;
@@ -216,8 +243,8 @@ Slicer.prototype.calculateFaceBounds = function() {
 
   this.min = min;
   this.max = max;
-  // slices are displaced by half a slice height from mesh extremes, hence +1
-  this.numSlices = Math.ceil((max - min) / this.sliceHeight) + 1;
+  // first slice is half a slice height below mesh min, hence +1
+  this.numSlices = Math.floor(0.5 + (max - min) / this.sliceHeight) + 2;
   this.currentSlice = this.numSlices;
 }
 
@@ -231,18 +258,116 @@ Slicer.prototype.makePreviewGeometry = function() {
     face.materialIndex = 0; // explicitly set as visible by default
     this.previewFaces.push(face);
   }
+
+  this.previewGeometryReady = true;
 }
 
 Slicer.prototype.makePathGeometry = function() {
-  return;
+  var segmentLists = this.buildLayerSegmentLists();
 
-  this.previewVertices = this.sourceVertices.slice();
-  this.previewFaces = [];
+  this.pathVertices = [];
 
-  // set the face array on the mesh
-  for (var i=0; i<this.faceBounds.length; i++) {
-    var face = this.faceBounds[i].face;
-    face.materialIndex = 0; // explicitly set as visible by default
-    this.previewFaces.push(face);
+  for (var i=0; i<segmentLists.length; i++) {
+    var segmentList = segmentLists[i];
+    for (var s=0; s<segmentList.length; s++) {
+      var segment = segmentList[s];
+      this.pathVertices.push(segment[0]);
+      this.pathVertices.push(segment[1]);
+    }
   }
+
+  this.pathGeometryReady = true;
+}
+
+
+
+// SLICING THE MESH INTO PATHS
+
+// uses an implementation of "An Optimal Algorithm for 3D Triangle Mesh Slicing"
+// http://www.dainf.ct.utfpr.edu.br/~murilo/public/CAD-slicing.pdf
+
+Slicer.prototype.buildLayerLists = function() {
+  var sliceHeight = this.sliceHeight;
+  var min = this.min, max = this.max;
+  var faceBounds = this.faceBounds;
+
+  var numPathLayers = this.numSlices - 2;
+
+  // position fo first and last layer
+  var layer0 = min + sliceHeight/2;
+  var layerk = layer0 + sliceHeight * (numPathLayers - 1);
+
+  // init layer lists
+  var layerLists = new Array(numPathLayers + 1);
+  for (var i=0; i<=numPathLayers; i++) layerLists[i] = [];
+
+  // bucket the faces
+  for (var i=0; i<this.sourceFaceCount; i++) {
+    var bounds = faceBounds[i];
+    var index;
+
+    if (bounds.min < layer0) index = 0;
+    else if (bounds.min > layerk) index = numPathLayers;
+    else index = Math.ceil((bounds.min - layer0) / sliceHeight);
+
+    layerLists[index].push(i);
+  }
+
+  return layerLists;
+}
+
+Slicer.prototype.buildLayerSegmentLists = function() {
+  var layerLists = this.buildLayerLists();
+
+  // various local vars
+  var numPathLayers = layerLists.length;
+  var faceBounds = this.faceBounds;
+  var min = this.min, axis = this.axis;
+  var sliceHeight = this.sliceHeight;
+  var vertices = this.sourceVertices;
+  var faces = this.sourceFaces;
+
+  var layerSegmentLists = new Array(numPathLayers);
+
+  // running set of active face indices as we sweep up along the layers
+  var sweepSet = new Set();
+
+  for (var i=0; i<numPathLayers; i++) {
+    // reaching a new layer, insert whatever new active face indices for that layer
+    if (layerLists[i].length>0) sweepSet = new Set([...sweepSet, ...layerLists[i]]);
+
+    // accumulate these for this layer
+    var layerSegmentList = [];
+    // height of layer from mesh min
+    var sliceLevel = min + (i + 0.5) * sliceHeight;
+
+    // for each index in the sweep list, see if it intersects the slicing plane:
+    //  if it's below the slicing plane, eliminate it
+    //  else, store its intersection with the slicing plane
+    for (var idx of sweepSet) {
+      var bounds = faceBounds[idx];
+
+      if (bounds.max < sliceLevel) sweepSet.delete(idx);
+      else {
+        // get verts sorted in ascending order on axis; call it [A,B,C]
+        var verts = faceGetVertsSorted(bounds.face, vertices, axis).verts;
+
+        // if B is above slicing plane, calculate AB and AC intersection
+        if (verts[1][axis]>sliceLevel) {
+          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
+        }
+        // else, calculate BC and AC intersection
+        else {
+          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
+        }
+        var int2 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
+
+        layerSegmentList.push([int1, int2]);
+      }
+    }
+
+    layerSegmentLists[i] = layerSegmentList;
+  }
+
+  return layerSegmentLists;
 }

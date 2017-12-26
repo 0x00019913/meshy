@@ -744,17 +744,21 @@ Model.prototype.setSliceMeshGeometry = function() {
   var sliceVertices = sliceGeometry.vertices;
   var sliceFaces = sliceGeometry.faces;
 
-  var mesh;
+  if (this.sliceMode=="preview") {
+    var mesh = this.slicePreviewMesh;
+    if (!mesh) return;
 
-  if (this.sliceMode=="preview") mesh = this.slicePreviewMesh;
-  else if (this.sliceMode=="path") mesh = this.slicePathMesh;
-
-  if (mesh) {
     mesh.geometry.vertices = sliceVertices;
     mesh.geometry.faces = sliceFaces;
 
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
+  }
+  else if (this.sliceMode=="path") {
+    var mesh = this.slicePathMesh;
+    if (!mesh) return;
+
+    mesh.geometry.vertices = sliceVertices;
   }
 }
 
@@ -1956,23 +1960,30 @@ Model.prototype.getCurrentSlice = function() {
   else return 0;
 }
 
+Model.prototype.getSliceMode = function() {
+  if (this.slicer) return this.slicer.getMode();
+  else return null;
+}
+
+Model.prototype.setSliceMode = function(sliceMode) {
+  if (this.sliceMode == sliceMode || !this.slicer) return;
+
+  removeMeshByName(this.scene, "model");
+
+  this.sliceMode = sliceMode;
+
+  this.slicer.setMode(sliceMode);
+
+  this.makeSliceMesh();
+  this.addSliceMesh();
+}
+
 Model.prototype.setSlice = function(slice) {
   if (!this.slicer) return;
 
   this.slicer.setSlice(slice);
 
   this.setSliceMeshGeometry();
-}
-
-Model.prototype.setSliceMode = function(sliceMode) {
-  if (this.sliceMode == sliceMode || !this.slicer) return;
-
-  removeMeshByName(scene, "model");
-
-  this.sliceMode = sliceMode;
-
-  this.makeSliceMesh();
-  this.addSliceMesh();
 }
 
 
