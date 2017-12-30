@@ -13,6 +13,7 @@ Stage = function() {
 
   // toggles
   this.importEnabled = true;
+  this.importingMeshName = "";
   this.floorVisible = true;
 
   // geometry
@@ -595,6 +596,11 @@ Stage.prototype.import = function() {
     return;
   }
 
+  if (!this.importEnabled) {
+    this.printout.warn("Already importing mesh " + this.importingMeshName);
+    return;
+  }
+
   if (this.fileInput) {
     this.fileInput.click();
   }
@@ -603,7 +609,10 @@ Stage.prototype.import = function() {
 // Called from HTML when the import button is clicked. Creates the Model
 // instance and tells it to load the geometry.
 Stage.prototype.handleFile = function(file) {
-  this.model = new Model(
+  this.importingMeshName = file.name;
+  this.importEnabled = false;
+
+  var model = new Model(
     this.scene,
     this.camera,
     this.container,
@@ -611,10 +620,38 @@ Stage.prototype.handleFile = function(file) {
     this.infoBox,
     this.progressBarContainer
   );
-  this.model.isLittleEndian = this.isLittleEndian;
-  this.model.vertexPrecision = this.vertexPrecision;
-  this.model.import(file, this.displayMesh.bind(this));
+
+  model.isLittleEndian = this.isLittleEndian;
+  model.vertexPrecision = this.vertexPrecision;
+  model.import(file, this.displayMesh.bind(this));
 };
+
+// Callback passed to model.import; puts the mesh into the viewport.
+Stage.prototype.displayMesh = function(success, model) {
+  if (!success) {
+    // it's necessary to clear file input box because it blocks importing
+    // a model with the same name twice in a row
+    this.fileInput.value = "";
+
+    this.model = null;
+    return;
+  }
+
+  // set model
+  this.model = model;
+
+  this.importEnabled = true;
+
+  // failsafe
+  if (!this.model) {
+    removeMeshByName(this.scene, "model");
+    return;
+  }
+  this.cameraToModel();
+  this.filename = this.model.filename;
+  this.setMeshColor();
+  this.updateUI();
+}
 
 // Interface for the dat.gui button. Saves the model.
 Stage.prototype.export = function(format) {
@@ -647,27 +684,6 @@ Stage.prototype.delete = function() {
   this.undoStack.clear();
 
   this.printout.log("Model deleted.");
-}
-
-// Callback passed to model.import; puts the mesh into the viewport.
-Stage.prototype.displayMesh = function(success) {
-  if (!success) {
-    // it's necessary to clear file input box because it blocks importing
-    // a model with the same name twice in a row
-    this.fileInput.value = "";
-
-    this.model = null;
-    return;
-  }
-  // failsafe
-  if (!this.model) {
-    removeMeshByName(this.scene, "model");
-    return;
-  }
-  this.cameraToModel();
-  this.filename = this.model.filename;
-  this.setMeshColor();
-  this.updateUI();
 }
 
 // Reposition the camera to look at the model.

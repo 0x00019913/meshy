@@ -164,11 +164,13 @@ function faceGetVertsSorted(face, vertices, axis) {
 // compute THREE.Face3 normal
 function faceComputeNormal(face, vertices) {
   var verts = faceGetVerts(face, vertices);
-  var b = verts[1];
-  var ba = verts[0].clone().sub(b);
-  var bc = verts[2].clone().sub(b);
+  face.normal.copy(vertsComputeNormal(...verts));
+}
+function vertsComputeNormal(a, b, c) {
+  var ba = a.clone().sub(b);
+  var bc = c.clone().sub(b);
 
-  face.normal.copy(bc.cross(ba).normalize());
+  return bc.cross(ba).normalize();
 }
 function faceGetBounds(face, axis, vertices) {
   var verts = faceGetVerts(face, vertices);
@@ -195,6 +197,21 @@ function removeMeshByName(scene, name) {
       scene.remove(child);
     }
   }
+}
+
+// u cross v = (uy vz - uz vy, uz vx - ux vz, ux vy - uy vx)
+// u = b - a; v = c - a; u cross v = 2 * area
+// (b-a) cross (c-a) = 2 * area = (
+//  (by-ay)(cz-az) - (bz-az)(cy-ay),
+//  (bz-az)(cx-ax) - (bx-ax)(cz-az),
+//  (bx-ax)(cy-ay) - (by-ay)(cx-ax),
+// )
+function triangleArea(a, b, c, axis) {
+  var area = 0;
+  if (axis == "x") area = (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);
+  if (axis == "y") area = (b.z-a.z)*(c.x-a.x) - (b.x-a.x)*(c.z-a.z);
+  if (axis == "z") area = (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
+  return area/2;
 }
 
 // for vertex hash maps

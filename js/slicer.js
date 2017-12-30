@@ -35,6 +35,35 @@ Slicer = function(sourceVertices, sourceFaces, params) {
   this.setMode(this.mode);
 }
 
+// necessary function - called from constructor
+// calculates min and max for every face on the axis
+Slicer.prototype.calculateFaceBounds = function() {
+  this.faceBounds = [];
+  var faceBounds = this.faceBounds;
+  var min = Infinity, max = -Infinity;
+
+  for (var i=0; i<this.sourceFaces.length; i++) {
+    var face = this.sourceFaces[i];
+    var bounds = faceGetBounds(face, this.axis, this.sourceVertices);
+
+    max = Math.max(max, bounds.max);
+    min = Math.min(min, bounds.min);
+
+    // store min and max for each face
+    faceBounds.push({
+      face: face.clone(),
+      max: bounds.max,
+      min: bounds.min
+    });
+  }
+
+  this.min = min;
+  this.max = max;
+  // first slice is half a slice height below mesh min, hence +1
+  this.numSlices = Math.floor(0.5 + (max - min) / this.sliceHeight) + 2;
+  this.currentSlice = this.numSlices;
+}
+
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
@@ -101,7 +130,7 @@ Slicer.prototype.setPreviewSlice = function() {
     }
   }
 
-  // handle the sliced faces: slice them and insert them (and assicated verts)
+  // handle the sliced faces: slice them and insert them (and associated verts)
   // into previewMesh
 
   // current vertices and faces
@@ -121,55 +150,66 @@ Slicer.prototype.setPreviewSlice = function() {
   var newVertices = new Array(4 * slicedFaces.length);
   var newFaces = new Array(2 * slicedFaces.length);
   // current face/vertex in the new arrays
-  var vidx = 0, fidx = 0;
+  var vidx = 0;
+  var fidx = 0;
+
+  var loopBuilder = new EdgeLoopBuilder(axis);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
     var slicedFace = slicedFaces[f];
 
-    // get verts sorted on axis; check if this flipped winding order (default is CCW)
-    var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
-    var verts = vertsSorted.verts;
-    var ccw = vertsSorted.ccw;
-
     // in the following, A is the bottom vert, B is the middle vert, and XY
     // are the points there the triangle intersects the X-Y segment
 
+    // get verts sorted on axis; check if this flipped winding order (default is CCW)
+    var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
+    var [A, B, C] = vertsSorted.verts;
+    var ccw = vertsSorted.ccw;
+
     // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
-    if (verts[1][axis] > sliceLevel) {
+    if (B[axis] > sliceLevel) {
       // calculate intersection of A-B and A-C
-      var AB = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
-      var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
+      var AB = segmentPlaneIntersection(axis, sliceLevel, A, B);
+      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
 
       // get indices of these verts in the final vert array before pushing them there
       var idxA = vertexCount + vidx;
       var idxAB = idxA + 1;
       var idxAC = idxA + 2;
-      newVertices[vidx++] = verts[0];
+      newVertices[vidx++] = A;
       newVertices[vidx++] = AB;
       newVertices[vidx++] = AC;
 
       // create the new face and push it into the faces array
       var newFace;
-      if (ccw) newFace = new THREE.Face3(idxA, idxAB, idxAC);
-      else newFace = new THREE.Face3(idxA, idxAC, idxAB);
+      if (ccw) {
+        newFace = new THREE.Face3(idxA, idxAB, idxAC);
+        newFace.normal.copy(vertsComputeNormal(A, AB, AC));
+      }
+      else {
+        newFace = new THREE.Face3(idxA, idxAC, idxAB);
+        newFace.normal.copy(vertsComputeNormal(A, AC, AB));
+      }
       // explicitly visible
       newFace.materialIndex = 0;
 
       newFaces[fidx++] = newFace;
+
+      loopBuilder.addSegment(AB, AC, newFace.normal);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
       // calculate intersection of A-C and B-C
-      var AC = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
-      var BC = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
+      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
+      var BC = segmentPlaneIntersection(axis, sliceLevel, B, C);
       // get indices of these verts in the vert array before pushing them there
       var idxA = vertexCount + vidx;
       var idxB = idxA + 1;
       var idxAC = idxA + 2;
       var idxBC = idxA + 3;
-      newVertices[vidx++] = verts[0];
-      newVertices[vidx++] = verts[1];
+      newVertices[vidx++] = A;
+      newVertices[vidx++] = B;
       newVertices[vidx++] = AC;
       newVertices[vidx++] = BC;
 
@@ -178,10 +218,14 @@ Slicer.prototype.setPreviewSlice = function() {
       if (ccw) {
         newFace1 = new THREE.Face3(idxA, idxB, idxAC);
         newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
+        newFace1.normal.copy(vertsComputeNormal(A, B, AC));
+        newFace2.normal.copy(vertsComputeNormal(B, BC, AC));
       }
       else {
         newFace1 = new THREE.Face3(idxA, idxAC, idxB);
         newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
+        newFace1.normal.copy(vertsComputeNormal(A, AC, B));
+        newFace2.normal.copy(vertsComputeNormal(B, AC, BC));
       }
       // explicitly visible
       newFace1.materialIndex = 0;
@@ -189,63 +233,26 @@ Slicer.prototype.setPreviewSlice = function() {
 
       newFaces[fidx++] = newFace1;
       newFaces[fidx++] = newFace2;
+
+      loopBuilder.addSegment(AC, BC, newFace2.normal);
     }
   }
 
-  // erase whatever we allocated and didn't need
-  newVertices.length = vidx;
-  newFaces.length = fidx;
-
-  // append the new vertices to the vertex array
-  vertices = vertices.concat(newVertices);
-  this.previewVertices = vertices;
-
-  // recompute the normals for all the faces we created
-  for (var f=0; f<fidx; f++) {
-    faceComputeNormal(newFaces[f], vertices);
-  }
-
-  // append the new faces to the face array
+  // put the new verts and faces on the end of the existing array
+  this.previewVertices = vertices.concat(newVertices);
   this.previewFaces = faces.concat(newFaces);
+
+  // erase whatever we allocated and didn't need
+  this.previewVertices.length = vertexCount + vidx;
+  this.previewFaces.length = faceCount + fidx;
+
+  var edgeLoops = loopBuilder.makeEdgeLoops();
+  console.log(edgeLoops);
 }
 
 Slicer.prototype.setPathSlice = function() {
   var slice = this.currentSlice;
   // todo
-}
-
-Slicer.prototype.calculateFaceBounds = function() {
-  this.faceBounds = [];
-  var faceBounds = this.faceBounds;
-  var min = Infinity, max = -Infinity;
-
-  for (var i=0; i<this.sourceFaces.length; i++) {
-    var face = this.sourceFaces[i];
-    var bounds = faceGetBounds(face, this.axis, this.sourceVertices);
-
-    max = Math.max(max, bounds.max);
-    min = Math.min(min, bounds.min);
-
-    // store min and max for each face
-    faceBounds.push({
-      face: face.clone(),
-      max: bounds.max,
-      min: bounds.min
-    });
-  }
-
-  // sort by maxes
-  faceBounds.sort(function(a,b) {
-    if (a.max<b.max) return -1;
-    else if (a.max>b.max) return 1;
-    else return 0;
-  });
-
-  this.min = min;
-  this.max = max;
-  // first slice is half a slice height below mesh min, hence +1
-  this.numSlices = Math.floor(0.5 + (max - min) / this.sliceHeight) + 2;
-  this.currentSlice = this.numSlices;
 }
 
 Slicer.prototype.makePreviewGeometry = function() {
@@ -351,9 +358,17 @@ Slicer.prototype.buildLayerSegmentLists = function() {
       else {
         // get verts sorted in ascending order on axis; call it [A,B,C]
         var verts = faceGetVertsSorted(bounds.face, vertices, axis).verts;
+        var a0 = verts[0][axis];
+        var a1 = verts[1][axis];
+        var a2 = verts[2][axis];
+
+        // face is flat or intersects slicing plane at a point
+        if (a0 == a2) continue;
+        if (a0 == sliceLevel && a0 < a1) continue;
+        if (a2 == sliceLevel && a1 < a2) continue;
 
         // if B is above slicing plane, calculate AB and AC intersection
-        if (verts[1][axis]>sliceLevel) {
+        if (a1 > sliceLevel) {
           var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
         }
         // else, calculate BC and AC intersection
@@ -370,4 +385,266 @@ Slicer.prototype.buildLayerSegmentLists = function() {
   }
 
   return layerSegmentLists;
+}
+
+// circular double-linked list symbolizing an edge loop
+EdgeLoop = function(vertices, axis) {
+  this.axis = axis;
+  this.axis1 = this.axis=="x" ? "y" : this.axis=="y" ? "z" : "x";
+  this.axis2 = this.axis=="x" ? "z" : this.axis=="y" ? "x" : "y";
+
+  this.count = 0;
+  this.area = 0;
+  this.hole = false;
+  this.vertex = null;
+
+  // bounds - used for bounding-box tests and for
+  this.min1 = Infinity;
+  this.max1 = -Infinity;
+  this.min2 = Infinity;
+  this.max2 = -Infinity;
+
+  this.polysInside = new Set();
+  this.polysOutside = new Set();
+  this.holesInside = new Set();
+  this.holesOutside = new Set();
+
+  if (!vertices || vertices.length < 1) return;
+
+  var start = null;
+
+  for (var i = 0; i < vertices.length; i++) {
+    var v = vertices[i];
+
+    // update bounds
+    this.min1 = Math.min(this.min1, v[this.axis1]);
+    this.max1 = Math.max(this.max1, v[this.axis1]);
+    this.min2 = Math.min(this.min2, v[this.axis2]);
+    this.max2 = Math.max(this.max2, v[this.axis2]);
+
+    // create the node for this vertex
+    var node = {
+      v: v,
+      prev: null,
+      next: null
+    }
+
+    // insert into the linked list
+    if (this.vertex) {
+      node.prev = this.vertex;
+      this.vertex.next = node;
+    }
+    else start = node;
+
+    this.vertex = node;
+
+    this.count++;
+    if (this.count > 2) {
+      this.area += triangleArea(start.v, this.vertex.prev.v, this.vertex.v, axis);
+    }
+  }
+
+  // close the last connection
+  this.vertex.next = start;
+  start.prev = this.vertex;
+
+  if (this.area < 0) this.hole = true;
+}
+
+EdgeLoop.prototype.contains = function(other) {
+  if (this.max1 < other.min1 || this.min1 > other.max1) return false;
+  if (this.max2 < other.min2 || this.min2 > other.max2) return false;
+
+  // todo: point-in-polygon testing
+
+  return true;
+}
+
+EdgeLoopBuilder = function(axis) {
+  this.p = Math.pow(10, 7);
+  this.axis = axis;
+  this.up = new THREE.Vector3();
+  this.up[axis] = 1;
+
+  this.adjacencyMap = {};
+}
+
+EdgeLoopBuilder.prototype.clear = function() {
+  this.adjacencyMap = {};
+}
+
+EdgeLoopBuilder.prototype.addSegment = function(v1, v2, normal) {
+  this.insertNeighbor(v1, v2, normal);
+  this.insertNeighbor(v2, v1, normal);
+}
+
+EdgeLoopBuilder.prototype.insertNeighbor = function(v1, v2, n) {
+  var v1hash = vertexHash(v1, this.p);
+  var a = this.adjacencyMap;
+
+  if (!a.hasOwnProperty(v1hash)) a[v1hash] = {
+    v : v1,
+    neighbors: [],
+    normals: [],
+    visited: false
+  };
+
+  a[v1hash].neighbors.push(v2);
+  a[v1hash].normals.push(n);
+}
+
+EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
+  var a = this.adjacencyMap;
+  var up = this.up;
+  var axis = this.axis;
+  var p = this.p;
+
+  var loops = {
+    polys: [],
+    holes: []
+  };
+
+  // repeats until adjacency map is empty
+  while (!objectIsEmpty(a)) {
+    // vertex hashes for start, current, and prev
+    var start = null;
+    var current = null;
+    var prev = null;
+
+    // pick a random vertex
+    for (key in a) {
+      start = key;
+      break;
+    }
+
+    // should never happen, but just in case
+    if (start == null) break;
+
+    var vertices = [];
+
+    var neighbors, normals;
+
+    current = start;
+
+    // go along the loop till it closes
+    do {
+      if (!a.hasOwnProperty(current)) break;
+
+      vertices.push(a[current].v);
+
+      v = a[current].v;
+      neighbors = a[current].neighbors;
+      normals = a[current].normals;
+
+      delete a[current];
+
+      next = vertexHash(neighbors[0], p);
+
+      // if current is the first vertex
+      if (!prev) {
+        var nextData = a[next];
+        // initialize:
+        // pick the neighbor that's CCW from current for normal edge loops and
+        // CW for holes: vector along axis normal to the plane crossed with an
+        // edge's normal should have a positive component along the CCW edge
+        var dot = up.clone().cross(normals[0]).dot(nextData.v.clone().sub(v));
+        if (dot < 0) next = vertexHash(neighbors[1], p);
+
+        prev = current;
+        current = next;
+      }
+      // else, continuing the loop
+      else {
+        if (next == prev) next = vertexHash(neighbors[1], p);
+
+        prev = current;
+        current = next;
+      }
+
+    } while (current != start);
+
+    var edgeLoop = new EdgeLoop(vertices, axis);
+
+    if (edgeLoop.hole) loops.holes.push(edgeLoop);
+    else loops.polys.push(edgeLoop);
+  }
+
+  this.calculateHierarchy(loops);
+
+  return loops;
+}
+
+EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
+  var polys = loops.polys;
+  var holes = loops.holes;
+
+  // tests whether poly i contains poly j
+  for (var i=0; i<polys.length; i++) {
+    for (var j=0; j<polys.length; j++) {
+      if (i==j) continue;
+
+      var ipoly = polys[i];
+      var jpoly = polys[j];
+      // if j contains i, then i does not contain j
+      if (jpoly.polysInside.has(i)) {
+        ipoly.polysOutside.add(j);
+        // if j contains i, then i does not contain polys j does not contain
+        ipoly.polysOutside = new Set([...ipoly.polysOutside, ...jpoly.polysOutside]);
+        continue;
+      }
+
+      if (ipoly.contains(jpoly)) {
+        ipoly.polysInside.add(j);
+        // if i contains j, i also contains polys j contains
+        ipoly.polysInside = new Set([...ipoly.polysInside, ...jpoly.polysInside]);
+      }
+      else {
+        ipoly.polysOutside.add(j);
+        // if i does not contain j, i does not contain anything j contains
+        ipoly.polysOutside = new Set([...ipoly.polysOutside, ...jpoly.polysInside]);
+      }
+    }
+  }
+
+  // test whether poly i contains hole j
+  for (var i=0; i<polys.length; i++) {
+    for (var j=0; j<holes.length; j++) {
+      var ipoly = polys[i];
+      var jhole = holes[j];
+
+      if (ipoly.contains(jhole)) ipoly.holesInside.add(j);
+      else ipoly.holesOutside.add(j);
+    }
+  }
+
+  return;
+
+  // back up the initial hole containment data so we can reference it while we
+  // mutate the actual data
+  var sourceHolesInside = new Array(polys.length);
+  for (var i=0; i<polys.length; i++) {
+    sourceHolesInside[i] = new Set(polys[i].holesInside);
+    console.log(sourceHolesInside, polys[i].holesInside);
+  }
+
+  // if poly i contains poly j, eliminate holes contained by j from i's list
+  for (var i=0; i<polys.length; i++) {
+    for (var j=0; j<polys.length; j++) {
+      if (i==j) continue;
+
+      var ipoly = polys[i];
+      var jpoly = polys[j];
+
+      if (ipoly.polysInside.has(j)) {
+        var iholes = ipoly.holesInside;
+        var sjholes = sourceHolesInside[j];
+        console.log(i, j, iholes, sjholes);
+
+        // for every hole in j, if i contains it, delete it from i's holes so
+        // that every poly only has the holes which it immediately contains
+        for (var jh of sjholes) iholes.delete(jh);
+        console.log(i, j, iholes);
+      }
+    }
+  }
 }

@@ -2146,7 +2146,7 @@ Model.prototype.import = function(file, callback) {
     } catch(e) {
       _this.printout.error("Error importing: " + e);
     }
-    callback(success);
+    callback(success, _this);
   };
 
   if (this.format=="stl") {
@@ -2190,7 +2190,7 @@ Model.prototype.import = function(file, callback) {
   else {
     var error = "Format '"+this.format+"' is not supported.";
     this.printout.error(error);
-    callback(false);
+    callback(false, this);
     return;
   }
 
