@@ -80,9 +80,17 @@ function vector3Abs(v) {
   result.z = Math.abs(v.z);
   return result;
 }
+function vector3AxisMin(v1, v2, axis) {
+  if (v1[axis] < v2[axis]) return v1;
+  else return v2;
+}
+function vector3AxisMax(v1, v2, axis) {
+  if (v1[axis] > v2[axis]) return v1;
+  else return v2;
+}
 
 
-// bool checks
+// object type bool checks
 
 function isArray(item) {
   return (Object.prototype.toString.call(item) === '[object Array]');

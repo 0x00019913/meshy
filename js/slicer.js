@@ -27,8 +27,8 @@ Slicer = function(sourceVertices, sourceFaces, params) {
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
   // then this.axis1 points right and this.axis2 points up
-  this.axis1 = this.axis=="x" ? "y" : this.axis=="y" ? "z" : "x";
-  this.axis2 = this.axis=="x" ? "z" : this.axis=="y" ? "x" : "y";
+  this.axis1 = cycleAxis(this.axis);
+  this.axis2 = cycleAxis(this.axis1);
 
   this.calculateFaceBounds();
 
@@ -390,19 +390,20 @@ Slicer.prototype.buildLayerSegmentLists = function() {
 // circular double-linked list symbolizing an edge loop
 EdgeLoop = function(vertices, axis) {
   this.axis = axis;
-  this.axis1 = this.axis=="x" ? "y" : this.axis=="y" ? "z" : "x";
-  this.axis2 = this.axis=="x" ? "z" : this.axis=="y" ? "x" : "y";
+  this.axis1 = cycleAxis(axis);
+  this.axis2 = cycleAxis(this.axis1);
 
   this.count = 0;
   this.area = 0;
   this.hole = false;
   this.vertex = null;
 
-  // bounds - used for bounding-box tests and for
-  this.min1 = Infinity;
-  this.max1 = -Infinity;
-  this.min2 = Infinity;
-  this.max2 = -Infinity;
+  // verts that are maximal/minimal on axes 1 and 2 - used for bounding-box
+  // tests and for joining holes
+  this.vmin1 = null;
+  this.vmax1 = null;
+  this.vmin2 = null;
+  this.vmax2 = null;
 
   this.polysInside = new Set();
   this.polysOutside = new Set();
@@ -416,11 +417,7 @@ EdgeLoop = function(vertices, axis) {
   for (var i = 0; i < vertices.length; i++) {
     var v = vertices[i];
 
-    // update bounds
-    this.min1 = Math.min(this.min1, v[this.axis1]);
-    this.max1 = Math.max(this.max1, v[this.axis1]);
-    this.min2 = Math.min(this.min2, v[this.axis2]);
-    this.max2 = Math.max(this.max2, v[this.axis2]);
+    this.updateBounds(v);
 
     // create the node for this vertex
     var node = {
@@ -451,13 +448,64 @@ EdgeLoop = function(vertices, axis) {
   if (this.area < 0) this.hole = true;
 }
 
+EdgeLoop.prototype.updateBounds = function(v) {
+  if (this.vmin1 === null) {
+    this.vmin1 = v;
+    this.vmax1 = v;
+    this.vmin2 = v;
+    this.vmax2 = v;
+  }
+  else {
+    this.vmin1 = vector3AxisMin(this.vmin1, v, this.axis1);
+    this.vmax1 = vector3AxisMax(this.vmax1, v, this.axis1);
+    this.vmin2 = vector3AxisMin(this.vmin2, v, this.axis2);
+    this.vmax2 = vector3AxisMax(this.vmax2, v, this.axis2);
+  }
+}
+
 EdgeLoop.prototype.contains = function(other) {
-  if (this.max1 < other.min1 || this.min1 > other.max1) return false;
-  if (this.max2 < other.min2 || this.min2 > other.max2) return false;
+  var a1 = this.axis1;
+  var a2 = this.axis2;
 
-  // todo: point-in-polygon testing
+  // bounding box tests first as they are cheaper
+  if (this.vmax1[a1] < other.vmin1[a1] || this.vmin1[a1] > other.vmax1[a1]) {
+    return false;
+  }
+  if (this.vmax2[a2] < other.vmin2[a2] || this.vmin2[a2] > other.vmax2[a2]) {
+    return false;
+  }
 
-  return true;
+  // point-in-polygon testing - see if some point of other is inside this loop;
+  // see O'Rourke's book, sec. 7.4
+
+  // use other's entry vertex
+  // the convention is that we're looking along negative this.axis, a1 points
+  // right and a2 points up - we'll call pt[a1] h and pt[a2] v
+  var pt = other.vertex.v;
+  var h = pt[a1];
+  var v = pt[a2];
+
+  // number of times a ray crosses
+  var crossCount = 0;
+
+  var current = this.vertex;
+  do {
+    var s1 = current.v;
+    var s2 = current.next.v;
+
+    // segment encloses pt on vertical axis
+    if ((s1[a2] >= v && s2[a2] < v) || (s2[a2] >= v && s1[a2] < v)) {
+      // calcualte intersection
+      var intersection = s1[a1] + (s2[a1] - s1[a1]) * (v - s1[a2]) / (s2[a2] - s1[a2]);
+
+      // if intersection strictly to the right of pt, it crosses the segment
+      if (intersection > 0) crossCount++;
+    }
+
+    current = current.next;
+  } while (current != this.vertex);
+
+  return crossCount%2 != 0;
 }
 
 EdgeLoopBuilder = function(axis) {
@@ -617,14 +665,11 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
     }
   }
 
-  return;
-
   // back up the initial hole containment data so we can reference it while we
   // mutate the actual data
   var sourceHolesInside = new Array(polys.length);
   for (var i=0; i<polys.length; i++) {
     sourceHolesInside[i] = new Set(polys[i].holesInside);
-    console.log(sourceHolesInside, polys[i].holesInside);
   }
 
   // if poly i contains poly j, eliminate holes contained by j from i's list
@@ -638,12 +683,10 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
       if (ipoly.polysInside.has(j)) {
         var iholes = ipoly.holesInside;
         var sjholes = sourceHolesInside[j];
-        console.log(i, j, iholes, sjholes);
 
         // for every hole in j, if i contains it, delete it from i's holes so
         // that every poly only has the holes which it immediately contains
         for (var jh of sjholes) iholes.delete(jh);
-        console.log(i, j, iholes);
       }
     }
   }
