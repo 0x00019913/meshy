@@ -192,7 +192,7 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
-  this.sliceFolder = this.gui.addFolder("Slice");
+  this.sliceFolder = this.gui.addFolder("Slice (beta)");
   this.buildSliceFolderInactive();
 
   this.gui.add(this, "undo");

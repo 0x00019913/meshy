@@ -463,15 +463,19 @@ EdgeLoop.prototype.updateBounds = function(v) {
   }
 }
 
+// test if this edge loop contains the other edge loop
 EdgeLoop.prototype.contains = function(other) {
-  var a1 = this.axis1;
-  var a2 = this.axis2;
+  // horizontal and vertical axes; the convention is that we're looking along
+  // negative this.axis, a1 pointt right and a2 points up - we'll call
+  // pt[a1] h and pt[a2] v
+  var ah = this.axis1;
+  var av = this.axis2;
 
   // bounding box tests first as they are cheaper
-  if (this.vmax1[a1] < other.vmin1[a1] || this.vmin1[a1] > other.vmax1[a1]) {
+  if (this.vmax1[ah] < other.vmin1[ah] || this.vmin1[ah] > other.vmax1[ah]) {
     return false;
   }
-  if (this.vmax2[a2] < other.vmin2[a2] || this.vmin2[a2] > other.vmax2[a2]) {
+  if (this.vmax2[av] < other.vmin2[av] || this.vmin2[av] > other.vmax2[av]) {
     return false;
   }
 
@@ -479,11 +483,9 @@ EdgeLoop.prototype.contains = function(other) {
   // see O'Rourke's book, sec. 7.4
 
   // use other's entry vertex
-  // the convention is that we're looking along negative this.axis, a1 points
-  // right and a2 points up - we'll call pt[a1] h and pt[a2] v
   var pt = other.vertex.v;
-  var h = pt[a1];
-  var v = pt[a2];
+  var h = pt[ah];
+  var v = pt[av];
 
   // number of times a ray crosses
   var crossCount = 0;
@@ -494,12 +496,12 @@ EdgeLoop.prototype.contains = function(other) {
     var s2 = current.next.v;
 
     // segment encloses pt on vertical axis
-    if ((s1[a2] >= v && s2[a2] < v) || (s2[a2] >= v && s1[a2] < v)) {
+    if ((s1[av] >= v && s2[av] < v) || (s2[av] >= v && s1[av] < v)) {
       // calcualte intersection
-      var intersection = s1[a1] + (s2[a1] - s1[a1]) * (v - s1[a2]) / (s2[a2] - s1[a2]);
+      var intersection = s1[ah] + (s2[ah] - s1[ah]) * (v - s1[av]) / (s2[av] - s1[av]);
 
       // if intersection strictly to the right of pt, it crosses the segment
-      if (intersection > 0) crossCount++;
+      if (intersection > h) crossCount++;
     }
 
     current = current.next;
@@ -618,6 +620,7 @@ EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
   }
 
   this.calculateHierarchy(loops);
+  //this.joinPolysAndHoles(loops);
 
   return loops;
 }
@@ -689,5 +692,37 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
         for (var jh of sjholes) iholes.delete(jh);
       }
     }
+  }
+}
+
+// join every polygon with the holes it immediately contains so that every
+// polygon can be triangulated as a single convex polygon
+EdgeLoopBuilder.prototype.joinPolysAndHoles = function(loops) {
+  var polys = loops.polys;
+  var holes = loops.holes;
+
+  var a1 = this.axis1;
+  var a2 = this.axis2;
+
+  for (var i=0; i<polys.length; i++) {
+    var ipoly = polys[i];
+    var iholes = [];
+
+    // build array of holes contained in polygon i
+    for (var h of ipoly.holesInside) iholes.push(holes[h]);
+
+    // sort holes on maximal vertex on axis 1 in descending order
+    iholes.sort(function(a,b) {
+      var amax = a.vmax1[a1];
+      var bmax = b.vmax1[a1];
+
+      if (amax > bmax) return -1;
+      if (amax < bmax) return 1;
+      return 0;
+    });
+
+    console.log(iholes);
+
+
   }
 }
