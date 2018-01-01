@@ -207,6 +207,10 @@ function removeMeshByName(scene, name) {
   }
 }
 
+
+
+// for calculating triangle area and efficient cross-products
+
 // u cross v = (uy vz - uz vy, uz vx - ux vz, ux vy - uy vx)
 // u = b - a; v = c - a; u cross v = 2 * area
 // (b-a) cross (c-a) = 2 * area = (
@@ -214,13 +218,19 @@ function removeMeshByName(scene, name) {
 //  (bz-az)(cx-ax) - (bx-ax)(cz-az),
 //  (bx-ax)(cy-ay) - (by-ay)(cx-ax),
 // )
+// calculate triangle area
 function triangleArea(a, b, c, axis) {
-  var area = 0;
-  if (axis == "x") area = (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);
-  if (axis == "y") area = (b.z-a.z)*(c.x-a.x) - (b.x-a.x)*(c.z-a.z);
-  if (axis == "z") area = (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
-  return area/2;
+  return cornerCrossProduct(a, b, c, axis)/2;
 }
+// calculates cross product of b-a and c-a
+function cornerCrossProduct(a, b, c, axis) {
+  if (axis == "x") return (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);
+  if (axis == "y") return (b.z-a.z)*(c.x-a.x) - (b.x-a.x)*(c.z-a.z);
+  if (axis == "z") return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
+  return 0;
+}
+
+
 
 // for vertex hash maps
 

@@ -63,7 +63,8 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       vertexColors: THREE.FaceColors
     }),
     slicePreviewMesh: new THREE.MeshStandardMaterial({
-      color: 0x6666ff
+      color: 0x6666ff,
+      side: THREE.DoubleSide // todo: remove?
     }),
     slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
       transparent: true,

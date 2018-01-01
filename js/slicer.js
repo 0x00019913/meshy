@@ -87,7 +87,8 @@ Slicer.prototype.getGeometry = function() {
     faces: this.previewFaces
   };
   else if (this.mode=="path") return {
-    vertices: this.pathVertices
+    vertices: this.pathVertices,
+    faces: null
   };
 }
 
@@ -392,6 +393,8 @@ EdgeLoop = function(vertices, axis) {
   this.axis = axis;
   this.axis1 = cycleAxis(axis);
   this.axis2 = cycleAxis(this.axis1);
+  this.up = new THREE.Vector3();
+  this.up[axis] = 1;
 
   this.count = 0;
   this.area = 0;
@@ -405,10 +408,7 @@ EdgeLoop = function(vertices, axis) {
   this.vmin2 = null;
   this.vmax2 = null;
 
-  this.polysInside = new Set();
-  this.polysOutside = new Set();
-  this.holesInside = new Set();
-  this.holesOutside = new Set();
+  this.holes = [];
 
   if (!vertices || vertices.length < 1) return;
 
@@ -423,8 +423,9 @@ EdgeLoop = function(vertices, axis) {
     var node = {
       v: v,
       prev: null,
-      next: null
-    }
+      next: null,
+      reflex: false
+    };
 
     // insert into the linked list
     if (this.vertex) {
@@ -446,6 +447,19 @@ EdgeLoop = function(vertices, axis) {
   start.prev = this.vertex;
 
   if (this.area < 0) this.hole = true;
+
+  // calculate reflex verts
+  var current = this.vertex;
+  var up = this.up;
+  this.nreflex = 0;
+  var sm = 0;
+  do {
+    var area = triangleArea(current.prev.v, current.v, current.next.v, axis);
+
+    if ((!this.hole && area < 0) || (this.hole && area > 0)) current.reflex = true;
+
+    current = current.next;
+  } while (current != this.vertex);
 }
 
 EdgeLoop.prototype.updateBounds = function(v) {
@@ -479,11 +493,19 @@ EdgeLoop.prototype.contains = function(other) {
     return false;
   }
 
-  // point-in-polygon testing - see if some point of other is inside this loop;
-  // see O'Rourke's book, sec. 7.4
+  // else, do point-in-polygon testing
 
   // use other's entry vertex
   var pt = other.vertex.v;
+
+  return this.containsPoint(pt);
+}
+
+// point-in-polygon testing - see if some point of other is inside this loop;
+// see O'Rourke's book, sec. 7.4
+EdgeLoop.prototype.containsPoint = function(pt) {
+  var ah = this.axis1;
+  var av = this.axis2;
   var h = pt[ah];
   var v = pt[av];
 
@@ -508,6 +530,28 @@ EdgeLoop.prototype.contains = function(other) {
   } while (current != this.vertex);
 
   return crossCount%2 != 0;
+}
+
+// join the polygon with the holes it immediately contains so that it can be
+// triangulated as a single convex polygon
+// see David Eberly's writeup
+EdgeLoop.prototype.mergeHolesIntoPoly = function() {
+  var a1 = this.axis1;
+  var a2 = this.axis2;
+
+  var holes = this.holes;
+
+  // sort holes on maximal vertex on axis 1 in descending order
+  holes.sort(function(a,b) {
+    var amax = a.vmax1[a1];
+    var bmax = b.vmax1[a1];
+
+    if (amax > bmax) return -1;
+    if (amax < bmax) return 1;
+    return 0;
+  });
+
+  
 }
 
 EdgeLoopBuilder = function(axis) {
@@ -620,7 +664,9 @@ EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
   }
 
   this.calculateHierarchy(loops);
-  //this.joinPolysAndHoles(loops);
+  for (var i=0; i<loops.polys.length; i++) {
+    loops.polys[i].mergeHolesIntoPoly();
+  }
 
   return loops;
 }
@@ -628,63 +674,80 @@ EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
 EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
   var polys = loops.polys;
   var holes = loops.holes;
+  var np = polys.length;
+  var nh = holes.length;
+
+  // for every polygon, make sets of polys/holes inside/outside
+  // e.g., if polysInside[i] contains entry j, then poly i contains poly j;
+  // if holesOutside[i] contains entry j; then poly i does not contain hole j
+  var polysInside = new Array(np);
+  var polysOutside = new Array(np);
+  var holesInside = new Array(np);
+  var holesOutside = new Array(np);
+  for (var i=0; i<np; i++) {
+    polysInside[i] = new Set();
+    polysOutside[i] = new Set();
+    holesInside[i] = new Set();
+    holesOutside[i] = new Set();
+  }
 
   // tests whether poly i contains poly j
-  for (var i=0; i<polys.length; i++) {
-    for (var j=0; j<polys.length; j++) {
+  for (var i=0; i<np; i++) {
+    for (var j=0; j<np; j++) {
       if (i==j) continue;
 
-      var ipoly = polys[i];
-      var jpoly = polys[j];
       // if j contains i, then i does not contain j
-      if (jpoly.polysInside.has(i)) {
-        ipoly.polysOutside.add(j);
+      if (polysInside[j].has(i)) {
+        polysOutside[i].add(j);
         // if j contains i, then i does not contain polys j does not contain
-        ipoly.polysOutside = new Set([...ipoly.polysOutside, ...jpoly.polysOutside]);
+        polysOutside[i] = new Set([...polysOutside[i], ...polysOutside[j]]);
         continue;
       }
 
+      var ipoly = polys[i];
+      var jpoly = polys[j];
+
       if (ipoly.contains(jpoly)) {
-        ipoly.polysInside.add(j);
+        polysInside[i].add(j);
         // if i contains j, i also contains polys j contains
-        ipoly.polysInside = new Set([...ipoly.polysInside, ...jpoly.polysInside]);
+        polysInside[i] = new Set([...polysInside[i], ...polysInside[j]]);
       }
       else {
-        ipoly.polysOutside.add(j);
+        polysOutside[i].add(j);
         // if i does not contain j, i does not contain anything j contains
-        ipoly.polysOutside = new Set([...ipoly.polysOutside, ...jpoly.polysInside]);
+        polysOutside[i] = new Set([...polysOutside[i], ...polysInside[j]]);
       }
     }
   }
 
   // test whether poly i contains hole j
-  for (var i=0; i<polys.length; i++) {
-    for (var j=0; j<holes.length; j++) {
+  for (var i=0; i<np; i++) {
+    for (var j=0; j<nh; j++) {
       var ipoly = polys[i];
       var jhole = holes[j];
 
-      if (ipoly.contains(jhole)) ipoly.holesInside.add(j);
-      else ipoly.holesOutside.add(j);
+      if (ipoly.contains(jhole)) holesInside[i].add(j);
+      else holesOutside[i].add(j);
     }
   }
 
   // back up the initial hole containment data so we can reference it while we
   // mutate the actual data
-  var sourceHolesInside = new Array(polys.length);
-  for (var i=0; i<polys.length; i++) {
-    sourceHolesInside[i] = new Set(polys[i].holesInside);
+  var sourceHolesInside = new Array(np);
+  for (var i=0; i<np; i++) {
+    sourceHolesInside[i] = new Set(holesInside[i]);
   }
 
   // if poly i contains poly j, eliminate holes contained by j from i's list
-  for (var i=0; i<polys.length; i++) {
-    for (var j=0; j<polys.length; j++) {
+  for (var i=0; i<np; i++) {
+    for (var j=0; j<np; j++) {
       if (i==j) continue;
 
       var ipoly = polys[i];
       var jpoly = polys[j];
 
-      if (ipoly.polysInside.has(j)) {
-        var iholes = ipoly.holesInside;
+      if (polysInside[i].has(j)) {
+        var iholes = holesInside[i];
         var sjholes = sourceHolesInside[j];
 
         // for every hole in j, if i contains it, delete it from i's holes so
@@ -693,36 +756,11 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
       }
     }
   }
-}
 
-// join every polygon with the holes it immediately contains so that every
-// polygon can be triangulated as a single convex polygon
-EdgeLoopBuilder.prototype.joinPolysAndHoles = function(loops) {
-  var polys = loops.polys;
-  var holes = loops.holes;
-
-  var a1 = this.axis1;
-  var a2 = this.axis2;
-
-  for (var i=0; i<polys.length; i++) {
+  // build the hole array for every edge loop
+  for (var i=0; i<np; i++) {
     var ipoly = polys[i];
-    var iholes = [];
 
-    // build array of holes contained in polygon i
-    for (var h of ipoly.holesInside) iholes.push(holes[h]);
-
-    // sort holes on maximal vertex on axis 1 in descending order
-    iholes.sort(function(a,b) {
-      var amax = a.vmax1[a1];
-      var bmax = b.vmax1[a1];
-
-      if (amax > bmax) return -1;
-      if (amax < bmax) return 1;
-      return 0;
-    });
-
-    console.log(iholes);
-
-
+    for (var h of holesInside[i]) ipoly.holes.push(holes[h]);
   }
 }
