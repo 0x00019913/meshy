@@ -63,8 +63,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       vertexColors: THREE.FaceColors
     }),
     slicePreviewMesh: new THREE.MeshStandardMaterial({
-      color: 0x6666ff,
-      side: THREE.DoubleSide // todo: remove?
+      color: 0x6666ff
     }),
     slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
       transparent: true,
@@ -698,7 +697,8 @@ Model.prototype.setMode = function(mode, params) {
       {
         sliceHeight: params.sliceHeight,
         axis: "z",
-        mode: this.sliceMode
+        mode: this.sliceMode,
+        scene: this.scene
       }
     );
 

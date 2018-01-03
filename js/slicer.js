@@ -1,4 +1,8 @@
 /* slicer.js */
+
+var scene; // for debugging, todo: remove
+var debugGeo = new THREE.Geometry();
+
 Slicer = function(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -24,11 +28,14 @@ Slicer = function(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
 
+  // for debugging, todo: remove
+  scene = this.scene;
+
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
-  // then this.axis1 points right and this.axis2 points up
-  this.axis1 = cycleAxis(this.axis);
-  this.axis2 = cycleAxis(this.axis1);
+  // then this.axish points right and this.axisv points up
+  this.axish = cycleAxis(this.axis);
+  this.axisv = cycleAxis(this.axish);
 
   this.calculateFaceBounds();
 
@@ -391,8 +398,8 @@ Slicer.prototype.buildLayerSegmentLists = function() {
 // circular double-linked list symbolizing an edge loop
 EdgeLoop = function(vertices, axis) {
   this.axis = axis;
-  this.axis1 = cycleAxis(axis);
-  this.axis2 = cycleAxis(this.axis1);
+  this.axish = cycleAxis(axis);
+  this.axisv = cycleAxis(this.axish);
   this.up = new THREE.Vector3();
   this.up[axis] = 1;
 
@@ -401,12 +408,12 @@ EdgeLoop = function(vertices, axis) {
   this.hole = false;
   this.vertex = null;
 
-  // verts that are maximal/minimal on axes 1 and 2 - used for bounding-box
+  // nodes that are maximal/minimal on axes 1 and 2 - used for bounding-box
   // tests and for joining holes
-  this.vmin1 = null;
-  this.vmax1 = null;
-  this.vmin2 = null;
-  this.vmax2 = null;
+  this.minh = null;
+  this.maxh = null;
+  this.minv = null;
+  this.maxv = null;
 
   this.holes = [];
 
@@ -417,15 +424,14 @@ EdgeLoop = function(vertices, axis) {
   for (var i = 0; i < vertices.length; i++) {
     var v = vertices[i];
 
-    this.updateBounds(v);
-
     // create the node for this vertex
     var node = {
       v: v,
       prev: null,
-      next: null,
-      reflex: false
+      next: null
     };
+
+    this.updateBounds(node);
 
     // insert into the linked list
     if (this.vertex) {
@@ -451,45 +457,43 @@ EdgeLoop = function(vertices, axis) {
   // calculate reflex verts
   var current = this.vertex;
   var up = this.up;
-  this.nreflex = 0;
-  var sm = 0;
   do {
-    var area = triangleArea(current.prev.v, current.v, current.next.v, axis);
-
-    if ((!this.hole && area < 0) || (this.hole && area > 0)) current.reflex = true;
-
+    this.nodeCalculateReflex(current);
     current = current.next;
   } while (current != this.vertex);
 }
 
-EdgeLoop.prototype.updateBounds = function(v) {
-  if (this.vmin1 === null) {
-    this.vmin1 = v;
-    this.vmax1 = v;
-    this.vmin2 = v;
-    this.vmax2 = v;
+EdgeLoop.prototype.updateBounds = function(n) {
+  var ah = this.axish;
+  var av = this.axisv;
+
+  if (this.minh === null) {
+    this.minh = n;
+    this.maxh = n;
+    this.minv = n;
+    this.maxv = n;
   }
   else {
-    this.vmin1 = vector3AxisMin(this.vmin1, v, this.axis1);
-    this.vmax1 = vector3AxisMax(this.vmax1, v, this.axis1);
-    this.vmin2 = vector3AxisMin(this.vmin2, v, this.axis2);
-    this.vmax2 = vector3AxisMax(this.vmax2, v, this.axis2);
+    this.minh =  this.minh.v[ah] < n.v[ah] ? this.minh : n;
+    this.maxh =  this.maxh.v[ah] > n.v[ah] ? this.maxh : n;
+    this.minv =  this.minv.v[av] < n.v[av] ? this.minv : n;
+    this.maxv =  this.maxv.v[av] > n.v[av] ? this.maxv : n;
   }
 }
 
 // test if this edge loop contains the other edge loop
 EdgeLoop.prototype.contains = function(other) {
   // horizontal and vertical axes; the convention is that we're looking along
-  // negative this.axis, a1 pointt right and a2 points up - we'll call
-  // pt[a1] h and pt[a2] v
-  var ah = this.axis1;
-  var av = this.axis2;
+  // negative this.axis, ah points right and av points up - we'll call
+  // pt[ah] h and pt[av] v
+  var ah = this.axish;
+  var av = this.axisv;
 
   // bounding box tests first as they are cheaper
-  if (this.vmax1[ah] < other.vmin1[ah] || this.vmin1[ah] > other.vmax1[ah]) {
+  if (this.maxh.v[ah] < other.minh.v[ah] || this.minh.v[ah] > other.maxh.v[ah]) {
     return false;
   }
-  if (this.vmax2[av] < other.vmin2[av] || this.vmin2[av] > other.vmax2[av]) {
+  if (this.maxv.v[av] < other.minv.v[av] || this.minv.v[av] > other.maxv.v[av]) {
     return false;
   }
 
@@ -504,8 +508,8 @@ EdgeLoop.prototype.contains = function(other) {
 // point-in-polygon testing - see if some point of other is inside this loop;
 // see O'Rourke's book, sec. 7.4
 EdgeLoop.prototype.containsPoint = function(pt) {
-  var ah = this.axis1;
-  var av = this.axis2;
+  var ah = this.axish;
+  var av = this.axisv;
   var h = pt[ah];
   var v = pt[av];
 
@@ -520,7 +524,7 @@ EdgeLoop.prototype.containsPoint = function(pt) {
     // segment encloses pt on vertical axis
     if ((s1[av] >= v && s2[av] < v) || (s2[av] >= v && s1[av] < v)) {
       // calcualte intersection
-      var intersection = s1[ah] + (s2[ah] - s1[ah]) * (v - s1[av]) / (s2[av] - s1[av]);
+      var intersection = raySegmentIntersectionOnAxis(s1, s2, pt, ah, av);
 
       // if intersection strictly to the right of pt, it crosses the segment
       if (intersection > h) crossCount++;
@@ -534,24 +538,153 @@ EdgeLoop.prototype.containsPoint = function(pt) {
 
 // join the polygon with the holes it immediately contains so that it can be
 // triangulated as a single convex polygon
-// see David Eberly's writeup
+// see David Eberly's writeup - we cast a ray to the right, see where it
+// intersects the closest segment, then check inside a triangle
 EdgeLoop.prototype.mergeHolesIntoPoly = function() {
-  var a1 = this.axis1;
-  var a2 = this.axis2;
+  var axis = this.axis;
+  var ah = this.axish;
+  var av = this.axisv;
 
   var holes = this.holes;
 
   // sort holes on maximal vertex on axis 1 in descending order
+  // once sorted, start merging from rightmost hole
   holes.sort(function(a,b) {
-    var amax = a.vmax1[a1];
-    var bmax = b.vmax1[a1];
+    var amax = a.maxh.v[ah];
+    var bmax = b.maxh.v[ah];
 
     if (amax > bmax) return -1;
     if (amax < bmax) return 1;
     return 0;
   });
 
-  
+
+  for (var i=0; i<holes.length; i++) {
+    var hole = holes[i];
+
+    // TODO: FACTOR FINDING THE VISIBLE POINT INTO A FUNCTION
+
+    var m = hole.maxh.v;
+    // closest intersection of ray from m and loop edges along axis ah
+    var minAxisInt = Infinity;
+    // full vector of intersection, directly to the right of m
+    var intPoint = m.clone();
+    // vertex node at which intersection edge starts
+    var intSource;
+
+    // check all segments for intersection
+    var current = this.vertex;
+    do {
+      var v = current.v;
+      var vn = current.next.v;
+
+      // polygon winds conterclockwise, so, if m is inside and the right-ward
+      // ray intersects the v-vn segment, v must be less than m and vn must be
+      // greater than m on the vertical axis
+      if (vn[av] > m[av] && v[av] <= m[av]) {
+        var axisInt = raySegmentIntersectionOnAxis(v, vn, m, ah, av);
+
+        if (axisInt > m[ah] && axisInt < minAxisInt) {
+          minAxisInt = axisInt;
+          intPoint[ah] = axisInt;
+          intSource = current;
+        }
+      }
+
+      current = current.next;
+    } while (current != this.vertex);
+
+    // final node guaranteed to be visible from the hole's rightmost point
+    var visiblePolyPoint = intSource;
+
+    // check all reflex verts; if they're present inside the triangle between m,
+    // the intersection point, and the edge source, then return the one with the
+    // smallest angle with the horizontal
+    current = this.vertex;
+
+    var angle = Math.PI/2;
+    var hEdge = intPoint.clone().sub(m).normalize();
+    do {
+      if (current.reflex) {
+        // if the point is inside the triangle formed by intersection segment
+        // source, intersection point, and ray source, then might need to update
+        // the visible node to the current one
+        if (pointInsideTriangle(current.v, intSource.v, intPoint, m, axis)) {
+          var newEdge = current.v.clone.sub(m).normalize();
+          var newAngle = hEdge.angleTo(newEdge);
+
+          if (newAngle < angle) {
+            angle = newAngle;
+            visiblePolyPoint = current;
+          }
+        }
+      }
+
+      current = current.next;
+    } while (current != this.vertex);
+
+    // join the hole into the poly
+
+    // loop goes CCW around poly, exits the poly, goes around hole, exits hole,
+    // enters poly
+    var polyExit = visiblePolyPoint;
+    var holeEntry = hole.maxh;
+    // have to duplicate the vertex nodes
+    var holeExit = Object.assign({}, holeEntry);
+    var polyEntry = Object.assign({}, polyExit);
+
+    holeEntry.prev.next = holeExit;
+    polyExit.next.prev = polyEntry;
+
+    polyExit.next = holeEntry;
+    holeEntry.prev = polyExit;
+    holeExit.next = polyEntry;
+    polyEntry.prev = holeExit;
+
+    this.nodeCalculateReflex(polyExit);
+    this.nodeCalculateReflex(holeEntry);
+    this.nodeCalculateReflex(holeExit);
+    this.nodeCalculateReflex(polyEntry);
+
+    this.count += hole.count + 2;
+    this.area += hole.area;
+  }
+
+  /*var ct = 0;
+  var curr = this.vertex;
+  do {
+    addDebugVertex(curr.v);
+    addDebugVertex(curr.next.v.clone().add(curr.v).multiplyScalar(0.5));
+    curr = curr.next;
+    ct++;
+    if (ct>500) break;
+  } while (curr != this.vertex);
+  debug();*/
+}
+
+// TODO: remove debugging
+function addDebugVertex(v) {
+  debugGeo.vertices.push(v);
+  debugGeo.verticesNeedUpdate = true;
+}
+function debug() {
+  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 5, sizeAttenuation: false });
+  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
+  debugMesh.name = "foo";
+  scene.add(debugMesh);
+}
+
+EdgeLoop.prototype.nodeCalculateReflex = function(node) {
+  var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
+
+  if ((!this.hole && area < 0) || (this.hole && area > 0)) {
+    // area calculation contains a subtraction, so when the result should be
+    // exactly 0, it might go to something like -1e-17; if the area is less
+    // than some reeeeeally small epsilon, it doesn't matter if it's reflex
+    // anyway, so might as well call those vertices convex
+    if (Math.abs(area) > 0.00000001) node.reflex = true;
+  }
+  else node.reflex = false;
 }
 
 EdgeLoopBuilder = function(axis) {
@@ -663,7 +796,10 @@ EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
     else loops.polys.push(edgeLoop);
   }
 
+  // assign holes to the polys containing them
   this.calculateHierarchy(loops);
+
+  // merge each poly's holes into the poly
   for (var i=0; i<loops.polys.length; i++) {
     loops.polys[i].mergeHolesIntoPoly();
   }
@@ -756,7 +892,6 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
       }
     }
   }
-
   // build the hole array for every edge loop
   for (var i=0; i<np; i++) {
     var ipoly = polys[i];
