@@ -161,7 +161,7 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = 0;
   var fidx = 0;
 
-  var loopBuilder = new EdgeLoopBuilder(axis);
+  var sliceBuilder = new SliceBuilder(axis);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
@@ -204,7 +204,7 @@ Slicer.prototype.setPreviewSlice = function() {
 
       newFaces[fidx++] = newFace;
 
-      loopBuilder.addSegment(AB, AC, newFace.normal);
+      sliceBuilder.addSegment(AB, AC, newFace.normal);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -242,7 +242,7 @@ Slicer.prototype.setPreviewSlice = function() {
       newFaces[fidx++] = newFace1;
       newFaces[fidx++] = newFace2;
 
-      loopBuilder.addSegment(AC, BC, newFace2.normal);
+      sliceBuilder.addSegment(AC, BC, newFace2.normal);
     }
   }
 
@@ -254,8 +254,8 @@ Slicer.prototype.setPreviewSlice = function() {
   this.previewVertices.length = vertexCount + vidx;
   this.previewFaces.length = faceCount + fidx;
 
-  var edgeLoops = loopBuilder.makeEdgeLoops();
-  console.log(edgeLoops);
+  var slice = sliceBuilder.getSlice();
+  slice.triangulate();
 }
 
 Slicer.prototype.setPathSlice = function() {
@@ -393,6 +393,23 @@ Slicer.prototype.buildLayerSegmentLists = function() {
   }
 
   return layerSegmentLists;
+}
+
+Slice = function(polys) {
+  this.polys = polys;
+}
+
+Slice.prototype.triangulate = function() {
+  // polys is an array of edgeloops signifying every polygon in the slice
+  var polys = this.polys;
+
+  for (var i=0; i<polys.length; i++) {
+    polys[i].triangulate();
+  }
+
+  // todo: remove
+  if (polys.length==0) return;
+  debug();
 }
 
 // circular double-linked list symbolizing an edge loop
@@ -569,18 +586,6 @@ EdgeLoop.prototype.mergeHolesIntoPoly = function() {
   }
 
   return;
-
-  // todo: remove debugging
-  var ct = 0;
-  var curr = this.vertex;
-  do {
-    addDebugVertex(curr.v);
-    addDebugVertex(curr.next.v.clone().add(curr.v).multiplyScalar(0.5));
-    curr = curr.next;
-    ct++;
-    if (ct>500) break;
-  } while (curr != this.vertex);
-  debug();
 }
 
 // join vertex node in polygon to given vertex node in hole
@@ -682,6 +687,90 @@ EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
   return P;
 }
 
+EdgeLoop.prototype.triangulate = function() {
+  this.calculateEars();
+
+  var count = this.count;
+
+  while (count > 3) {
+    var current = this.vertex;
+    do {
+      if (current.ear) {
+
+        break;
+      }
+
+      current = current.next;
+    } while (current != this.vertex);
+
+    count--;
+  }
+
+  this.count = count;
+
+  return;
+
+  // todo: remove debugging
+  var ct = 0;
+  var curr = this.vertex;
+  do {
+    var vn = curr.next;
+    var vp = curr.prev;
+
+    if (curr.ear) addDebugVertex(curr.v);
+
+    //if (curr.ear) addDebugVertex(curr.v);
+    //addDebugVertex(curr.next.v.clone().add(curr.v).multiplyScalar(0.5));
+    curr = curr.next;
+    ct++;
+    if (ct>500) break;
+  } while (curr != this.vertex);
+}
+
+// calculate ear status of all ears
+EdgeLoop.prototype.calculateEars = function() {
+  var current = this.vertex;
+  do {
+    current.ear = this.diagonal(current);
+
+    current = current.next;
+  } while (current != this.vertex);
+}
+
+EdgeLoop.prototype.diagonal = function(node) {
+  var p = node.prev;
+  var n = node.next;
+
+  return this.inCone(p, n) && this.inCone(n, p) && this.nonintersection(p, n);
+}
+
+EdgeLoop.prototype.inCone = function(a, b) {
+  var axis = this.axis;
+  var apv = a.prev.v;
+  var anv = a.next.v;
+
+  if (a.reflex) return !(leftOn(anv, a.v, b.v, axis) && leftOn(a.v, apv, b.v, axis));
+  else return left(apv, a.v, b.v, axis) && left(a.v, anv, b.v, axis);
+}
+
+EdgeLoop.prototype.nonintersection = function(a, b) {
+  var axis = this.axis;
+  var c = this.vertex;
+
+  do {
+    var d = c.next;
+
+    // only segments not sharing a/b as endpoints can intersect ab segment
+    if (c!=a && c!=b && d!=a && d!=b) {
+      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis)) return false;
+    }
+
+    c = c.next;
+  } while (c != this.vertex);
+
+  return true;
+}
+
 // TODO: remove debugging
 function addDebugVertex(v) {
   debugGeo.vertices.push(v);
@@ -707,7 +796,7 @@ EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   else node.reflex = false;
 }
 
-EdgeLoopBuilder = function(axis) {
+SliceBuilder = function(axis) {
   this.p = Math.pow(10, 7);
   this.axis = axis;
   this.up = new THREE.Vector3();
@@ -716,16 +805,16 @@ EdgeLoopBuilder = function(axis) {
   this.adjacencyMap = {};
 }
 
-EdgeLoopBuilder.prototype.clear = function() {
+SliceBuilder.prototype.clear = function() {
   this.adjacencyMap = {};
 }
 
-EdgeLoopBuilder.prototype.addSegment = function(v1, v2, normal) {
+SliceBuilder.prototype.addSegment = function(v1, v2, normal) {
   this.insertNeighbor(v1, v2, normal);
   this.insertNeighbor(v2, v1, normal);
 }
 
-EdgeLoopBuilder.prototype.insertNeighbor = function(v1, v2, n) {
+SliceBuilder.prototype.insertNeighbor = function(v1, v2, n) {
   var v1hash = vertexHash(v1, this.p);
   var a = this.adjacencyMap;
 
@@ -740,7 +829,7 @@ EdgeLoopBuilder.prototype.insertNeighbor = function(v1, v2, n) {
   a[v1hash].normals.push(n);
 }
 
-EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
+SliceBuilder.prototype.makePolys = function() {
   var a = this.adjacencyMap;
   var up = this.up;
   var axis = this.axis;
@@ -824,10 +913,10 @@ EdgeLoopBuilder.prototype.makeEdgeLoops = function() {
     loops.polys[i].mergeHolesIntoPoly();
   }
 
-  return loops;
+  return loops.polys;
 }
 
-EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
+SliceBuilder.prototype.calculateHierarchy = function(loops) {
   var polys = loops.polys;
   var holes = loops.holes;
   var np = polys.length;
@@ -918,4 +1007,10 @@ EdgeLoopBuilder.prototype.calculateHierarchy = function(loops) {
 
     for (var h of holesInside[i]) ipoly.holes.push(holes[h]);
   }
+}
+
+SliceBuilder.prototype.getSlice = function() {
+  var polys = this.makePolys();
+
+  return new Slice(polys);
 }

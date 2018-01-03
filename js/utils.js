@@ -290,13 +290,24 @@ function raySegmentIntersectionOnAxis(s1, s2, pt, ah, av) {
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
 }
 
-// true if c is left of a-b segment
+// true if c is strictly left of a-b segment
 function left(a, b, c, axis) {
   return triangleArea(a, b, c, axis) > 0;
 }
 
+// true if c is left or equal to a-b segment
+function leftOn(a, b, c, axis) {
+  return triangleArea(a, b, c, axis) >= 0;
+}
+
 function pointInsideTriangle(p, a, b, c, axis) {
   return left(a, b, p, axis) && left(b, c, p, axis) && left(c, a, p, axis);
+}
+
+// bool check if segment ab intersects segment cd
+function segmentSegmentIntersection(a, b, c, d, axis) {
+  return ((left(a, b, c, axis) ^ left(a, b, d, axis)) &&
+          (left(c, d, a, axis) ^ left(c, d, b, axis)));
 }
 
 
