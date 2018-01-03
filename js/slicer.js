@@ -428,7 +428,8 @@ EdgeLoop = function(vertices, axis) {
     var node = {
       v: v,
       prev: null,
-      next: null
+      next: null,
+      ear: false
     };
 
     this.updateBounds(node);
@@ -562,95 +563,15 @@ EdgeLoop.prototype.mergeHolesIntoPoly = function() {
   for (var i=0; i<holes.length; i++) {
     var hole = holes[i];
 
-    // TODO: FACTOR FINDING THE VISIBLE POINT INTO A FUNCTION
+    var P = this.findVisiblePointFromHole(hole);
 
-    var m = hole.maxh.v;
-    // closest intersection of ray from m and loop edges along axis ah
-    var minAxisInt = Infinity;
-    // full vector of intersection, directly to the right of m
-    var intPoint = m.clone();
-    // vertex node at which intersection edge starts
-    var intSource;
-
-    // check all segments for intersection
-    var current = this.vertex;
-    do {
-      var v = current.v;
-      var vn = current.next.v;
-
-      // polygon winds conterclockwise, so, if m is inside and the right-ward
-      // ray intersects the v-vn segment, v must be less than m and vn must be
-      // greater than m on the vertical axis
-      if (vn[av] > m[av] && v[av] <= m[av]) {
-        var axisInt = raySegmentIntersectionOnAxis(v, vn, m, ah, av);
-
-        if (axisInt > m[ah] && axisInt < minAxisInt) {
-          minAxisInt = axisInt;
-          intPoint[ah] = axisInt;
-          intSource = current;
-        }
-      }
-
-      current = current.next;
-    } while (current != this.vertex);
-
-    // final node guaranteed to be visible from the hole's rightmost point
-    var visiblePolyPoint = intSource;
-
-    // check all reflex verts; if they're present inside the triangle between m,
-    // the intersection point, and the edge source, then return the one with the
-    // smallest angle with the horizontal
-    current = this.vertex;
-
-    var angle = Math.PI/2;
-    var hEdge = intPoint.clone().sub(m).normalize();
-    do {
-      if (current.reflex) {
-        // if the point is inside the triangle formed by intersection segment
-        // source, intersection point, and ray source, then might need to update
-        // the visible node to the current one
-        if (pointInsideTriangle(current.v, intSource.v, intPoint, m, axis)) {
-          var newEdge = current.v.clone.sub(m).normalize();
-          var newAngle = hEdge.angleTo(newEdge);
-
-          if (newAngle < angle) {
-            angle = newAngle;
-            visiblePolyPoint = current;
-          }
-        }
-      }
-
-      current = current.next;
-    } while (current != this.vertex);
-
-    // join the hole into the poly
-
-    // loop goes CCW around poly, exits the poly, goes around hole, exits hole,
-    // enters poly
-    var polyExit = visiblePolyPoint;
-    var holeEntry = hole.maxh;
-    // have to duplicate the vertex nodes
-    var holeExit = Object.assign({}, holeEntry);
-    var polyEntry = Object.assign({}, polyExit);
-
-    holeEntry.prev.next = holeExit;
-    polyExit.next.prev = polyEntry;
-
-    polyExit.next = holeEntry;
-    holeEntry.prev = polyExit;
-    holeExit.next = polyEntry;
-    polyEntry.prev = holeExit;
-
-    this.nodeCalculateReflex(polyExit);
-    this.nodeCalculateReflex(holeEntry);
-    this.nodeCalculateReflex(holeExit);
-    this.nodeCalculateReflex(polyEntry);
-
-    this.count += hole.count + 2;
-    this.area += hole.area;
+    this.mergeHoleIntoPoly(P, hole, hole.maxh);
   }
 
-  /*var ct = 0;
+  return;
+
+  // todo: remove debugging
+  var ct = 0;
   var curr = this.vertex;
   do {
     addDebugVertex(curr.v);
@@ -659,7 +580,106 @@ EdgeLoop.prototype.mergeHolesIntoPoly = function() {
     ct++;
     if (ct>500) break;
   } while (curr != this.vertex);
-  debug();*/
+  debug();
+}
+
+// join vertex node in polygon to given vertex node in hole
+EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
+  // loop goes CCW around poly, exits the poly, goes around hole, exits hole,
+  // enters poly
+  var polyExit = polyNode;
+  var holeEntry = holeNode;
+  // have to duplicate the vertex nodes
+  var holeExit = Object.assign({}, holeEntry);
+  var polyEntry = Object.assign({}, polyExit);
+
+  // update vert nodes that are next to those that got copied
+  holeEntry.prev.next = holeExit;
+  polyExit.next.prev = polyEntry;
+
+  // make degenerate edges
+  polyExit.next = holeEntry;
+  holeEntry.prev = polyExit;
+  holeExit.next = polyEntry;
+  polyEntry.prev = holeExit;
+
+  // reflex state may have changed
+  this.nodeCalculateReflex(polyExit);
+  this.nodeCalculateReflex(holeEntry);
+  this.nodeCalculateReflex(holeExit);
+  this.nodeCalculateReflex(polyEntry);
+
+  this.count += hole.count + 2;
+  this.area += hole.area;
+}
+
+EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
+  var axis = this.axis;
+  var ah = this.axish;
+  var av = this.axisv;
+
+  // hole's rightmost point
+  var M = hole.maxh.v;
+  // closest intersection of ray from M and loop edges along axis ah
+  var minIAxis = Infinity;
+  // full vector of intersection, directly to the right of m
+  var I = M.clone();
+  // vertex node at which intersection edge starts
+  var S;
+
+  // check all segments for intersection
+  var current = this.vertex;
+  do {
+    var v = current.v;
+    var vn = current.next.v;
+
+    // polygon winds conterclockwise, so, if m is inside and the right-ward
+    // ray intersects the v-vn segment, v must be less than m and vn must be
+    // greater than m on the vertical axis
+    if (vn[av] > M[av] && v[av] <= M[av]) {
+      var IAxis = raySegmentIntersectionOnAxis(v, vn, M, ah, av);
+
+      if (IAxis > M[ah] && IAxis < minIAxis) {
+        minIAxis = IAxis;
+        I[ah] = IAxis;
+        S = current;
+      }
+    }
+
+    current = current.next;
+  } while (current != this.vertex);
+
+  // candidate for the final node guaranteed to be visible from the hole's
+  // rightmost point
+  var P = S;
+
+  // check all reflex verts; if they're present inside the triangle between m,
+  // the intersection point, and the edge source, then return the one with the
+  // smallest angle with the horizontal
+  current = this.vertex;
+
+  var angle = Math.PI/2;
+  var hEdge = I.clone().sub(M).normalize();
+  do {
+    if (current.reflex) {
+      // if the point is inside the triangle formed by intersection segment
+      // source, intersection point, and ray source, then might need to update
+      // the visible node to the current one
+      if (pointInsideTriangle(current.v, S.v, I, M, axis)) {
+        var newEdge = current.v.clone.sub(M).normalize();
+        var newAngle = hEdge.angleTo(newEdge);
+
+        if (newAngle < angle) {
+          angle = newAngle;
+          P = current;
+        }
+      }
+    }
+
+    current = current.next;
+  } while (current != this.vertex);
+
+  return P;
 }
 
 // TODO: remove debugging
