@@ -1,8 +1,5 @@
 /* slicer.js */
 
-var scene; // for debugging, todo: remove
-var debugGeo = new THREE.Geometry();
-
 Slicer = function(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -27,9 +24,6 @@ Slicer = function(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
     if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
-
-  // for debugging, todo: remove
-  scene = this.scene;
 
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
@@ -262,6 +256,7 @@ Slicer.prototype.setPreviewSlice = function() {
   for (var i=0; i<triIndices.length; i += 3) {
     var face = new THREE.Face3(triIndices[i], triIndices[i+1], triIndices[i+2]);
     faceComputeNormal(face, this.previewVertices);
+    face.materialIndex = 2;
     triFaces.push(face);
   }
 
@@ -417,8 +412,6 @@ Slice.prototype.triangulate = function() {
   for (var i=0; i<polys.length; i++) {
     indices = indices.concat(polys[i].triangulate());
   }
-  // todo: remove
-  if (polys.length>0) debug();
 
   return indices;
 }
@@ -481,8 +474,9 @@ EdgeLoop = function(axis, vertices, indices) {
       // if the last three vertices are collinear, remove the middle vertex
       var pp = this.vertex.prev.prev;
       var p = this.vertex.prev;
-      var anorm = triangleAreaNormalized(pp.v, p.v, this.vertex.v, axis);
-      if (Math.abs(anorm) < this.epsilon) {
+
+      var area = triangleArea(pp.v, p.v, this.vertex.v, axis);
+      if (Math.abs(area) < this.epsilon) {
         pp.next = this.vertex;
         this.vertex.prev = pp;
 
@@ -497,12 +491,11 @@ EdgeLoop = function(axis, vertices, indices) {
 
   if (this.area < 0) this.hole = true;
 
-  // calculate reflex state and angle
+  // calculate reflex state
   var current = this.vertex;
   var up = this.up;
   do {
     this.nodeCalculateReflex(current);
-    this.nodeCalculateAngle(current);
 
     current = current.next;
   } while (current != this.vertex);
@@ -635,15 +628,11 @@ EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
   holeExit.next = polyEntry;
   polyEntry.prev = holeExit;
 
-  // update reflex and angle states
+  // update reflex state
   this.nodeCalculateReflex(polyExit);
-  this.nodeCalculateAngle(polyExit);
   this.nodeCalculateReflex(holeEntry);
-  this.nodeCalculateAngle(holeEntry);
   this.nodeCalculateReflex(holeExit);
-  this.nodeCalculateAngle(holeExit);
   this.nodeCalculateReflex(polyEntry);
-  this.nodeCalculateAngle(polyEntry);
 
   this.count += hole.count + 2;
   this.area += hole.area;
@@ -747,7 +736,9 @@ EdgeLoop.prototype.triangulate = function() {
         this.vertex = n;
 
         this.nodeCalculateEar(p);
+        this.nodeCalculateReflex(p);
         this.nodeCalculateEar(n);
+        this.nodeCalculateReflex(n);
 
         count--;
 
@@ -757,9 +748,8 @@ EdgeLoop.prototype.triangulate = function() {
       current = current.next;
     } while (current != this.vertex);
 
-    if (!added) {
-      break;
-    }
+    // in case we failed to find an ear, break to avoid an infinite loop
+    if (!added) break;
   }
 
   indices.push(this.vertex.prev.idx);
@@ -819,18 +809,6 @@ EdgeLoop.prototype.nonintersection = function(a, b) {
   return true;
 }
 
-// TODO: remove debugging
-function addDebugVertex(v) {
-  debugGeo.vertices.push(v);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debug() {
-  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 5, sizeAttenuation: false });
-  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
-  debugMesh.name = "foo";
-  scene.add(debugMesh);
-}
-
 EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
 
@@ -844,16 +822,8 @@ EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   else node.reflex = false;
 }
 
-EdgeLoop.prototype.nodeCalculateAngle = function(node) {
-  var ep = node.prev.v.clone().sub(node.v);
-  var en = node.next.v.clone().sub(node.v);
-
-  node.angle = ep.angleTo(en);
-  if (node.reflex) node.angle = 2*Math.PI - node.angle;
-}
-
 SliceBuilder = function(axis) {
-  this.p = Math.pow(10, 7);
+  this.p = Math.pow(10, 9);
   this.axis = axis;
   this.up = new THREE.Vector3();
   this.up[axis] = 1;

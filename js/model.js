@@ -69,6 +69,9 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       transparent: true,
       opacity: 0
     }),
+    slicePreviewMeshSliceSurface: new THREE.MeshStandardMaterial({
+      color: 0x6666ff
+    }),
     slicePathMesh: new THREE.LineBasicMaterial({
       color: 0xffffff,
       linewidth: 1
@@ -777,7 +780,9 @@ Model.prototype.makeSlicePreviewMesh = function(vertices, faces) {
     // set materialIndex = 0 to make a face visible
     this.materials.slicePreviewMesh,
     // set materialindex = 1 to hide a face
-    this.materials.slicePreviewMeshTransparent
+    this.materials.slicePreviewMeshTransparent,
+    // set materialIndex = 2 for slice surface
+    this.materials.slicePreviewMeshSliceSurface
   ];
 
   var mesh = new THREE.Mesh(geo, faceMaterials);
