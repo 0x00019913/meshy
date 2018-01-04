@@ -597,6 +597,9 @@ Model.prototype.toggleWireframe = function() {
   if (this.basicMesh) {
     this.basicMesh.material.wireframe = this.wireframe;
   }
+  if (this.slicePreviewMesh) {
+    this.slicePreviewMesh.material[0].wireframe = this.wireframe;
+  }
 }
 
 // Get and set material color.

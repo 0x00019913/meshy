@@ -222,6 +222,31 @@ function removeMeshByName(scene, name) {
 function triangleArea(a, b, c, axis) {
   return cornerCrossProduct(a, b, c, axis)/2;
 }
+// triangle area, but normalized by a-b length and a-c length to account for
+// very small triangles
+function triangleAreaNormalized(a, b, c, axis) {
+  var area = cornerCrossProduct(a, b, c, axis)/2;
+
+  var norm = triangleAreaNormalizationFactor(a, b, c, axis);
+  if (norm === 0) return 0;
+
+  return area/norm;
+}
+function triangleAreaNormalizationFactor(a, b, c, axis) {
+  // need two orthogonal axes
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var bah = b[ah]-a[ah];
+  var bav = b[av]-a[av];
+  var cah = c[ah]-a[ah];
+  var cav = c[av]-a[av];
+
+  // if one of the the segments is 0, area is 0
+  if ((bah === 0 && bav === 0) || (cah === 0 && cav === 0)) return 0;
+
+  return Math.sqrt((bah*bah + bav*bav)*(cah*cah + cav*cav));
+}
 // calculates cross product of b-a and c-a
 function cornerCrossProduct(a, b, c, axis) {
   if (axis == "x") return (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);

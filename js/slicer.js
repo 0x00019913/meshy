@@ -204,7 +204,7 @@ Slicer.prototype.setPreviewSlice = function() {
 
       newFaces[fidx++] = newFace;
 
-      sliceBuilder.addSegment(AB, AC, newFace.normal);
+      sliceBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -242,7 +242,7 @@ Slicer.prototype.setPreviewSlice = function() {
       newFaces[fidx++] = newFace1;
       newFaces[fidx++] = newFace2;
 
-      sliceBuilder.addSegment(AC, BC, newFace2.normal);
+      sliceBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
     }
   }
 
@@ -255,7 +255,17 @@ Slicer.prototype.setPreviewSlice = function() {
   this.previewFaces.length = faceCount + fidx;
 
   var slice = sliceBuilder.getSlice();
-  slice.triangulate();
+  var triIndices = slice.triangulate();
+
+  var triFaces = [];
+
+  for (var i=0; i<triIndices.length; i += 3) {
+    var face = new THREE.Face3(triIndices[i], triIndices[i+1], triIndices[i+2]);
+    faceComputeNormal(face, this.previewVertices);
+    triFaces.push(face);
+  }
+
+  this.previewFaces = this.previewFaces.concat(triFaces);
 }
 
 Slicer.prototype.setPathSlice = function() {
@@ -402,23 +412,26 @@ Slice = function(polys) {
 Slice.prototype.triangulate = function() {
   // polys is an array of edgeloops signifying every polygon in the slice
   var polys = this.polys;
+  var indices = [];
 
   for (var i=0; i<polys.length; i++) {
-    polys[i].triangulate();
+    indices = indices.concat(polys[i].triangulate());
   }
-
   // todo: remove
-  if (polys.length==0) return;
-  debug();
+  if (polys.length>0) debug();
+
+  return indices;
 }
 
 // circular double-linked list symbolizing an edge loop
-EdgeLoop = function(vertices, axis) {
+EdgeLoop = function(axis, vertices, indices) {
   this.axis = axis;
   this.axish = cycleAxis(axis);
   this.axisv = cycleAxis(this.axish);
   this.up = new THREE.Vector3();
   this.up[axis] = 1;
+
+  this.epsilon = 0.0000001;
 
   this.count = 0;
   this.area = 0;
@@ -444,6 +457,7 @@ EdgeLoop = function(vertices, axis) {
     // create the node for this vertex
     var node = {
       v: v,
+      idx: indices[i],
       prev: null,
       next: null,
       ear: false
@@ -463,6 +477,17 @@ EdgeLoop = function(vertices, axis) {
     this.count++;
     if (this.count > 2) {
       this.area += triangleArea(start.v, this.vertex.prev.v, this.vertex.v, axis);
+
+      // if the last three vertices are collinear, remove the middle vertex
+      var pp = this.vertex.prev.prev;
+      var p = this.vertex.prev;
+      var anorm = triangleAreaNormalized(pp.v, p.v, this.vertex.v, axis);
+      if (Math.abs(anorm) < this.epsilon) {
+        pp.next = this.vertex;
+        this.vertex.prev = pp;
+
+        this.count--;
+      }
     }
   }
 
@@ -472,11 +497,13 @@ EdgeLoop = function(vertices, axis) {
 
   if (this.area < 0) this.hole = true;
 
-  // calculate reflex verts
+  // calculate reflex state and angle
   var current = this.vertex;
   var up = this.up;
   do {
     this.nodeCalculateReflex(current);
+    this.nodeCalculateAngle(current);
+
     current = current.next;
   } while (current != this.vertex);
 }
@@ -608,11 +635,15 @@ EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
   holeExit.next = polyEntry;
   polyEntry.prev = holeExit;
 
-  // reflex state may have changed
+  // update reflex and angle states
   this.nodeCalculateReflex(polyExit);
+  this.nodeCalculateAngle(polyExit);
   this.nodeCalculateReflex(holeEntry);
+  this.nodeCalculateAngle(holeEntry);
   this.nodeCalculateReflex(holeExit);
+  this.nodeCalculateAngle(holeExit);
   this.nodeCalculateReflex(polyEntry);
+  this.nodeCalculateAngle(polyEntry);
 
   this.count += hole.count + 2;
   this.area += hole.area;
@@ -687,15 +718,38 @@ EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
   return P;
 }
 
+// triangulation by ear clipping
+// returns an array of 3*n indices for n new triangles
+// see O'Rourke's book for details
 EdgeLoop.prototype.triangulate = function() {
   this.calculateEars();
 
   var count = this.count;
 
+  var indices = [];
+
   while (count > 3) {
     var current = this.vertex;
+    var added = false;
     do {
       if (current.ear) {
+        added = true;
+        var p = current.prev;
+        var n = current.next;
+
+        indices.push(p.idx);
+        indices.push(current.idx);
+        indices.push(n.idx);
+
+        p.next = n;
+        n.prev = p;
+
+        this.vertex = n;
+
+        this.nodeCalculateEar(p);
+        this.nodeCalculateEar(n);
+
+        count--;
 
         break;
       }
@@ -703,38 +757,32 @@ EdgeLoop.prototype.triangulate = function() {
       current = current.next;
     } while (current != this.vertex);
 
-    count--;
+    if (!added) {
+      break;
+    }
   }
+
+  indices.push(this.vertex.prev.idx);
+  indices.push(this.vertex.idx);
+  indices.push(this.vertex.next.idx);
 
   this.count = count;
 
-  return;
-
-  // todo: remove debugging
-  var ct = 0;
-  var curr = this.vertex;
-  do {
-    var vn = curr.next;
-    var vp = curr.prev;
-
-    if (curr.ear) addDebugVertex(curr.v);
-
-    //if (curr.ear) addDebugVertex(curr.v);
-    //addDebugVertex(curr.next.v.clone().add(curr.v).multiplyScalar(0.5));
-    curr = curr.next;
-    ct++;
-    if (ct>500) break;
-  } while (curr != this.vertex);
+  return indices;
 }
 
 // calculate ear status of all ears
 EdgeLoop.prototype.calculateEars = function() {
   var current = this.vertex;
   do {
-    current.ear = this.diagonal(current);
+    this.nodeCalculateEar(current);
 
     current = current.next;
   } while (current != this.vertex);
+}
+
+EdgeLoop.prototype.nodeCalculateEar = function(node) {
+  node.ear = this.diagonal(node);
 }
 
 EdgeLoop.prototype.diagonal = function(node) {
@@ -786,14 +834,22 @@ function debug() {
 EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
 
-  if ((!this.hole && area < 0) || (this.hole && area > 0)) {
+  if (area < 0) {
     // area calculation contains a subtraction, so when the result should be
     // exactly 0, it might go to something like -1e-17; if the area is less
     // than some reeeeeally small epsilon, it doesn't matter if it's reflex
     // anyway, so might as well call those vertices convex
-    if (Math.abs(area) > 0.00000001) node.reflex = true;
+    if (Math.abs(area) > this.epsilon) node.reflex = true;
   }
   else node.reflex = false;
+}
+
+EdgeLoop.prototype.nodeCalculateAngle = function(node) {
+  var ep = node.prev.v.clone().sub(node.v);
+  var en = node.next.v.clone().sub(node.v);
+
+  node.angle = ep.angleTo(en);
+  if (node.reflex) node.angle = 2*Math.PI - node.angle;
 }
 
 SliceBuilder = function(axis) {
@@ -809,17 +865,18 @@ SliceBuilder.prototype.clear = function() {
   this.adjacencyMap = {};
 }
 
-SliceBuilder.prototype.addSegment = function(v1, v2, normal) {
-  this.insertNeighbor(v1, v2, normal);
-  this.insertNeighbor(v2, v1, normal);
+SliceBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
+  this.insertNeighbor(v1, v2, normal, idx1);
+  this.insertNeighbor(v2, v1, normal, idx2);
 }
 
-SliceBuilder.prototype.insertNeighbor = function(v1, v2, n) {
+SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
   var v1hash = vertexHash(v1, this.p);
   var a = this.adjacencyMap;
 
   if (!a.hasOwnProperty(v1hash)) a[v1hash] = {
     v : v1,
+    idx: idx1,
     neighbors: [],
     normals: [],
     visited: false
@@ -857,6 +914,7 @@ SliceBuilder.prototype.makePolys = function() {
     if (start == null) break;
 
     var vertices = [];
+    var indices = [];
 
     var neighbors, normals;
 
@@ -867,6 +925,7 @@ SliceBuilder.prototype.makePolys = function() {
       if (!a.hasOwnProperty(current)) break;
 
       vertices.push(a[current].v);
+      indices.push(a[current].idx);
 
       v = a[current].v;
       neighbors = a[current].neighbors;
@@ -899,7 +958,7 @@ SliceBuilder.prototype.makePolys = function() {
 
     } while (current != start);
 
-    var edgeLoop = new EdgeLoop(vertices, axis);
+    var edgeLoop = new EdgeLoop(axis, vertices, indices);
 
     if (edgeLoop.hole) loops.holes.push(edgeLoop);
     else loops.polys.push(edgeLoop);

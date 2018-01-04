@@ -101,4 +101,5 @@ AxisWidget.prototype.styleContainer = function() {
   this.container.style.bottom = "15px";
   this.container.style.left = "15px";
   this.container.style.backgroundColor = "transparent";
+  this.container.style.pointerEvents = "none";
 }

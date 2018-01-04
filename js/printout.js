@@ -79,6 +79,7 @@ Printout.prototype.styleContainer = function() {
   this.container.style.backgroundColor = "transparent";
   this.container.style.overflowY = "hidden";
   this.container.style.userSelect = "none";
+  this.container.style.pointerEvents = "none";
 
   this.container.style.color = "#eee";
   this.container.style.font = "11px Lucida Grande, sans-serif";
