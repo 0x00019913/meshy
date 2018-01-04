@@ -60,6 +60,7 @@ Controls = function(camera, domElement, params) {
   this.domElement.addEventListener('mouseenter', onMouseEnter, false);
   this.domElement.addEventListener('mousewheel', onMousewheel, false);
   this.domElement.addEventListener('DOMMouseScroll', onMousewheel, false); //Firefox
+  this.domElement.addEventListener('contextmenu', onContextmenu, false);
 
   function onMouseMove(e) {
     // calculate difference in mouse position between this and the previous events
@@ -76,6 +77,14 @@ Controls = function(camera, domElement, params) {
     if (mouseButton==1) { // MMB
       handleMMB();
     }
+
+    if (mouseButton==2) { // RMB
+      handleRMB();
+    }
+  }
+
+  function onContextmenu(e) {
+    e.preventDefault();
   }
 
   function onMousewheel(e) {
@@ -134,6 +143,11 @@ Controls = function(camera, domElement, params) {
       if (_this.z < _this.zMin) _this.z = _this.zMin;
       if (_this.z > _this.zMax) _this.z = _this.zMax;
     }
+  }
+
+  function handleRMB() {
+    // MMB was initially intended for panning, so just so that
+    handleMMB();
   }
 
   function handleWheel(d) {
