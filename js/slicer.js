@@ -1,5 +1,8 @@
 /* slicer.js */
 
+var scene; // for debugging, todo: remove
+var debugGeo = new THREE.Geometry();
+
 Slicer = function(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -24,6 +27,9 @@ Slicer = function(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
     if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
+
+  // for debugging, todo: remove
+  scene = this.scene;
 
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
@@ -412,6 +418,8 @@ Slice.prototype.triangulate = function() {
   for (var i=0; i<polys.length; i++) {
     indices = indices.concat(polys[i].triangulate());
   }
+  // todo: remove
+  if (polys.length>0) debug();
 
   return indices;
 }
@@ -809,6 +817,37 @@ EdgeLoop.prototype.nonintersection = function(a, b) {
   return true;
 }
 
+// TODO: remove debugging
+function debugLoop(loop, fn) {
+  if (fn === undefined) fn = function() { return true; };
+  var curr = loop.vertex;
+  do {
+    if (fn(curr)) addDebugVertex(curr.v);
+    curr = curr.next;
+  } while (curr != loop.vertex);
+}
+function addDebugVertex(v) {
+  debugGeo.vertices.push(v);
+  debugGeo.verticesNeedUpdate = true;
+}
+function debug() {
+  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 5, sizeAttenuation: false });
+  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
+  debugMesh.name = "debug";
+  scene.add(debugMesh);
+
+  var debugLineGeo = new THREE.Geometry();
+  for (var i=0; i<debugGeo.vertices.length; i++) {
+    debugLineGeo.vertices.push(debugGeo.vertices[i]);
+    debugLineGeo.vertices.push(debugGeo.vertices[(i+1)%debugGeo.vertices.length]);
+  }
+  var debugLineMaterial = new THREE.LineBasicMaterial({color: 0xff6666, linewidth: 1 });
+  var debugLineMesh = new THREE.LineSegments(debugLineGeo, debugLineMaterial);
+  debugLineMesh.name = "debugLine";
+  scene.add(debugLineMesh);
+  debugGeo = new THREE.Geometry();
+}
+
 EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
 
@@ -842,6 +881,7 @@ SliceBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
 
 SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
   var v1hash = vertexHash(v1, this.p);
+
   var a = this.adjacencyMap;
 
   if (!a.hasOwnProperty(v1hash)) a[v1hash] = {
@@ -851,6 +891,9 @@ SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
     normals: [],
     visited: false
   };
+
+  var v2hash = vertexHash(v2, this.p);
+  if (v1hash == v2hash) return;
 
   a[v1hash].neighbors.push(v2);
   a[v1hash].normals.push(n);
