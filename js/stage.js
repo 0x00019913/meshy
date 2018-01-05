@@ -49,7 +49,7 @@ Stage = function() {
   // standard notifications
   this.printout.log("Meshy is freely available under the MIT license. Thanks for using!");
   this.printout.log("Supported import formats: OBJ, STL.");
-  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), F (center on model), C (center of mass), W (wireframe)");
+  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe)");
 
   // undo stack
   this.undoStack = new UndoStack(this.printout);
