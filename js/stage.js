@@ -193,6 +193,8 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "cancelPatch");
 
   this.sliceFolder = this.gui.addFolder("Slice (beta)");
+  this.sliceHeight = .05;
+  this.sliceAxis = "z";
   this.buildSliceFolderInactive();
 
   this.gui.add(this, "undo");
@@ -334,8 +336,8 @@ Stage.prototype.cancelPatch = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceHeight = .05;
   this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
+  this.sliceFolder.add(this, "sliceAxis", ["x", "y", "z"]);
   this.sliceFolder.add(this, "activateSliceMode");
 }
 // build the Slice folder for when slice mode is on
@@ -365,7 +367,7 @@ Stage.prototype.setSliceMode = function() {
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
-    this.model.activateSliceMode(this.sliceHeight);
+    this.model.activateSliceMode(this.sliceHeight, this.sliceAxis);
     this.buildSliceFolderActive();
   }
 }

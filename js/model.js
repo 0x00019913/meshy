@@ -702,7 +702,7 @@ Model.prototype.setMode = function(mode, params) {
       this.faces,
       {
         sliceHeight: params.sliceHeight,
-        axis: "z",
+        axis: params.sliceAxis,
         mode: this.sliceMode,
         scene: this.scene
       }
@@ -1943,11 +1943,12 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 // Turn on slice mode: set mode to "slice", passing sliceHeight. Slice mode
 // defaults to "preview".
-Model.prototype.activateSliceMode = function(sliceHeight) {
+Model.prototype.activateSliceMode = function(sliceHeight, sliceAxis) {
   this.sliceMode = "preview";
 
   this.setMode("slice", {
-    sliceHeight: sliceHeight
+    sliceHeight: sliceHeight,
+    sliceAxis: sliceAxis===undefined ? "z" : sliceAxis
   });
 }
 
