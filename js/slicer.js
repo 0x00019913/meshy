@@ -416,7 +416,9 @@ Slice.prototype.triangulate = function() {
   var indices = [];
 
   for (var i=0; i<polys.length; i++) {
-    indices = indices.concat(polys[i].triangulate());
+    var poly = polys[i];
+    poly.mergeHolesIntoPoly();
+    indices = indices.concat(poly.triangulate());
   }
   // todo: remove
   if (polys.length>0) debug();
@@ -979,11 +981,6 @@ SliceBuilder.prototype.makePolys = function() {
 
   // assign holes to the polys containing them
   this.calculateHierarchy(loops);
-
-  // merge each poly's holes into the poly
-  for (var i=0; i<loops.polys.length; i++) {
-    loops.polys[i].mergeHolesIntoPoly();
-  }
 
   return loops.polys;
 }
