@@ -161,7 +161,7 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = 0;
   var fidx = 0;
 
-  var sliceBuilder = new SliceBuilder(axis);
+  var layerBuilder = new LayerBuilder(axis);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
@@ -204,7 +204,7 @@ Slicer.prototype.setPreviewSlice = function() {
 
       newFaces[fidx++] = newFace;
 
-      sliceBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
+      layerBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -242,7 +242,7 @@ Slicer.prototype.setPreviewSlice = function() {
       newFaces[fidx++] = newFace1;
       newFaces[fidx++] = newFace2;
 
-      sliceBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
+      layerBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
     }
   }
 
@@ -254,8 +254,8 @@ Slicer.prototype.setPreviewSlice = function() {
   this.previewVertices.length = vertexCount + vidx;
   this.previewFaces.length = faceCount + fidx;
 
-  var slice = sliceBuilder.getSlice();
-  var triIndices = slice.triangulate();
+  var layer = layerBuilder.getLayer();
+  var triIndices = layer.triangulate();
 
   var triFaces = [];
 
@@ -293,14 +293,27 @@ Slicer.prototype.makePathGeometry = function() {
 
   this.pathVertices = [];
 
+  var layerBuilder = new LayerBuilder(this.axis);
+  var timer = new Timer();
+  timer.start();
+
   for (var i=0; i<segmentLists.length; i++) {
     var segmentList = segmentLists[i];
     for (var s=0; s<segmentList.length; s++) {
       var segment = segmentList[s];
       this.pathVertices.push(segment[0]);
       this.pathVertices.push(segment[1]);
+
+      layerBuilder.addSegment(segment[0], segment[1], segment[2]);
     }
+
+    var layer = layerBuilder.getLayer();
+    layer.triangulate();
+    layerBuilder.clear();
   }
+
+  timer.stop();
+  console.log(timer.elapsed());
 
   this.pathGeometryReady = true;
 }
@@ -396,7 +409,7 @@ Slicer.prototype.buildLayerSegmentLists = function() {
         }
         var int2 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
 
-        layerSegmentList.push([int1, int2]);
+        layerSegmentList.push([int1, int2, bounds.face.normal]);
       }
     }
 
@@ -406,11 +419,12 @@ Slicer.prototype.buildLayerSegmentLists = function() {
   return layerSegmentLists;
 }
 
-Slice = function(polys) {
+// contains a single slice of the mesh
+Layer = function(polys) {
   this.polys = polys;
 }
 
-Slice.prototype.triangulate = function() {
+Layer.prototype.triangulate = function() {
   // polys is an array of edgeloops signifying every polygon in the slice
   var polys = this.polys;
   var indices = [];
@@ -427,7 +441,7 @@ Slice.prototype.triangulate = function() {
 }
 
 // circular double-linked list symbolizing an edge loop
-EdgeLoop = function(axis, vertices, indices) {
+Polygon = function(axis, vertices, indices) {
   this.axis = axis;
   this.axish = cycleAxis(axis);
   this.axisv = cycleAxis(this.axish);
@@ -511,7 +525,7 @@ EdgeLoop = function(axis, vertices, indices) {
   } while (current != this.vertex);
 }
 
-EdgeLoop.prototype.updateBounds = function(n) {
+Polygon.prototype.updateBounds = function(n) {
   var ah = this.axish;
   var av = this.axisv;
 
@@ -530,7 +544,7 @@ EdgeLoop.prototype.updateBounds = function(n) {
 }
 
 // test if this edge loop contains the other edge loop
-EdgeLoop.prototype.contains = function(other) {
+Polygon.prototype.contains = function(other) {
   // horizontal and vertical axes; the convention is that we're looking along
   // negative this.axis, ah points right and av points up - we'll call
   // pt[ah] h and pt[av] v
@@ -555,7 +569,7 @@ EdgeLoop.prototype.contains = function(other) {
 
 // point-in-polygon testing - see if some point of other is inside this loop;
 // see O'Rourke's book, sec. 7.4
-EdgeLoop.prototype.containsPoint = function(pt) {
+Polygon.prototype.containsPoint = function(pt) {
   var ah = this.axish;
   var av = this.axisv;
   var h = pt[ah];
@@ -588,7 +602,7 @@ EdgeLoop.prototype.containsPoint = function(pt) {
 // triangulated as a single convex polygon
 // see David Eberly's writeup - we cast a ray to the right, see where it
 // intersects the closest segment, then check inside a triangle
-EdgeLoop.prototype.mergeHolesIntoPoly = function() {
+Polygon.prototype.mergeHolesIntoPoly = function() {
   var axis = this.axis;
   var ah = this.axish;
   var av = this.axisv;
@@ -619,7 +633,7 @@ EdgeLoop.prototype.mergeHolesIntoPoly = function() {
 }
 
 // join vertex node in polygon to given vertex node in hole
-EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
+Polygon.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
   // loop goes CCW around poly, exits the poly, goes around hole, exits hole,
   // enters poly
   var polyExit = polyNode;
@@ -648,7 +662,7 @@ EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
   this.area += hole.area;
 }
 
-EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
+Polygon.prototype.findVisiblePointFromHole = function(hole) {
   var axis = this.axis;
   var ah = this.axish;
   var av = this.axisv;
@@ -720,7 +734,7 @@ EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
 // triangulation by ear clipping
 // returns an array of 3*n indices for n new triangles
 // see O'Rourke's book for details
-EdgeLoop.prototype.triangulate = function() {
+Polygon.prototype.triangulate = function() {
   this.calculateEars();
 
   var count = this.count;
@@ -772,7 +786,7 @@ EdgeLoop.prototype.triangulate = function() {
 }
 
 // calculate ear status of all ears
-EdgeLoop.prototype.calculateEars = function() {
+Polygon.prototype.calculateEars = function() {
   var current = this.vertex;
   do {
     this.nodeCalculateEar(current);
@@ -781,18 +795,18 @@ EdgeLoop.prototype.calculateEars = function() {
   } while (current != this.vertex);
 }
 
-EdgeLoop.prototype.nodeCalculateEar = function(node) {
+Polygon.prototype.nodeCalculateEar = function(node) {
   node.ear = this.diagonal(node);
 }
 
-EdgeLoop.prototype.diagonal = function(node) {
+Polygon.prototype.diagonal = function(node) {
   var p = node.prev;
   var n = node.next;
 
   return this.inCone(p, n) && this.inCone(n, p) && this.nonintersection(p, n);
 }
 
-EdgeLoop.prototype.inCone = function(a, b) {
+Polygon.prototype.inCone = function(a, b) {
   var axis = this.axis;
   var apv = a.prev.v;
   var anv = a.next.v;
@@ -801,7 +815,7 @@ EdgeLoop.prototype.inCone = function(a, b) {
   else return left(apv, a.v, b.v, axis) && left(a.v, anv, b.v, axis);
 }
 
-EdgeLoop.prototype.nonintersection = function(a, b) {
+Polygon.prototype.nonintersection = function(a, b) {
   var axis = this.axis;
   var c = this.vertex;
 
@@ -850,7 +864,7 @@ function debug() {
   debugGeo = new THREE.Geometry();
 }
 
-EdgeLoop.prototype.nodeCalculateReflex = function(node) {
+Polygon.prototype.nodeCalculateReflex = function(node) {
   var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
 
   if (area < 0) {
@@ -863,7 +877,18 @@ EdgeLoop.prototype.nodeCalculateReflex = function(node) {
   else node.reflex = false;
 }
 
-SliceBuilder = function(axis) {
+HalfEdge = function() {
+  this.v = null;
+  this.twin = null;
+  this.next = null;
+}
+
+HalfEdgeVert = function() {
+  this.v = null;
+  this.halfedge = null;
+}
+
+LayerBuilder = function(axis) {
   this.p = Math.pow(10, 9);
   this.axis = axis;
   this.up = new THREE.Vector3();
@@ -872,27 +897,21 @@ SliceBuilder = function(axis) {
   this.adjacencyMap = {};
 }
 
-SliceBuilder.prototype.clear = function() {
+LayerBuilder.prototype.clear = function() {
   this.adjacencyMap = {};
 }
 
-SliceBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
+LayerBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
   this.insertNeighbor(v1, v2, normal, idx1);
   this.insertNeighbor(v2, v1, normal, idx2);
 }
 
-SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
+LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
   var v1hash = vertexHash(v1, this.p);
 
   var a = this.adjacencyMap;
 
-  if (!a.hasOwnProperty(v1hash)) a[v1hash] = {
-    v : v1,
-    idx: idx1,
-    neighbors: [],
-    normals: [],
-    visited: false
-  };
+  if (!a.hasOwnProperty(v1hash)) a[v1hash] = this.makeAdjMapNode(v1, idx1);
 
   var v2hash = vertexHash(v2, this.p);
   if (v1hash == v2hash) return;
@@ -901,13 +920,30 @@ SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
   a[v1hash].normals.push(n);
 }
 
-SliceBuilder.prototype.makePolys = function() {
+LayerBuilder.prototype.makeAdjMapNode = function(v1, idx1) {
+  // don't store index if unavailable
+  if (idx1 === undefined) return {
+    v : v1,
+    neighbors: [],
+    normals: [],
+    visited: false
+  };
+  else return {
+    v : v1,
+    idx: idx1,
+    neighbors: [],
+    normals: [],
+    visited: false
+  };
+}
+
+LayerBuilder.prototype.makePolys = function() {
   var a = this.adjacencyMap;
   var up = this.up;
   var axis = this.axis;
   var p = this.p;
 
-  var loops = {
+  var edgeLoops = {
     polys: [],
     holes: []
   };
@@ -973,21 +1009,21 @@ SliceBuilder.prototype.makePolys = function() {
 
     } while (current != start);
 
-    var edgeLoop = new EdgeLoop(axis, vertices, indices);
+    var edgeLoop = new Polygon(axis, vertices, indices);
 
-    if (edgeLoop.hole) loops.holes.push(edgeLoop);
-    else loops.polys.push(edgeLoop);
+    if (edgeLoop.hole) edgeLoops.holes.push(edgeLoop);
+    else edgeLoops.polys.push(edgeLoop);
   }
 
   // assign holes to the polys containing them
-  this.calculateHierarchy(loops);
+  this.calculateHierarchy(edgeLoops);
 
-  return loops.polys;
+  return edgeLoops.polys;
 }
 
-SliceBuilder.prototype.calculateHierarchy = function(loops) {
-  var polys = loops.polys;
-  var holes = loops.holes;
+LayerBuilder.prototype.calculateHierarchy = function(edgeLoops) {
+  var polys = edgeLoops.polys;
+  var holes = edgeLoops.holes;
   var np = polys.length;
   var nh = holes.length;
 
@@ -1078,8 +1114,8 @@ SliceBuilder.prototype.calculateHierarchy = function(loops) {
   }
 }
 
-SliceBuilder.prototype.getSlice = function() {
+LayerBuilder.prototype.getLayer = function() {
   var polys = this.makePolys();
 
-  return new Slice(polys);
+  return new Layer(polys);
 }
