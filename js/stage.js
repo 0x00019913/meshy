@@ -49,7 +49,7 @@ Stage = function() {
   // standard notifications
   this.printout.log("Meshy is freely available under the MIT license. Thanks for using!");
   this.printout.log("Supported import formats: OBJ, STL.");
-  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), F (center on model), C (center of mass), W (wireframe)");
+  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe)");
 
   // undo stack
   this.undoStack = new UndoStack(this.printout);
@@ -193,8 +193,6 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "cancelPatch");
 
   this.sliceFolder = this.gui.addFolder("Slice (beta)");
-  this.sliceHeight = .05;
-  this.sliceAxis = "z";
   this.buildSliceFolderInactive();
 
   this.gui.add(this, "undo");
@@ -336,8 +334,8 @@ Stage.prototype.cancelPatch = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
+  this.sliceHeight = .6;
   this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
-  this.sliceFolder.add(this, "sliceAxis", ["x", "y", "z"]);
   this.sliceFolder.add(this, "activateSliceMode");
 }
 // build the Slice folder for when slice mode is on
@@ -367,7 +365,7 @@ Stage.prototype.setSliceMode = function() {
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
-    this.model.activateSliceMode(this.sliceHeight, this.sliceAxis);
+    this.model.activateSliceMode(this.sliceHeight);
     this.buildSliceFolderActive();
   }
 }
@@ -650,6 +648,10 @@ Stage.prototype.displayMesh = function(success, model) {
     removeMeshByName(this.scene, "model");
     return;
   }
+
+  // todo: remove
+  this.activateSliceMode();
+
   this.cameraToModel();
   this.filename = this.model.filename;
   this.setMeshColor();

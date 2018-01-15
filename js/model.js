@@ -1944,7 +1944,7 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 // Turn on slice mode: set mode to "slice", passing sliceHeight. Slice mode
 // defaults to "preview".
 Model.prototype.activateSliceMode = function(sliceHeight, sliceAxis) {
-  this.sliceMode = "preview";
+  this.sliceMode = "path"; // todo: switch back to preview
 
   this.setMode("slice", {
     sliceHeight: sliceHeight,
@@ -2454,72 +2454,3 @@ Model.prototype.dispose = function() {
   // remove measurement markers, etc. from the scene
   this.measurement.dispose();
 }
-
-// OLD CODE FOR SLICING - NOT CURRENTLY USING ANY OF THIS, PROBABLY DOESN'T WORK.
-// TODO: make this workable later or replace entirely.
-/*
-Model.prototype.renderSlicedModel = function(scene) {
-  this.segmentLists = this.slice();
-  var geo = new THREE.Geometry();
-  for (var i=0; i<this.segmentLists.length; i++) {
-    for (var j=0; j<this.segmentLists[i].length; j++) {
-      geo.vertices.push(this.segmentLists[i][j][0]);
-      geo.vertices.push(this.segmentLists[i][j][1]);
-    }
-  }
-  var mat = new THREE.LineBasicMaterial({
-    color: 0x0,
-    linewidth: 1
-  });
-  this.slicedMesh = new THREE.LineSegments(geo, mat);
-  this.slicedMesh.name = "model";
-  scene.add(this.slicedMesh);
-}
-
-// UNUSED.
-Model.prototype.buildSliceLists = function() {
-  // slice thickness
-  this.delta = (this.ymax-this.ymin)/this.numSlices;
-  var slice0 = this.ymin + this.delta/2;
-  var slicek = this.ymax - this.delta/2;
-  var sliceLists = [];
-  // initialize sliceLists
-  for (var i=0; i<=this.numSlices; i++) {
-    sliceLists[i] = [];
-  }
-  for (var i=0; i<this.count; i++) {
-    var index;
-    var triangle = this.triangles[i];
-    if (triangle.ymin<slice0) index = 0;
-    else if (triangle.ymin>slicek) index = this.numSlices;
-    else index = Math.floor((triangle.ymin-slice0)/this.delta) + 1;
-    sliceLists[index].push(triangle);
-  }
-
-  return sliceLists;
-}
-
-// UNUSED.
-Model.prototype.slice = function() {
-  var sliceLists = this.buildSliceLists();
-  var sweepList = [];
-  var segmentLists = [];
-
-  var intersectingList = [];
-  for (var i=0; i<this.numSlices; i++) {
-    sweepList = sweepList.concat(sliceLists[i]);
-    segmentLists[i] = [];
-    var slicePos = this.ymin + (i+0.5)*this.delta;
-    for (var j=0; j<sweepList.length; j++) {
-      if (sweepList[j].ymax<slicePos) {
-        sweepList.splice(j,1); // crude but should work
-      }
-      else {
-        var intersection = sweepList[j].yIntersection(slicePos);
-        segmentLists[i].push(intersection);
-      }
-    }
-  }
-  return segmentLists;
-}
-*/
