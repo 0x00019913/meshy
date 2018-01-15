@@ -122,6 +122,10 @@ function objectIsEmpty(obj) {
   return isEmpty;
 }
 
+function shallowCopy(obj) {
+  return Object.assign({}, obj);
+}
+
 // THREE.Face3- and THREE.Vector3-related functions
 // get THREE.Face3 vertices
 function faceGetVerts(face, vertices) {
@@ -308,11 +312,54 @@ function segmentPlaneIntersection(axis, plane, va, vb) {
 
 // s1, s2: endpoints of segment
 // pt: point emitting ray
-// ah: horizontal axis along which ray emits
-// av: orthogonal to ah
+// axis: axis orthogonal to plane; therefore:
+//  ah: horizontal axis along which ray emits
+//  av: orthogonal to ah
 // returns: intersection along a1 axis
-function raySegmentIntersectionOnAxis(s1, s2, pt, ah, av) {
+function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
+}
+
+// basically this math:
+// https://stackoverflow.com/a/2931703/7416552
+// s, t: segment origins
+// sd, td: segment directions (not necessarily normalized)
+// point of intersection is s + sd * u = t + td * v
+function rayRayIntersection(s, t, sd, td, axis) {
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var det = sd[ah]*td[av] - sd[av]*td[ah];
+  // lines are exactly parallel, so no intersection
+  if (det == 0) return null;
+
+  var dh = t[ah] - s[ah];
+  var dv = t[av] - s[av];
+
+  var u = (td[av]*dh - td[ah]*dv) / det;
+  // rays diverge, so intersection is "behind" ray a's origin
+  if (u < 0) return null;
+
+  return s.clone().add(sd.clone().multiplyScalar(u));
+}
+
+// returns v's distance to the line through a and b
+function distanceToLine(v, a, b, axis) {
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  // unit vector from a to b (unit vector along line)
+  var abhat = b.clone().sub(a).normalize();
+
+  // vector from a to v
+  var av = v.clone().sub(a);
+  // projection of a-v vector onto line
+  var projection = abhat.multiplyScalar(av.dot(abhat));
+
+  // subtract projection from a-v vector to get orthogonal vector
+  return av.sub(projection).length();
 }
 
 // true if c is strictly left of a-b segment
@@ -333,6 +380,14 @@ function pointInsideTriangle(p, a, b, c, axis) {
 function segmentSegmentIntersection(a, b, c, d, axis) {
   return ((left(a, b, c, axis) ^ left(a, b, d, axis)) &&
           (left(c, d, a, axis) ^ left(c, d, b, axis)));
+}
+
+function collinear(a, b, c, axis, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0000001;
+
+  var area = triangleArea(a, b, c, axis);
+
+  return Math.abs(area) < epsilon;
 }
 
 
