@@ -137,6 +137,8 @@ function faceGetVerts(face, vertices) {
 }
 // get THREE.Face3 vertices and sort them in ascending order on axis
 function faceGetVertsSorted(face, vertices, axis) {
+  if (axis === undefined) axis = 'z';
+
   var verts = faceGetVerts(face, vertices);
   var ccw = true;
   var a = verts[0][axis];
@@ -185,6 +187,8 @@ function vertsComputeNormal(a, b, c) {
   return bc.cross(ba).normalize();
 }
 function faceGetBounds(face, axis, vertices) {
+  if (axis === undefined) axis = 'z';
+
   var verts = faceGetVerts(face, vertices);
   return {
     max: Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis])),
@@ -224,11 +228,15 @@ function removeMeshByName(scene, name) {
 // )
 // calculate triangle area
 function triangleArea(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   return cornerCrossProduct(a, b, c, axis)/2;
 }
 // triangle area, but normalized by a-b length and a-c length to account for
 // very small triangles
 function triangleAreaNormalized(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   var area = cornerCrossProduct(a, b, c, axis)/2;
 
   var norm = triangleAreaNormalizationFactor(a, b, c, axis);
@@ -237,6 +245,8 @@ function triangleAreaNormalized(a, b, c, axis) {
   return area/norm;
 }
 function triangleAreaNormalizationFactor(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   // need two orthogonal axes
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -253,6 +263,8 @@ function triangleAreaNormalizationFactor(a, b, c, axis) {
 }
 // calculates cross product of b-a and c-a
 function cornerCrossProduct(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   if (axis == "x") return (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);
   if (axis == "y") return (b.z-a.z)*(c.x-a.x) - (b.x-a.x)*(c.z-a.z);
   if (axis == "z") return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
@@ -293,6 +305,8 @@ function vertexArrayToMap(map, vertices, p) {
 
 // intersection between line segment and plane normal to axis
 function segmentPlaneIntersection(axis, plane, va, vb) {
+  if (axis === undefined) axis = 'z';
+
   // va assumed lower on axis than vb; if not, make it so
   if (va[axis] > vb[axis]) {
     var tmp = va;
@@ -317,6 +331,8 @@ function segmentPlaneIntersection(axis, plane, va, vb) {
 //  av: orthogonal to ah
 // returns: intersection along a1 axis
 function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
+  if (axis === undefined) axis = 'z';
+
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
@@ -328,6 +344,8 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
 // sd, td: segment directions (not necessarily normalized)
 // point of intersection is s + sd * u = t + td * v
 function rayRayIntersection(s, t, sd, td, axis) {
+  if (axis === undefined) axis = 'z';
+
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
@@ -347,6 +365,8 @@ function rayRayIntersection(s, t, sd, td, axis) {
 
 // returns v's distance to the line through a and b
 function distanceToLine(v, a, b, axis) {
+  if (axis === undefined) axis = 'z';
+
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
@@ -364,25 +384,40 @@ function distanceToLine(v, a, b, axis) {
 
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   return triangleArea(a, b, c, axis) > 0;
 }
 
 // true if c is left or equal to a-b segment
 function leftOn(a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   return triangleArea(a, b, c, axis) >= 0;
 }
 
 function pointInsideTriangle(p, a, b, c, axis) {
+  if (axis === undefined) axis = 'z';
+
   return left(a, b, p, axis) && left(b, c, p, axis) && left(c, a, p, axis);
 }
 
 // bool check if segment ab intersects segment cd
 function segmentSegmentIntersection(a, b, c, d, axis) {
+  if (axis === undefined) axis = 'z';
+
   return ((left(a, b, c, axis) ^ left(a, b, d, axis)) &&
           (left(c, d, a, axis) ^ left(c, d, b, axis)));
 }
 
+function coincident(a, b, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0001;
+
+  return a.clone().sub(b).length() < epsilon;
+}
+
 function collinear(a, b, c, axis, epsilon) {
+  if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
   var area = triangleArea(a, b, c, axis);
