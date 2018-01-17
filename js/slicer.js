@@ -1050,14 +1050,11 @@ StraightSkeleton = function(poly) {
   var ct = 0;
   var ixn = null;
   var dbg = true;
+  var lim = 18;
   while (pq.length > 0) {
-    if (++ct > 2) break;
+    ct++;
+    //if (ct > lim ) break;
     var lnode = pq.dequeue();
-
-    if (dbg && true) {
-      console.log('\n');
-      console.log(ct, "current:", lnode);
-    }
 
     // intersection vertex
     var vI = lnode.intersection;
@@ -1074,20 +1071,17 @@ StraightSkeleton = function(poly) {
     }
     // now intersection is formed by bisectors of A and B (B CCW from A)
 
+    if (dbg && false && ct==lim) {
+      console.log(ct, lnode.intersectprev ? "prev" : "next", shallowCopy(lnode));
+      console.log(shallowCopy(lnodeA));
+      console.log(shallowCopy(lnodeB));
+      console.log(shallowCopy(lnodeA.prev.prev), lnodeA.prev.prev == lnodeB);
+    }
+
     // dequeued a duplicate intersection, so continue
     if (lnodeA.processed || lnodeB.processed) {
       if (dbg && true) {
-        console.log(" discard", lnodeA, lnodeB);
-        console.log(" next:", pq.peek());
-      }
-      continue;
-    }
-
-    // reached a peak of the roof
-    if (lnodeA.prev.prev == lnodeB) {
-      // todo
-      if (dbg && true) {
-        console.log(" peak", lnodeA, lnodeB, lnodeB.next);
+        console.log(ct, "discard", lnode.heidx);
       }
       continue;
     }
@@ -1096,37 +1090,49 @@ StraightSkeleton = function(poly) {
 
     // node at intersection
     var nidxI = this.makeNode(vI);
-    // halfedge going into A
+
+    // link A to I
     var heidxA = this.halfedgePrevIdx(lnodeA.heidx);
-    // vertex node at B
-    var nidxB = this.halfedgeNodeIdx(lnodeB.heidx);
-
-    // connect (halfedge going into A) to (node at intersection)
     var heidxAI = this.connectHalfedgeToNode(heidxA, nidxI);
-    // connect (halfedge going into intersection) to (node at B)
-    var heidxIB = this.connectHalfedgeToNode(heidxAI, nidxB);
-
     lnodeA.processed = true;
+
+    // link B to I
+    var nidxB = this.halfedgeNodeIdx(lnodeB.heidx);
+    var heidxIB = this.connectHalfedgeToNode(heidxAI, nidxB);
     lnodeB.processed = true;
 
-    // make a new LAV node
+    // reached a peak of the roof, so close it with three edges
+    if (lnodeA.prev.prev == lnodeB) {
+      var lnodeC = lnodeA.prev;
+      var heidxC = this.halfedgePrevIdx(lnodeC.heidx);
+
+      this.connectHalfedgeToNode(heidxC, nidxI);
+
+      lnodeC.processed = true;
+
+      if (dbg && true) {
+        console.log("peak");
+      }
+      continue;
+    }
+
+    // make a new LAV node at the intersection
     var lnodeI = this.makeLAVnode(heidxIB);
     // todo: remove
     ixn = lnodeI;
 
-    // associate with the correct contour edges
-    lnodeI.backward = lnodeA.backward;
-    lnodeI.backwardStart = lnodeA.backwardStart;
-    lnodeI.forward = lnodeB.forward;
-    lnodeI.forwardStart = lnodeB.forwardStart;
-
-    // attach to neighbor LAV nodes
     var newprev = lnodeA.prev;
     var newnext = lnodeB.next;
     newprev.next = lnodeI;
     lnodeI.prev = newprev;
     newnext.prev = lnodeI;
     lnodeI.next = newnext;
+
+    // associate with the correct contour edges
+    lnodeI.backward = lnodeA.backward;
+    lnodeI.backwardStart = lnodeA.backwardStart;
+    lnodeI.forward = lnodeB.forward;
+    lnodeI.forwardStart = lnodeB.forwardStart;
 
     // calculate bisector from contour edges and the resulting intersection,
     // if any, with neighboring LAV nodes' bisectors
@@ -1136,7 +1142,7 @@ StraightSkeleton = function(poly) {
     // if intersection, push to PQ
     if (lnodeI.intersection) pq.queue(lnodeI);
 
-    if (dbg && true) {
+    if (dbg && false) {
       console.log(lnodeA, lnodeI, lnodeB);
       console.log(" next:", pq.peek());
     }
@@ -1203,8 +1209,15 @@ StraightSkeleton = function(poly) {
 
       c = heidx;
       do {
-        var v = this.nodeVertex(this.halfedgeNodeIdx(c));
-        var vnext = this.nodeVertex(this.halfedgeEndNodeIdx(c));
+        var v = this.nodeVertex(this.halfedgeNodeIdx(c)).clone();
+        var vnext = this.nodeVertex(this.halfedgeEndNodeIdx(c)).clone();
+        var vprev = this.nodeVertex(this.halfedgeNodeIdx(this.halfedgePrevIdx(c)));
+        var nnextidx = this.halfedgeEndNodeIdx(this.halfedgeNextIdx(c));
+        var forward = vnext.clone().sub(v).normalize();
+        var forwardnext = this.nodeVertex(nnextidx).clone().sub(vnext).normalize();
+        var backward = vprev.clone().sub(v).normalize();
+        v.add(forward.clone().add(backward).setLength(.1));
+        vnext.add(forwardnext.clone().sub(forward).setLength(.1));
         debugLine(v, vnext, 1, true);
 
         c = this.halfedgeNextIdx(c);
@@ -1215,16 +1228,26 @@ StraightSkeleton = function(poly) {
   }
 
   // debug current LAV
-  if (dbg && true && ixn) {
+  if (dbg && false) {
+    //console.log(pq.peek());
     var c = ixn;
     var cct = 0;
     do {
-      var a = c.v.clone().add(c.bisector.clone().multiplyScalar(0.1));
+      //console.log(shallowCopy(c));
+      if (!c || !c.bisector) break;
+      var a = c.v.clone();
+      a.add(c.bisector.clone().multiplyScalar(0.1));
       a.z += 0.02;
       addDebugVertex(a);
       debugLine(c.v, c.next.v);
+      if (true) {
+        if (!c.intersection) break;
+        var ii = c.intersection.clone().add(new THREE.Vector3(0,0,0.4));
+        debugLine(c.v, ii);
+      }
       c = c.next;
-      //if (++cct > 100) break;
+      cct++;
+      //if (cct > 100) break;
     } while (c != ixn);
     debugLines();
   }
@@ -1248,20 +1271,20 @@ StraightSkeleton = function(poly) {
 // if t_n has a next edge t_henext, set that as st_he's next;
 // else, set ts_he as st_he's next
 // ts_he's next is s_henext
-StraightSkeleton.prototype.connectHalfedgeToNode = function(s_heidx, t_nidx) {
+StraightSkeleton.prototype.connectHalfedgeToNode = function(s_inheidx, t_nidx) {
   var nodes = this.nodes;
   var halfedges = this.halfedges;
 
   // get source node and outflowing halfedge
-  var s_henextidx = this.halfedgeNextIdx(s_heidx);
-  var s_nidx = this.halfedgeNodeIdx(s_henextidx);
+  var s_outheidx = this.halfedgeNextIdx(s_inheidx);
+  var s_nidx = this.halfedgeNodeIdx(s_outheidx);
 
   // get outflowing and inflowing halfedges for target
-  var t_henextidx = this.nodeHalfedgeIdx(t_nidx);
-  var t_heidx = -1;
+  var t_outheidx = this.nodeHalfedgeIdx(t_nidx);
+  var t_inheidx = -1;
   // if t_n already has an outflowing edge, it must have an inflowing edge too
-  if (t_henextidx > -1) {
-    t_heidx = this.halfedgePrevIdx(t_henextidx);
+  if (t_outheidx > -1) {
+    t_inheidx = this.halfedgePrevIdx(t_outheidx);
   }
 
   // create two halfedges
@@ -1269,14 +1292,14 @@ StraightSkeleton.prototype.connectHalfedgeToNode = function(s_heidx, t_nidx) {
   var ts_heidx = this.halfedgeTwinIdx(st_heidx);
 
   // attach halfedge on source
-  this.setHalfedgeNextIdx(s_heidx, st_heidx);
-  this.setHalfedgeNextIdx(ts_heidx, s_henextidx);
+  this.setHalfedgeNextIdx(s_inheidx, st_heidx);
+  this.setHalfedgeNextIdx(ts_heidx, s_outheidx);
 
   // attach halfedges on target
   // if target had outflowing and inflowing edges
-  if (t_heidx > -1) {
-    this.setHalfedgeNextIdx(st_heidx, t_henextidx);
-    this.setHalfedgeNextIdx(t_heidx, ts_heidx);
+  if (t_outheidx > -1) {
+    this.setHalfedgeNextIdx(st_heidx, t_outheidx);
+    this.setHalfedgeNextIdx(t_inheidx, ts_heidx);
   }
   // else, if target didn't have edges, we already created the new edges
   // connected to each other - so do nothing
@@ -1303,31 +1326,25 @@ StraightSkeleton.prototype.makeHalfedgePair = function(s_nidx, t_nidx) {
   var st_heidx = this.halfedges.length;
   var ts_heidx = st_heidx + 1;
 
-  var sv = this.nodeVertex(s_nidx);
-  var tv = this.nodeVertex(t_nidx);
-  var st_edge = tv.clone().sub(sv);
-  var ts_edge = st_edge.clone().negate();
-
   // s -> t halfedge
   var st_he = {
     nodeidx: s_nidx,
     nextidx: ts_heidx,
-    twinidx: ts_heidx,
-    edge: st_edge
+    twinidx: ts_heidx
   };
   // t -> s halfedge
   var ts_he = {
     nodeidx: t_nidx,
     nextidx: st_heidx,
-    twinidx: st_heidx,
-    edge: ts_edge
+    twinidx: st_heidx
   };
 
   this.halfedges.push(st_he);
   this.halfedges.push(ts_he);
 
-  // in case the node has no halfedge, set it to the most recent halfedge
+  // in case source node has no halfedge, set it to the most recent halfedge
   this.nodes[s_nidx].heidx = st_heidx;
+  this.nodes[t_nidx].heidx = ts_heidx;
 
   return st_heidx;
 }
