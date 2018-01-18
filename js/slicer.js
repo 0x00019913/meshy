@@ -308,7 +308,7 @@ Slicer.prototype.makePathGeometry = function() {
 
     var layer = layerBuilder.getLayer();
 
-    if (i!=2) continue;
+    //if (i!=2) continue;
 
     layer.writeBaseContoursToVerts(this.pathVertices);
     layer.makeSkeletons();
@@ -524,19 +524,23 @@ Polygon = function(axis, vertices, indices) {
   this.vertex.next = start;
   start.prev = this.vertex;
 
-
   // eliminate collinear vertices
+  start = null;
   var current = this.vertex;
   do {
     if (this.collinear(current)) {
-      if (current == this.vertex) this.vertex = current.next;
-
       this.removeNode(current);
+    }
+    else {
+      if (!start) start = current;
     }
 
     current = current.next;
-  } while (current != this.vertex);
+  } while (current != start);
 
+  this.vertex = start;
+
+  // negative area means the poly is a hole, so set a readable parameter
   if (this.area < 0) this.hole = true;
 
   // calculate reflex state
@@ -1032,6 +1036,8 @@ StraightSkeleton = function(poly) {
   var pqComparator = function (a, b) { return a.L - b.L; }
   var pq = new PriorityQueue({ comparator: pqComparator });
 
+  var dbg = true;
+
   // init priority queue with every precalculated intersection
   for (var LAV of SLAV) {
     var lcurr = LAV;
@@ -1039,8 +1045,10 @@ StraightSkeleton = function(poly) {
       if (lcurr.intersection) pq.queue(lcurr);
 
       // border verts; todo: remove
-      var vv = lcurr.v.clone();
-      addDebugVertex(vv.add(lcurr.bisector.clone().multiplyScalar(-0.2)));
+      if (dbg && true) {
+        var vv = lcurr.v.clone();
+        addDebugVertex(vv.add(lcurr.bisector.clone().multiplyScalar(-0.2)));
+      }
 
       lcurr = lcurr.next;
     } while (lcurr != LAV);
@@ -1049,8 +1057,7 @@ StraightSkeleton = function(poly) {
   // iterate, build the straight skeleton
   var ct = 0;
   var ixn = null;
-  var dbg = true;
-  var lim = 18;
+  var lim = 0;
   while (pq.length > 0) {
     ct++;
     //if (ct > lim ) break;
@@ -1071,7 +1078,7 @@ StraightSkeleton = function(poly) {
     }
     // now intersection is formed by bisectors of A and B (B CCW from A)
 
-    if (dbg && false && ct==lim) {
+    if (dbg && false) {
       console.log(ct, lnode.intersectprev ? "prev" : "next", shallowCopy(lnode));
       console.log(shallowCopy(lnodeA));
       console.log(shallowCopy(lnodeB));

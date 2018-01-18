@@ -334,7 +334,7 @@ Stage.prototype.cancelPatch = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceHeight = .6;
+  this.sliceHeight = .5;
   this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
   this.sliceFolder.add(this, "activateSliceMode");
 }
