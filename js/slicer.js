@@ -308,7 +308,7 @@ Slicer.prototype.makePathGeometry = function() {
 
     var layer = layerBuilder.getLayer();
 
-    //if (i!=2) continue;
+    if (i!=2) continue;
 
     layer.writeBaseContoursToVerts(this.pathVertices);
     layer.makeSkeletons();
@@ -961,6 +961,147 @@ Polygon.prototype.writeSegments = function(vertices) {
   }
 }
 
+SSHalfedge = function(node) {
+  this.id = -1;
+  this.node = node;
+  this.next = null;
+  this.twin = null;
+}
+
+SSHalfedge.prototype.prev = function() {
+  var twin = this.twin;
+
+  while (twin.next != this) twin = twin.next.twin;
+
+  return twin;
+}
+
+SSHalfedge.prototype.nstart = function() {
+  return this.node;
+}
+
+SSHalfedge.prototype.nend = function() {
+  return this.next.node;
+}
+
+SSHalfedge.prototype.rotated = function() {
+  return this.twin.next;
+}
+
+SSHalfedgeFactory = function() {
+  this.id = 0;
+  this.halfedges = [];
+}
+
+SSHalfedgeFactory.prototype.create = function(node) {
+  var halfedge = new SSHalfedge(node);
+
+  this.halfedges.push(halfedge);
+  halfedge.id = this.id++;
+
+  return halfedge;
+}
+
+SSNode = function(v) {
+  this.id = -1;
+  this.v = v;
+  this.halfedge = null;
+}
+
+SSNode.prototype.isolated = function() {
+  return this.halfedge == null;
+}
+
+SSNode.prototype.terminal = function() {
+  return this.halfedge.twin.next == this.halfedge;
+}
+
+SSNodeFactory = function() {
+  this.id = 0;
+  this.nodes = [];
+}
+
+SSNodeFactory.prototype.create = function(v) {
+  var node = new SSNode(v);
+
+  this.nodes.push(node);
+  node.id = this.id++;
+
+  return node;
+}
+
+SSConnector = function(nfactory, hefactory) {
+  this.nfactory = nfactory;
+  this.hefactory = hefactory;
+}
+
+SSConnector.prototype.connectNodeToNode = function(nsource, ntarget) {
+  var st = this.hefactory.create(nsource);
+  var ts = this.hefactory.create(ntarget);
+
+  // the halfedge listed on the node is arbitrary, so set it here to make sure
+  nsource.halfedge = st;
+  ntarget.halfedge = ts;
+
+  st.twin = ts;
+  st.next = ts;
+  ts.twin = st;
+  ts.next = st;
+
+  return ts;
+}
+
+// connect the vertex node starting at the source halfedge to the given
+// isolated node
+SSConnector.prototype.connectHalfedgeToNode = function(hesource, ntarget) {
+  if (!ntarget.isolated()) return null;
+
+  var nsource = hesource.node;
+
+  var hesourceIn = hesource.prev();
+  var hesourceOut = hesource;
+
+  // create the connecting halfedges
+  var hets = this.connectNodeToNode(nsource, ntarget);
+  var hest = hets.twin;
+
+  // link the halfedges correctly
+  hesourceIn.next = hest;
+  hets.next = hesourceOut;
+
+  return hets;
+}
+
+// connect the vertex node starting at the source halfedge to the vertex node
+// starting at the target halfedge while preserving orientation;
+// this is distinct from .connectHalfedgeToNode because we don't necessarily
+// know which of the incoming/outgoing halfedge pairs incident on the target
+// node should be connected
+SSConnector.prototype.connectHalfedgeToHalfedge = function(hesource, hetarget) {
+  var nsource = hesource.node;
+  var ntarget = hetarget.node;
+
+  var hesourceIn = hesource.prev();
+  var hesourceOut = hesource;
+
+  var hetargetIn = hetarget.prev();
+  var hetargetOut = hetarget;
+
+  // create the connecting halfedges
+  var hets = this.connectNodeToNode(nsource, ntarget);
+  var hest = hets.twin;
+
+  // link the halfedges correctly
+
+  hesourceIn.next = hest;
+  hest.next = hetargetOut;
+
+  hetargetIn.next = hets;
+  hets.next = hesourceOut;
+
+  return hets;
+}
+
 // straight skeleton uses a halfedge data structure; initialize from a polygon
 // with holes so that initial halfedges wind CCW around interior of every
 // contour and CW around the exterior of every contour;
@@ -969,104 +1110,84 @@ StraightSkeleton = function(poly) {
   this.axis = poly.axis;
   this.ah = poly.ah;
   this.av = poly.av;
-  // array of nodes (vertices); each has a halfedge
-  this.nodes = [];
-  // array of halfedges; each has a start vertex, next halfedge, and twin
-  this.halfedges = [];
-  // array of internal halfedge indices, one per separate contour
-  this.entryHalfedgeIdxArray = [];
 
-  var nodes = this.nodes;
-  var halfedges = this.halfedges;
+  // array of halfedges, one per separate contour
+  this.entryHalfedges = [];
+
+  this.nfactory = new SSNodeFactory();
+  this.hefactory = new SSHalfedgeFactory();
+  this.connector = new SSConnector(this.nfactory, this.hefactory);
+
+  var nfactory = this.nfactory;
+  var hefactory = this.hefactory;
+  var connector = this.connector;
+
+  var nodes = nfactory.nodes;
+  var halfedges = hefactory.halfedges;
 
   // polygon and its holes in one array
   var contours = [poly].concat(poly.holes);
 
   // make vertex nodes and halfedges for every vert/edge in every contour
-  for (var c=0; c<contours.length; c++) {
-    var contour = contours[c];
+  for (var c = 0; c < contours.length; c++) {
+    var cnode = contours[c].vertex;
 
-    var prevheidx = -1;
-    var startnidx = -1;
     var count = 0;
+    var nstart = null;
+    var heprev = null;
 
-    var curr = contour.vertex;
+    var curr = cnode;
     do {
       var v = curr.v;
 
-      var nidx = this.makeNode(v);
+      var n = nfactory.create(v);
 
-      // if no nodes yet, just create one
-      if (count == 0) startnidx = nidx;
+      if (count == 0) nstart = n;
       else {
-        var heidx;
-        // if only one other node, connect this node to that one
-        if (count == 1) {
-          heidx = this.makeHalfedgePair(startnidx, nidx);
-        }
-        // else, there's an existing halfedge to which to connect the new node
-        else {
-          heidx = this.connectHalfedgeToNode(prevheidx, nidx);
-        }
+        var he;
 
-        // todo: remove
-        halfedges[heidx].contour = true;
-        halfedges[this.halfedgeTwinIdx(heidx)].contour = true;
+        if (count == 1) he = connector.connectNodeToNode(nstart, n);
+        else he = connector.connectHalfedgeToNode(heprev, n);
 
-        prevheidx = heidx;
+        heprev = he;
+
+        he.contour = true;
+        he.twin.contour = true;
       }
 
       count++;
 
       curr = curr.next;
-    } while (curr != contour.vertex);
+    } while (curr != cnode);
 
-    // join last halfedge to start node
-    this.connectHalfedgeToNode(prevheidx, startnidx);
+    // close the gap between last and first nodes
+    heprev = connector.connectHalfedgeToHalfedge(heprev, nstart.halfedge);
 
-    this.entryHalfedgeIdxArray.push(prevheidx);
+    this.entryHalfedges.push(heprev);
   }
 
-  var contourNodeCount = nodes.length; // for debugging; todo: remove
-  console.log("halfedge count", halfedges.length);
-
   var SLAV = this.makeSLAV();
+
+  var contourNodeCount = nodes.length;
 
   // pq retrieves smallest-L node first
   var pqComparator = function (a, b) { return a.L - b.L; }
   var pq = new PriorityQueue({ comparator: pqComparator });
 
-  var dbg = true;
-
-  // init priority queue with every precalculated intersection
   for (var LAV of SLAV) {
-    var lcurr = LAV;
+    var lnode = LAV;
     do {
-      if (lcurr.intersection) pq.queue(lcurr);
+      if (lnode.intersection) pq.queue(lnode);
 
-      // border verts; todo: remove
-      if (dbg && true) {
-        var vv = lcurr.v.clone();
-        addDebugVertex(vv.add(lcurr.bisector.clone().multiplyScalar(-0.2)));
-      }
-
-      lcurr = lcurr.next;
-    } while (lcurr != LAV);
+      lnode = lnode.next;
+    } while (lnode != LAV);
   }
 
-  // iterate, build the straight skeleton
-  var ct = 0;
-  var ixn = null;
-  var lim = 0;
   while (pq.length > 0) {
-    ct++;
-    //if (ct > lim ) break;
     var lnode = pq.dequeue();
 
-    // intersection vertex
     var vI = lnode.intersection;
 
-    // the two nodes that caused the intersection; lnodeB is CCW from lnodeA
     var lnodeA, lnodeB;
     if (lnode.intersectprev) {
       lnodeA = lnode.prev;
@@ -1076,57 +1197,37 @@ StraightSkeleton = function(poly) {
       lnodeA = lnode;
       lnodeB = lnode.next;
     }
-    // now intersection is formed by bisectors of A and B (B CCW from A)
 
-    if (dbg && false) {
-      console.log(ct, lnode.intersectprev ? "prev" : "next", shallowCopy(lnode));
-      console.log(shallowCopy(lnodeA));
-      console.log(shallowCopy(lnodeB));
-      console.log(shallowCopy(lnodeA.prev.prev), lnodeA.prev.prev == lnodeB);
-    }
-
-    // dequeued a duplicate intersection, so continue
-    if (lnodeA.processed || lnodeB.processed) {
-      if (dbg && true) {
-        console.log(ct, "discard", lnode.heidx);
-      }
-      continue;
-    }
+    if (lnodeA.processed || lnodeB.processed) continue;
 
     // insert the intersection vertex into the skeleton
 
     // node at intersection
-    var nidxI = this.makeNode(vI);
+    var nI = nfactory.create(vI);
 
     // link A to I
-    var heidxA = this.halfedgePrevIdx(lnodeA.heidx);
-    var heidxAI = this.connectHalfedgeToNode(heidxA, nidxI);
+    var heA = lnodeA.he;
+    var heAI = connector.connectHalfedgeToNode(heA, nI);
     lnodeA.processed = true;
 
     // link B to I
-    var nidxB = this.halfedgeNodeIdx(lnodeB.heidx);
-    var heidxIB = this.connectHalfedgeToNode(heidxAI, nidxB);
+    var heB = lnodeB.he;
+    var heBI = connector.connectHalfedgeToHalfedge(heB, heAI);
     lnodeB.processed = true;
 
     // reached a peak of the roof, so close it with three edges
     if (lnodeA.prev.prev == lnodeB) {
       var lnodeC = lnodeA.prev;
-      var heidxC = this.halfedgePrevIdx(lnodeC.heidx);
+      var heC = lnodeC.he;
 
-      this.connectHalfedgeToNode(heidxC, nidxI);
+      connector.connectHalfedgeToHalfedge(heC, heBI);
 
       lnodeC.processed = true;
-
-      if (dbg && true) {
-        console.log("peak");
-      }
       continue;
     }
 
     // make a new LAV node at the intersection
-    var lnodeI = this.makeLAVnode(heidxIB);
-    // todo: remove
-    ixn = lnodeI;
+    var lnodeI = this.makeLAVnode(heBI);
 
     var newprev = lnodeA.prev;
     var newnext = lnodeB.next;
@@ -1148,212 +1249,27 @@ StraightSkeleton = function(poly) {
 
     // if intersection, push to PQ
     if (lnodeI.intersection) pq.queue(lnodeI);
-
-    if (dbg && false) {
-      console.log(lnodeA, lnodeI, lnodeB);
-      console.log(" next:", pq.peek());
-    }
   }
 
-  // read off the current priority queue
-  var pqct = 0;
-  if (dbg && false) {
-    while (pq.length > 0) {
-      var node = pq.dequeue();
-      console.log(pqct, node.L, node.intersection);
-      var intersection = node.intersection;
-      debugLine(node.v, intersection);
-      debugLine(node.intersectprev ? node.prev.v : node.next.v, intersection);
-      if (pqct==0) {
-        intersection = intersection.clone();
-        intersection.z += 0.1;
-        addDebugVertex(intersection);
-      }
-      pqct++;
-    }
-    debugLines();
-  }
+  var offset = 0;
+  for (var i=contourNodeCount; i<nodes.length; i++) {
+    var node = nodes[i];
 
-  // debug all halfedges of skeleton
-  if (dbg && false) {
-    for (var i=0; i<halfedges.length; i++) {
-      var v = this.nodeVertex(this.halfedgeNodeIdx(i));
-      var vv = this.nodeVertex(this.halfedgeEndNodeIdx(i));
-      debugLine(v, vv);
-    }
-    debugLines();
-  }
-
-  // debug edges from internal verts of skeleton
-  if (dbg && true) {
-    for (var i=contourNodeCount; i<nodes.length; i++) {
-      var heidx = nodes[i].heidx;
-      var c = heidx;
-      do {
-        var v = this.nodeVertex(this.halfedgeNodeIdx(c));
-        var vv = this.nodeVertex(this.halfedgeEndNodeIdx(c));
-        debugLine(v, vv);
-        c = this.halfedgeCycleIdx(c);
-      } while (c != heidx);
-
-      debugLines(i, 2);
-    }
-  }
-
-  // debug internal verts of skeleton by tracing the faces between these verts
-  // and contour edges
-  if (dbg && false) {
-    for (var i=contourNodeCount; i<nodes.length; i++) {
-      var heidx = this.halfedgeTwinIdx(nodes[i].heidx);
-      var c = heidx;
-      var contourcount = 0;
-      do {
-        if (halfedges[heidx].contour) contourcount++;;
-        c = this.halfedgeNextIdx(c);
-      } while (c != heidx);
-
-      if (contourcount>1) heidx = this.halfedgeTwinIdx(heidx);
-
-      c = heidx;
-      do {
-        var v = this.nodeVertex(this.halfedgeNodeIdx(c)).clone();
-        var vnext = this.nodeVertex(this.halfedgeEndNodeIdx(c)).clone();
-        var vprev = this.nodeVertex(this.halfedgeNodeIdx(this.halfedgePrevIdx(c)));
-        var nnextidx = this.halfedgeEndNodeIdx(this.halfedgeNextIdx(c));
-        var forward = vnext.clone().sub(v).normalize();
-        var forwardnext = this.nodeVertex(nnextidx).clone().sub(vnext).normalize();
-        var backward = vprev.clone().sub(v).normalize();
-        v.add(forward.clone().add(backward).setLength(.1));
-        vnext.add(forwardnext.clone().sub(forward).setLength(.1));
-        debugLine(v, vnext, 1, true);
-
-        c = this.halfedgeNextIdx(c);
-      } while (c != heidx);
-
-      debugLines(i, 2);
-    }
-  }
-
-  // debug current LAV
-  if (dbg && false) {
-    //console.log(pq.peek());
-    var c = ixn;
-    var cct = 0;
+    var he = node.halfedge;
     do {
-      //console.log(shallowCopy(c));
-      if (!c || !c.bisector) break;
-      var a = c.v.clone();
-      a.add(c.bisector.clone().multiplyScalar(0.1));
-      a.z += 0.02;
-      addDebugVertex(a);
-      debugLine(c.v, c.next.v);
-      if (true) {
-        if (!c.intersection) break;
-        var ii = c.intersection.clone().add(new THREE.Vector3(0,0,0.4));
-        debugLine(c.v, ii);
-      }
-      c = c.next;
-      cct++;
-      //if (cct > 100) break;
-    } while (c != ixn);
-    debugLines();
+      var vs = node.v.clone();
+      var ve = he.nend().v.clone();
+      //vs.z += offset;
+      //ve.z += offset;
+      debugLine(vs, ve);
+
+      he = he.rotated();
+    } while (he != node.halfedge);
+    offset += 0.1;
   }
-}
+  debugLines();
 
-// prefixes 's' and 't' mean "source" and "target"
-// 'n' and 'he' signify "node" and "halfedge"
-// 'idx' suffix means the index of a node/halfedge, while its absence signifies
-// the object itself
-//
-// halfedge s_he is assumed to terminate with vertex node s_n - say that
-// halfedges s_he and s_henext go into it and out, respectively (they may
-// be twins);
-// t_n may or may not have a next and a previous edge - if it does, they are
-// called t_he and t_henext
-//
-// create 2 new halfedges st_he and ts_he as twins, with s_n as st_he's node and
-// t_n as ts_he's node, and splice them in thus:
-//
-// s_he's next is now st_he ending at t_n
-// if t_n has a next edge t_henext, set that as st_he's next;
-// else, set ts_he as st_he's next
-// ts_he's next is s_henext
-StraightSkeleton.prototype.connectHalfedgeToNode = function(s_inheidx, t_nidx) {
-  var nodes = this.nodes;
-  var halfedges = this.halfedges;
-
-  // get source node and outflowing halfedge
-  var s_outheidx = this.halfedgeNextIdx(s_inheidx);
-  var s_nidx = this.halfedgeNodeIdx(s_outheidx);
-
-  // get outflowing and inflowing halfedges for target
-  var t_outheidx = this.nodeHalfedgeIdx(t_nidx);
-  var t_inheidx = -1;
-  // if t_n already has an outflowing edge, it must have an inflowing edge too
-  if (t_outheidx > -1) {
-    t_inheidx = this.halfedgePrevIdx(t_outheidx);
-  }
-
-  // create two halfedges
-  var st_heidx = this.makeHalfedgePair(s_nidx, t_nidx);
-  var ts_heidx = this.halfedgeTwinIdx(st_heidx);
-
-  // attach halfedge on source
-  this.setHalfedgeNextIdx(s_inheidx, st_heidx);
-  this.setHalfedgeNextIdx(ts_heidx, s_outheidx);
-
-  // attach halfedges on target
-  // if target had outflowing and inflowing edges
-  if (t_outheidx > -1) {
-    this.setHalfedgeNextIdx(st_heidx, t_outheidx);
-    this.setHalfedgeNextIdx(t_inheidx, ts_heidx);
-  }
-  // else, if target didn't have edges, we already created the new edges
-  // connected to each other - so do nothing
-
-  return st_heidx;
-}
-
-// create a node and return it index
-StraightSkeleton.prototype.makeNode = function(v) {
-  var node = {
-    v: v,
-    heidx: -1,
-    edge: null
-  };
-  var nidx = this.nodes.length;
-
-  this.nodes.push(node);
-
-  return nidx;
-}
-
-// create a loop of two halfedges from s to t and return the st halfedge's index
-StraightSkeleton.prototype.makeHalfedgePair = function(s_nidx, t_nidx) {
-  var st_heidx = this.halfedges.length;
-  var ts_heidx = st_heidx + 1;
-
-  // s -> t halfedge
-  var st_he = {
-    nodeidx: s_nidx,
-    nextidx: ts_heidx,
-    twinidx: ts_heidx
-  };
-  // t -> s halfedge
-  var ts_he = {
-    nodeidx: t_nidx,
-    nextidx: st_heidx,
-    twinidx: st_heidx
-  };
-
-  this.halfedges.push(st_he);
-  this.halfedges.push(ts_he);
-
-  // in case source node has no halfedge, set it to the most recent halfedge
-  this.nodes[s_nidx].heidx = st_heidx;
-  this.nodes[t_nidx].heidx = ts_heidx;
-
-  return st_heidx;
+  return;
 }
 
 // LAV: list of active vertices (technically, halfedges originating from the
@@ -1365,16 +1281,16 @@ StraightSkeleton.prototype.makeHalfedgePair = function(s_nidx, t_nidx) {
 StraightSkeleton.prototype.makeSLAV = function() {
   var SLAV = new Set();
 
-  for (var i=0; i<this.entryHalfedgeIdxArray.length; i++) {
-    var entryidx = this.entryHalfedgeIdxArray[i];
+  for (var i=0; i<this.entryHalfedges.length; i++) {
+    var hestart = this.entryHalfedges[i];
 
     var LAV = null;
     var lstart = null;
 
-    var heidx = entryidx;
+    var he = hestart;
     do {
       // LAV node, implicitly signifies vertex at start of given halfedge
-      var lnode = this.makeLAVnode(heidx);
+      var lnode = this.makeLAVnode(he);
 
       if (LAV) {
         lnode.prev = LAV;
@@ -1384,8 +1300,8 @@ StraightSkeleton.prototype.makeSLAV = function() {
 
       LAV = lnode;
 
-      heidx = this.halfedgeNextIdx(heidx);
-    } while (heidx != entryidx);
+      he = he.next;
+    } while (he != hestart);
 
     LAV.next = lstart;
     lstart.prev = LAV;
@@ -1420,6 +1336,32 @@ StraightSkeleton.prototype.makeSLAV = function() {
   }
 
   return SLAV;
+}
+
+StraightSkeleton.prototype.makeLAVnode = function(he) {
+  return {
+    // skeleton halfedge that starts at this vertex
+    he: he,
+    v: he.node.v,
+    // prev/next nodes in LAV
+    prev: null,
+    next: null,
+    processed: false,
+    // forward edge direction and origin
+    forwardEdge: null,
+    forwardEdgeStart: null,
+    // backward edge direction and origin
+    backwardEdge: null,
+    backwardEdgeStart: null,
+    // intersection stuff
+    bisector: null,
+    intersection: null,
+    // true if closer bisector intersection is from prev node, false if from next
+    // (irrelevant if no intersection, in which case .intersection is null)
+    intersectprev: true,
+    // distance from intersection point to neighboring edge
+    L: null
+  };
 }
 
 StraightSkeleton.prototype.calculateOutgoingEdge = function(lnode) {
@@ -1485,128 +1427,6 @@ StraightSkeleton.prototype.calculateBisectorIntersection = function(lnode) {
     lnode.L = distanceToLine(inext, edgeStart, edgeEnd, axis);
   }
 }
-
-StraightSkeleton.prototype.makeLAVnode = function(heidx) {
-  return {
-    // skeleton halfedge that starts at this vertex
-    heidx: heidx,
-    v: this.nodeVertex(this.halfedgeNodeIdx(heidx)),
-    // prev/next nodes in LAV
-    prev: null,
-    next: null,
-    processed: false,
-    // forward edge direction and origin
-    forwardEdge: null,
-    forwardEdgeStart: null,
-    // backward edge direction and origin
-    backwardEdge: null,
-    backwardEdgeStart: null,
-    // intersection stuff
-    bisector: null,
-    intersection: null,
-    // true if closer bisector intersection is from prev node, false if from next
-    // (irrelevant if no intersection, in which case .intersection is null)
-    intersectprev: true,
-    // distance from intersection point to neighboring edge
-    L: null
-  };
-}
-
-StraightSkeleton.prototype.lnodeVertex = function(lnode) {
-  return this.nodeVertex(this.halfedgeNodeIdx(lnode.heidx));
-}
-
-StraightSkeleton.prototype.lnodeNextVertex = function(lnode) {
-  return this.nodeVertex(this.halfedgeEndNodeIdx(lnode.heidx));
-}
-
-StraightSkeleton.prototype.lnodePrevVertex = function(lnode) {
-  var heprevidx = this.halfedgePrevIdx(lnode.heidx);
-  return this.nodeVertex(this.halfedgeNodeIdx(heprevidx));
-}
-
-StraightSkeleton.prototype.halfedgeNextIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  return this.halfedges[heidx].nextidx;
-}
-
-StraightSkeleton.prototype.halfedgeNodeIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  return this.halfedges[heidx].nodeidx;
-}
-
-StraightSkeleton.prototype.halfedgeEndNodeIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  var twinidx = this.halfedgeTwinIdx(heidx);
-
-  return this.halfedgeNodeIdx(twinidx);
-}
-
-StraightSkeleton.prototype.halfedgeTwinIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  return this.halfedges[heidx].twinidx;
-}
-
-StraightSkeleton.prototype.halfedgePrevIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  var curridx = heidx;
-  var previdx;
-
-  do {
-    previdx = curridx;
-    curridx = this.halfedgeNextIdx(this.halfedgeTwinIdx(curridx));
-    if (curridx == -1) return -1;
-  } while (curridx != heidx);
-
-  return this.halfedgeTwinIdx(previdx);
-}
-
-// use to cycle around the halfedges radiating from a vertex node
-StraightSkeleton.prototype.halfedgeCycleIdx = function(heidx) {
-  if (heidx == -1) return -1;
-
-  return this.halfedgeNextIdx(this.halfedgeTwinIdx(heidx));
-}
-
-StraightSkeleton.prototype.nodeNextNodeIdx = function(nidx) {
-  if (nidx == -1) return -1;
-
-  return this.halfedgeEndNodeIdx(this.nodes[nidx].heidx);
-}
-
-StraightSkeleton.prototype.nodePrevNodeIdx = function(nidx) {
-  if (nidx == -1) return -1;
-
-  var heprevidx = this.halfedgePrevIdx(this.nodeHalfedgeIdx(nidx));
-  return this.halfedgeNodeIdx(heprevidx);
-}
-
-StraightSkeleton.prototype.setHalfedgeNextIdx = function(heidx, henextidx) {
-  this.halfedges[heidx].nextidx = henextidx;
-}
-
-StraightSkeleton.prototype.setNodeHalfedge = function(nidx, heidx) {
-  this.nodes[nidx].heidx = heidx;
-}
-
-StraightSkeleton.prototype.nodeHalfedgeIdx = function(nidx) {
-  if (nidx == -1) return -1;
-
-  return this.nodes[nidx].heidx;
-}
-
-StraightSkeleton.prototype.nodeVertex = function(nidx) {
-  if (nidx == -1) return null;
-
-  return this.nodes[nidx].v;
-}
-
-
 
 // add pairs of verts with .addSegment, then get the layer with .getLayer
 // and .clear if reusing
