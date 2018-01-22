@@ -500,6 +500,7 @@ Polygon = function(axis, vertices, indices) {
       idx: indices[i],
       prev: null,
       next: null,
+      reflex: false,
       ear: false
     };
 
@@ -564,10 +565,10 @@ Polygon.prototype.updateBounds = function(n) {
     this.maxv = n;
   }
   else {
-    this.minh =  this.minh.v[ah] < n.v[ah] ? this.minh : n;
-    this.maxh =  this.maxh.v[ah] > n.v[ah] ? this.maxh : n;
-    this.minv =  this.minv.v[av] < n.v[av] ? this.minv : n;
-    this.maxv =  this.maxv.v[av] > n.v[av] ? this.maxv : n;
+    this.minh = this.minh.v[ah] < n.v[ah] ? this.minh : n;
+    this.maxh = this.maxh.v[ah] > n.v[ah] ? this.maxh : n;
+    this.minv = this.minv.v[av] < n.v[av] ? this.minv : n;
+    this.maxv = this.maxv.v[av] > n.v[av] ? this.maxv : n;
   }
 }
 
@@ -1004,8 +1005,12 @@ SSHalfedgeFactory.prototype.create = function(node) {
 
 SSNode = function(v) {
   this.id = -1;
+  // vertex
   this.v = v;
+  // one of the 1+ halfedges starting at this node
   this.halfedge = null;
+  // true if reflex contour vertex
+  this.reflex = false;
 }
 
 SSNode.prototype.isolated = function() {
@@ -1014,6 +1019,10 @@ SSNode.prototype.isolated = function() {
 
 SSNode.prototype.terminal = function() {
   return this.halfedge.twin.next == this.halfedge;
+}
+
+SSNode.prototype.setReflex = function(reflex) {
+  this.reflex = reflex;
 }
 
 SSNodeFactory = function() {
@@ -1062,14 +1071,14 @@ SSConnector.prototype.connectHalfedgeToNode = function(hesource, ntarget) {
   var hesourceOut = hesource;
 
   // create the connecting halfedges
-  var hets = this.connectNodeToNode(nsource, ntarget);
-  var hest = hets.twin;
+  var hetargetsource = this.connectNodeToNode(nsource, ntarget);
+  var hesourcetarget = hetargetsource.twin;
 
   // link the halfedges correctly
-  hesourceIn.next = hest;
-  hets.next = hesourceOut;
+  hesourceIn.next = hesourcetarget;
+  hetargetsource.next = hesourceOut;
 
-  return hets;
+  return hetargetsource;
 }
 
 // connect the vertex node starting at the source halfedge to the vertex node
@@ -1088,18 +1097,27 @@ SSConnector.prototype.connectHalfedgeToHalfedge = function(hesource, hetarget) {
   var hetargetOut = hetarget;
 
   // create the connecting halfedges
-  var hets = this.connectNodeToNode(nsource, ntarget);
-  var hest = hets.twin;
+  var hetargetsource = this.connectNodeToNode(nsource, ntarget);
+  var hesourcetarget = hetargetsource.twin;
 
   // link the halfedges correctly
 
-  hesourceIn.next = hest;
-  hest.next = hetargetOut;
+  hesourceIn.next = hesourcetarget;
+  hesourcetarget.next = hetargetOut;
 
-  hetargetIn.next = hets;
-  hets.next = hesourceOut;
+  hetargetIn.next = hetargetsource;
+  hetargetsource.next = hesourceOut;
 
-  return hets;
+  return hetargetsource;
+}
+
+// helper class to make edge-related code clearer
+// assumes that polygon interior is on the left (polys wound CCW and holes CW)
+SSEdge = function(v1, v2) {
+  this.v1 = v1;
+  this.v2 = v2;
+  this.forward = v2.clone().sub(v1).normalize();
+  this.backward = this.forward.clone().negate();
 }
 
 // straight skeleton uses a halfedge data structure; initialize from a polygon
@@ -1141,6 +1159,7 @@ StraightSkeleton = function(poly) {
       var v = curr.v;
 
       var n = nfactory.create(v);
+      n.setReflex(curr.reflex);
 
       if (count == 0) nstart = n;
       else {
@@ -1163,10 +1182,10 @@ StraightSkeleton = function(poly) {
     // close the gap between last and first nodes
     heprev = connector.connectHalfedgeToHalfedge(heprev, nstart.halfedge);
 
-    this.entryHalfedges.push(heprev);
+    this.entryHalfedges.push(heprev.twin);
   }
 
-  var SLAV = this.makeSLAV();
+  var slav = this.makeslav();
 
   var contourNodeCount = nodes.length;
 
@@ -1174,81 +1193,92 @@ StraightSkeleton = function(poly) {
   var pqComparator = function (a, b) { return a.L - b.L; }
   var pq = new PriorityQueue({ comparator: pqComparator });
 
-  for (var LAV of SLAV) {
-    var lnode = LAV;
+  for (var lav of slav) {
+    var lnode = lav;
     do {
       if (lnode.intersection) pq.queue(lnode);
 
       lnode = lnode.next;
-    } while (lnode != LAV);
+    } while (lnode != lav);
   }
 
   while (pq.length > 0) {
     var lnode = pq.dequeue();
+    if (lnode.eventType == this.eventTypes.edgeEvent) {
+      var vI = lnode.intersection;
 
-    var vI = lnode.intersection;
+      var lnodeA, lnodeB;
+      if (lnode.intersectprev) {
+        lnodeA = lnode.prev;
+        lnodeB = lnode;
+      }
+      else {
+        lnodeA = lnode;
+        lnodeB = lnode.next;
+      }
 
-    var lnodeA, lnodeB;
-    if (lnode.intersectprev) {
-      lnodeA = lnode.prev;
-      lnodeB = lnode;
+      if (lnodeA.processed || lnodeB.processed) continue;
+
+      // insert the intersection vertex into the skeleton
+
+      // node at intersection
+      var nI = nfactory.create(vI);
+
+      // link A to I
+      var heA = lnodeA.he;
+      var heAI = connector.connectHalfedgeToNode(heA, nI);
+      lnodeA.processed = true;
+
+      // link B to I
+      var heB = lnodeB.he;
+      var heBI = connector.connectHalfedgeToHalfedge(heB, heAI);
+      lnodeB.processed = true;
+
+      // reached a peak of the roof, so close it with three edges
+      if (lnodeA.prev.prev == lnodeB) {
+        var lnodeC = lnodeA.prev;
+        var heC = lnodeC.he;
+
+        connector.connectHalfedgeToHalfedge(heC, heBI);
+
+        lnodeC.processed = true;
+        continue;
+      }
+
+      // make a new lav node at the intersection
+      var lnodeI = this.makelavnode(heBI);
+
+      var newprev = lnodeA.prev;
+      var newnext = lnodeB.next;
+      newprev.next = lnodeI;
+      lnodeI.prev = newprev;
+      newnext.prev = lnodeI;
+      lnodeI.next = newnext;
+
+      // associate with the correct contour edges
+      lnodeI.backward = lnodeA.backward;
+      lnodeI.backwardStart = lnodeA.backwardStart;
+      lnodeI.forward = lnodeB.forward;
+      lnodeI.forwardStart = lnodeB.forwardStart;
+
+      // calculate bisector from contour edges and the resulting intersection,
+      // if any, with neighboring lav nodes' bisectors
+      this.calculateBisector(lnodeI);
+      this.calculateBisectorIntersection(lnodeI);
+
+      // if intersection, push to PQ
+      if (lnodeI.intersection) pq.queue(lnodeI);
+    }
+    else if (lnode.eventType == this.eventTypes.splitEvent) {
+      console.log("split");
+      addDebugVertex(lnode.intersection);
+      addDebugVertex(lnode.v);
+      debugLine(lnode.splitEdge.v, lnode.splitEdge.next.v);
+      break;
     }
     else {
-      lnodeA = lnode;
-      lnodeB = lnode.next;
+      console.log("unrecognized event type:", lnode.eventType);
     }
-
-    if (lnodeA.processed || lnodeB.processed) continue;
-
-    // insert the intersection vertex into the skeleton
-
-    // node at intersection
-    var nI = nfactory.create(vI);
-
-    // link A to I
-    var heA = lnodeA.he;
-    var heAI = connector.connectHalfedgeToNode(heA, nI);
-    lnodeA.processed = true;
-
-    // link B to I
-    var heB = lnodeB.he;
-    var heBI = connector.connectHalfedgeToHalfedge(heB, heAI);
-    lnodeB.processed = true;
-
-    // reached a peak of the roof, so close it with three edges
-    if (lnodeA.prev.prev == lnodeB) {
-      var lnodeC = lnodeA.prev;
-      var heC = lnodeC.he;
-
-      connector.connectHalfedgeToHalfedge(heC, heBI);
-
-      lnodeC.processed = true;
-      continue;
-    }
-
-    // make a new LAV node at the intersection
-    var lnodeI = this.makeLAVnode(heBI);
-
-    var newprev = lnodeA.prev;
-    var newnext = lnodeB.next;
-    newprev.next = lnodeI;
-    lnodeI.prev = newprev;
-    newnext.prev = lnodeI;
-    lnodeI.next = newnext;
-
-    // associate with the correct contour edges
-    lnodeI.backward = lnodeA.backward;
-    lnodeI.backwardStart = lnodeA.backwardStart;
-    lnodeI.forward = lnodeB.forward;
-    lnodeI.forwardStart = lnodeB.forwardStart;
-
-    // calculate bisector from contour edges and the resulting intersection,
-    // if any, with neighboring LAV nodes' bisectors
-    this.calculateBisector(lnodeI);
-    this.calculateBisectorIntersection(lnodeI);
-
-    // if intersection, push to PQ
-    if (lnodeI.intersection) pq.queue(lnodeI);
   }
 
   var offset = 0;
@@ -1272,95 +1302,126 @@ StraightSkeleton = function(poly) {
   return;
 }
 
+// basically an enum; omitting 0 as it's a falsy value
+StraightSkeleton.prototype.eventTypes = {
+  edgeEvent: 1,
+  splitEvent: 2
+}
+
 // LAV: list of active vertices (technically, halfedges originating from the
 // active vertices), one for each contour
 // SLAV: set of LAVs - the current fronts for propagating the skeleton
 //
-// returns a SLAV, initialized to correspond to the initial contours of the poly
-// and its holes
-StraightSkeleton.prototype.makeSLAV = function() {
-  var SLAV = new Set();
+// creates a SLAV, initialized to correspond to the initial contours of the poly
+// and its holes, and calculates all the initial events
+StraightSkeleton.prototype.makeslav = function() {
+  var slav = new Set();
 
   for (var i=0; i<this.entryHalfedges.length; i++) {
     var hestart = this.entryHalfedges[i];
 
-    var LAV = null;
+    var lav = null;
     var lstart = null;
 
     var he = hestart;
     do {
-      // LAV node, implicitly signifies vertex at start of given halfedge
-      var lnode = this.makeLAVnode(he);
+      // lav node, implicitly signifies vertex at start of given halfedge
+      var lnode = this.makelavnode(he);
 
-      if (LAV) {
-        lnode.prev = LAV;
-        LAV.next = lnode;
+      if (lav) {
+        lnode.prev = lav;
+        lav.next = lnode;
       }
       else lstart = lnode;
 
-      LAV = lnode;
+      lav = lnode;
 
       he = he.next;
     } while (he != hestart);
 
-    LAV.next = lstart;
-    lstart.prev = LAV;
+    lav.next = lstart;
+    lstart.prev = lav;
 
     var lcurr;
 
     // calculate forward and backward edges
-    lcurr = LAV;
+    lcurr = lav;
     do {
       this.calculateOutgoingEdge(lcurr);
 
       lcurr = lcurr.next;
-    } while (lcurr != LAV);
+    } while (lcurr != lav);
 
     // calculate bisectors
-    lcurr = LAV;
+    lcurr = lav;
     do {
       this.calculateBisector(lcurr);
 
       lcurr = lcurr.next;
-    } while (lcurr != LAV);
+    } while (lcurr != lav);
 
     // calculate bisector intersections
-    lcurr = LAV;
+    lcurr = lav;
     do {
       this.calculateBisectorIntersection(lcurr);
 
       lcurr = lcurr.next;
-    } while (lcurr != LAV);
+    } while (lcurr != lav);
 
-    SLAV.add(LAV);
+    slav.add(lav);
   }
 
-  return SLAV;
+  // for every vertex (if reflex), get the split events it causes
+  for (var lav of slav) {
+    var lcurr = lav;
+    do {
+      this.calculateSplitEvent(lcurr, slav);
+
+      lcurr = lcurr.next;
+    } while (lcurr != lav);
+  }
+
+  return slav;
 }
 
-StraightSkeleton.prototype.makeLAVnode = function(he) {
+StraightSkeleton.prototype.makelavnode = function(he) {
   return {
     // skeleton halfedge that starts at this vertex
     he: he,
+    // for ease of access
     v: he.node.v,
-    // prev/next nodes in LAV
+    reflex: he.node.reflex,
+
+    // prev/next nodes in lav
     prev: null,
     next: null,
+
+    // flag - true means that the vert will not take part in further events
     processed: false,
+
     // forward edge direction and origin
-    forwardEdge: null,
-    forwardEdgeStart: null,
+    forward: null,
+    forwardStart: null,
     // backward edge direction and origin
-    backwardEdge: null,
-    backwardEdgeStart: null,
+    backward: null,
+    backwardStart: null,
+
     // intersection stuff
+
+    // normalized bisecting vector
     bisector: null,
+    // event type - either edge or split, edge by default
+    eventType: this.eventTypes.edgeEvent,
+    // intersection point (edge and split events); null if no intersection
     intersection: null,
-    // true if closer bisector intersection is from prev node, false if from next
+    // true if closer edge event is from prev node, false if from next
     // (irrelevant if no intersection, in which case .intersection is null)
     intersectprev: true,
-    // distance from intersection point to neighboring edge
-    L: null
+    // if event is a split event, this refers to the LAV node from which the
+    // split edge starts
+    splitEdge: null,
+    // distance from event point to a neighboring edge
+    L: Infinity
   };
 }
 
@@ -1378,10 +1439,14 @@ StraightSkeleton.prototype.calculateOutgoingEdge = function(lnode) {
 StraightSkeleton.prototype.calculateBisector = function(lnode) {
   var forwardEdge = lnode.forward;
   var backwardEdge = lnode.backward;
-  lnode.bisector = forwardEdge.clone().add(backwardEdge).normalize();
+  var bisector = forwardEdge.clone().add(backwardEdge).normalize();
+
+  if (lnode.reflex) bisector.negate();
+
+  lnode.bisector = bisector;
 }
 
-// given a node in the LAV, see which of its neighbors' bisectors it intersects
+// given a node in the lav, see which of its neighbors' bisectors it intersects
 // first (if any)
 StraightSkeleton.prototype.calculateBisectorIntersection = function(lnode) {
   var axis = this.axis;
@@ -1395,8 +1460,8 @@ StraightSkeleton.prototype.calculateBisectorIntersection = function(lnode) {
   var vnext = lnext.v;
   var bnext = lnext.bisector;
 
-  var iprev = rayRayIntersection(v, vprev, b, bprev, axis);
-  var inext = rayRayIntersection(v, vnext, b, bnext, axis);
+  var iprev = rayLineIntersection(v, vprev, b, bprev, axis);
+  var inext = rayLineIntersection(v, vnext, b, bnext, axis);
 
   // 0 if no intersection; 1 if prev is closer; 2 if next is closer
   var intersectionResult = 0;
@@ -1426,6 +1491,109 @@ StraightSkeleton.prototype.calculateBisectorIntersection = function(lnode) {
     var edgeEnd = edgeStart.clone().add(lnode.forward);
     lnode.L = distanceToLine(inext, edgeStart, edgeEnd, axis);
   }
+}
+
+// calculates the closest split event caused by V's bisector (if V is reflex);
+// if no split event, leave it alone
+StraightSkeleton.prototype.calculateSplitEvent = function(lnodeV, slav) {
+  if (!lnodeV.reflex) return;
+
+  var v = lnodeV.v;
+  var b = lnodeV.bisector;
+  var axis = this.axis;
+
+  var splitPoint = null;
+  var splitEdge = null;
+  var minL = Infinity;
+
+  for (var lav of slav) {
+    var lcurr = lav;
+    do {
+      // we're considering the edge between A and B, so the line holding it goes
+      // through A and B
+      var lnodeA = lcurr;
+      var lnodeB = lcurr.next;
+
+      lcurr = lcurr.next;
+
+      // lnodeV's bisector will never split either of its edges
+      if (lnodeA == lnodeV || lnodeB == lnodeV) continue;
+
+      var eAB = lnodeA.forward;
+      var vA = lnodeA.v;
+
+      // intersection of V's bisector with AB line
+      var intAB = rayLineIntersection(v, vA, b, eAB, axis);
+
+      // if V's bisector doesn't intersect AB line, it can't split the AB edge
+      if (intAB === null) continue;
+
+      // now say the forward and backward edges emanating from V intersect the
+      // AB line at points R and S (R is closer); find R, draw its bisector with
+      // AB line, see where it intersects V's bisector
+
+      // edges emanating from V - negated forward/backward edges, respectively
+      var efnV = lnodeV.forward.clone().negate();
+      var ebnV = lnodeV.backward.clone().negate();
+
+      // pick the edge that's least parallel with the testing edge to avoid
+      // the more parallel edge
+      var fndotAB = Math.abs(efnV.dot(eAB));
+      var bndotAB = Math.abs(ebnV.dot(eAB));
+      var enV = (fndotAB < bndotAB) ? efnV : ebnV;
+
+      // R is intersection point between the edge from V and the AB line
+      var vR = rayLineIntersection(v, vA, enV, eAB, axis);
+
+      if (vR === null) continue;
+
+      // vector from R to V
+      var eRV = v.clone().sub(vR).normalize();
+
+      // need AB edge pointing along the above vector so that their bisector
+      if (eRV.dot(eAB) < 0) eAB = eAB.clone().negate();
+
+      // calculate bisector (not normalized) of AB line and RV vector
+      var bRAB = eRV.add(eAB);
+
+      // potential split event happens here
+      var vSplit = rayLineIntersection(v, vR, b, bRAB, axis);
+
+      if (vSplit === null) continue;
+
+      // verify that the split event occurs within the area swept out by AB edge
+
+      // A and A+A.bisector form A's side of AB edge's sweep area; likewise for B
+      var vAoffset = vA.clone().add(lnodeA.bisector);
+      var vB = lnodeB.v;
+      var vBoffset = vB.clone().add(lnodeB.bisector);
+
+      // check if split point is inside the boundary
+      if (!left(vA, vB, vSplit, axis)) continue;
+      if (!left(vAoffset, vA, vSplit, axis)) continue;
+      if (!left(vB, vBoffset, vSplit, axis)) continue;
+
+      // valid split point, so see if it's the closest so far
+      var L = distanceToLine(vSplit, vA, vB, axis);
+
+      if (L < minL) {
+        minL = L;
+        splitPoint = vSplit;
+        splitEdge = lnodeA;
+      }
+    } while (lcurr != lav);
+  }
+
+  // if the closest split event we found is closer than the edge event already
+  // calculated for V, set V's event to split and set the appropriate fields
+  if (minL < lnodeV.L) {
+    lnodeV.eventType = this.eventTypes.splitEvent;
+    lnodeV.L = minL;
+    lnodeV.intersection = splitPoint;
+    lnodeV.splitEdge = splitEdge;
+  }
+
+  debugLines();
 }
 
 // add pairs of verts with .addSegment, then get the layer with .getLayer

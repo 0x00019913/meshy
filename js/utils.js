@@ -338,12 +338,16 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
 }
 
+// finds the intersection of ray s with line t (both given as rays)
 // basically this math:
 // https://stackoverflow.com/a/2931703/7416552
-// s, t: segment origins
-// sd, td: segment directions (not necessarily normalized)
+// s, t: ray origins
+// sd, td: ray directions (not necessarily normalized)
 // point of intersection is s + sd * u = t + td * v
-function rayRayIntersection(s, t, sd, td, axis) {
+//
+// NB: returns null if intersection is "behind" s's origin, but not necessarily
+// if intersection is "behind" t's origin
+function rayLineIntersection(s, t, sd, td, axis) {
   if (axis === undefined) axis = 'z';
 
   var ah = cycleAxis(axis);
