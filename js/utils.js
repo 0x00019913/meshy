@@ -386,6 +386,24 @@ function distanceToLine(v, a, b, axis) {
   return av.sub(projection).length();
 }
 
+// find the point on the a-b line that's closest to v
+function projectToLine(v, a, b, axis) {
+  if (axis === undefined) axis = 'z';
+
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  // unit vector from a to b (unit vector along line)
+  var abhat = b.clone().sub(a).normalize();
+
+  // vector from a to v
+  var av = v.clone().sub(a);
+  // projection of a-v vector onto line
+  var projection = abhat.multiplyScalar(av.dot(abhat));
+
+  return a.clone().add(projection);
+}
+
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis) {
   if (axis === undefined) axis = 'z';
