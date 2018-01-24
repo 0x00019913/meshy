@@ -367,6 +367,33 @@ function rayLineIntersection(s, t, sd, td, axis) {
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
+// same as rayLineIntersection, but also checks that the intersection is between
+// t and t+td
+function raySegmentIntersection(s, t, sd, td, axis) {
+  if (axis === undefined) axis = 'z';
+
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var det = sd[ah]*td[av] - sd[av]*td[ah];
+  // lines are exactly parallel, so no intersection
+  if (det == 0) return null;
+
+  var dh = t[ah] - s[ah];
+  var dv = t[av] - s[av];
+
+  var u = (td[av]*dh - td[ah]*dv) / det;
+  // rays diverge, so intersection is "behind" ray a's origin
+  if (u < 0) return null;
+
+  var v = (sd[av]*dh - sd[ah]*dv) / det;
+
+  // v is otuside the segment bounds
+  if (v < 0 || v > 1) return null;
+
+  return s.clone().add(sd.clone().multiplyScalar(u));
+}
+
 // returns v's distance to the line through a and b
 function distanceToLine(v, a, b, axis) {
   if (axis === undefined) axis = 'z';
@@ -401,7 +428,7 @@ function projectToLine(v, a, b, axis) {
   // projection of a-v vector onto line
   var projection = abhat.multiplyScalar(av.dot(abhat));
 
-  return a.clone().add(projection);
+  return a.clone()
 }
 
 // true if c is strictly left of a-b segment
