@@ -1131,6 +1131,8 @@ SSEdge = function(he) {
 // with holes so that initial halfedges wind CCW around interior of every
 // contour and CW around the exterior of every contour;
 // poly is assumed a closed, simple CCW contour with holes
+//
+// refer to the Petr Felkel paper for the algorithm overview
 StraightSkeleton = function(poly) {
   var axis = poly.axis;
   var epsilon = poly.epsilon !== undefined ? poly.epsilon : 0.0000001;
@@ -1231,6 +1233,7 @@ StraightSkeleton = function(poly) {
   var debugFirstSplitLAV = t;
   var debugSecondSplitLAV = t;
   var debugBothSplitLAVs = f;
+  var debugSkeleton = t;
   var shiftSkeleton = f;
   while (pq.length > 0) {
     ct++;
@@ -1419,14 +1422,14 @@ StraightSkeleton = function(poly) {
 
       var lnodeB;
 
-      // if poly has no holes, we can just say that B is A's next;
+      // if poly has no holes, we can just say that B is A's next
+      if (!this.hasHoles) lnodeB = lnodeA.next;
       // if poly has holes, analogously searching backwards for B might land us
       // on a LAV node that is associated with the correct edge but isn't A's
       // neighbor, so we'll need to decide which of A/B is the true A/B and then
       // just set the other one to the correct node's neighbor
-      if (!this.hasHoles) lnodeB = lnodeA.next;
       else {
-        // analogously search for B
+        // analogously search backwards for B
         lnodeB = lnodeV;
         do {
           if (lnodeB.prev.edge == edge) break;
@@ -1536,26 +1539,34 @@ StraightSkeleton = function(poly) {
       if (endSplit) lnodeLeft.edge = lnodeB.edge;
       else lnodeLeft.edge = edge;
 
-      // if the A-N side of I is degenerate (LAV contains two verts), then just
-      // link them
+      // final processing - calculate bisectors and potential new events, or
+      // link the new skeleton node to its neighbors if one or both of the split
+      // LAVs ended up being degenerate (containing only two verts)
+
+      // A-N side of I
       if (lnodeRight.prev == lnodeRight.next) {
         connector.connectHalfedgeToHalfedge(heIV, lnodeRight.prev.he);
       }
+      // else, update bisectors and events
       else {
+        this.calculateReflex(lnodeRight);
         this.calculateBisector(lnodeRight);
         this.calculateEdgeEvent(lnodeRight);
+        //this.calculateSplitEvent(lnodeRight, slav);
 
+        // if potential new edge event, push to PQ
         if (lnodeRight.eventType != this.eventTypes.noEvent) pq.queue(lnodeRight);
       }
 
+      // P-B side of I
       if (lnodeLeft.next == lnodeLeft.prev) {
-        connector.connectHalfedgeToHalfedge(heIV, lnodeLeft.next.he);
+        connector.connectHalfedgeToHalfedge(heIV.twin.next, lnodeLeft.next.he);
       }
       else {
-        // calculate the new nodes' bisectors from contour edges and the resulting
-        // intersection, if any, with neighboring LAV nodes' bisectors
+        this.calculateReflex(lnodeLeft);
         this.calculateBisector(lnodeLeft);
         this.calculateEdgeEvent(lnodeLeft);
+        //this.calculateSplitEvent(lnodeLeft, slav);
 
         // if potential new edge event, push to PQ
         if (lnodeLeft.eventType != this.eventTypes.noEvent) pq.queue(lnodeLeft);
@@ -1596,21 +1607,23 @@ StraightSkeleton = function(poly) {
     }
   }
 
-  var offset = shiftSkeleton ? -2 : 0;
-  for (var i=contourNodeCount; i<nodes.length; i++) {
-    var node = nodes[i];
+  if (debugSkeleton) {
+    var offset = shiftSkeleton ? -2 : 0;
+    for (var i=contourNodeCount; i<nodes.length; i++) {
+      var node = nodes[i];
 
-    var he = node.halfedge;
-    do {
-      var vs = node.v.clone();
-      var ve = he.nend().v.clone();
-      vs.z += offset;
-      ve.z += offset;
-      debugLine(vs, ve);
+      var he = node.halfedge;
+      do {
+        var vs = node.v.clone();
+        var ve = he.nend().v.clone();
+        vs.z += offset;
+        ve.z += offset;
+        debugLine(vs, ve);
 
-      he = he.rotated();
-    } while (he != node.halfedge);
-    //offset += -0.1;
+        he = he.rotated();
+      } while (he != node.halfedge);
+      //offset += -0.1;
+    }
   }
   debugLines();
 
@@ -1741,6 +1754,13 @@ StraightSkeleton.prototype.setEdge = function(lnode) {
   lnode.edge = new SSEdge(lnode.he);
 }
 
+StraightSkeleton.prototype.calculateReflex = function(lnode) {
+  var forward = lnode.edge.forward;
+  var backward = lnode.prev.edge.backward;
+
+  lnode.reflex = crossProductComponent(forward, backward, this.axis) < 0;
+}
+
 StraightSkeleton.prototype.calculateBisector = function(lnode) {
   var forward = lnode.edge.forward;
   var backward = lnode.prev.edge.backward;
@@ -1866,8 +1886,8 @@ StraightSkeleton.prototype.calculateSplitEvent = function(lnodeV, slav) {
       // vector from R to V
       var eRV = v.clone().sub(vR).normalize();
 
-      // need AB edge pointing along the above vector so that their bisector
-      if (eRV.dot(eAB) < 0) eAB = eAB.clone().negate();
+      // need AB edge pointing from R toward the bisector
+      if (left(v, v.clone().add(b), vR, axis)) eAB = edge.backward;
 
       // calculate bisector (not normalized) of AB line and RV vector
       var bRAB = eRV.add(eAB);

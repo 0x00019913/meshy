@@ -90,7 +90,7 @@ function vector3AxisMax(v1, v2, axis) {
 }
 
 
-// object type bool checks
+// object type bool checks and other utilities
 
 function isArray(item) {
   return (Object.prototype.toString.call(item) === '[object Array]');
@@ -232,35 +232,6 @@ function triangleArea(a, b, c, axis) {
 
   return cornerCrossProduct(a, b, c, axis)/2;
 }
-// triangle area, but normalized by a-b length and a-c length to account for
-// very small triangles
-function triangleAreaNormalized(a, b, c, axis) {
-  if (axis === undefined) axis = 'z';
-
-  var area = cornerCrossProduct(a, b, c, axis)/2;
-
-  var norm = triangleAreaNormalizationFactor(a, b, c, axis);
-  if (norm === 0) return 0;
-
-  return area/norm;
-}
-function triangleAreaNormalizationFactor(a, b, c, axis) {
-  if (axis === undefined) axis = 'z';
-
-  // need two orthogonal axes
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
-  var bah = b[ah]-a[ah];
-  var bav = b[av]-a[av];
-  var cah = c[ah]-a[ah];
-  var cav = c[av]-a[av];
-
-  // if one of the the segments is 0, area is 0
-  if ((bah === 0 && bav === 0) || (cah === 0 && cav === 0)) return 0;
-
-  return Math.sqrt((bah*bah + bav*bav)*(cah*cah + cav*cav));
-}
 // calculates cross product of b-a and c-a
 function cornerCrossProduct(a, b, c, axis) {
   if (axis === undefined) axis = 'z';
@@ -270,37 +241,14 @@ function cornerCrossProduct(a, b, c, axis) {
   if (axis == "z") return (b.x-a.x)*(c.y-a.y) - (b.y-a.y)*(c.x-a.x);
   return 0;
 }
+// cross product component of two vectors
+function crossProductComponent(v, w, axis) {
+  if (axis === undefined) axis = 'z';
 
-
-
-// for vertex hash maps
-
-// gets the index of a vertex in a hash map, adding it to the map and vertex
-// array if necessary
-// inputs:
-//  map: hash map ({hash:idx} object)
-//  v: vertex whose index to get, adding it to the map and array as necessary
-//  vertices: array of vertices whose indices are stored in the hash map
-//  p: precision factor
-function vertexMapIdx(map, v, vertices, p) {
-  var hash = vertexHash(v, p);
-  var idx = -1;
-  if (map[hash]===undefined) {
-    idx = vertices.length;
-    map[hash] = idx;
-    vertices.push(v);
-  }
-  else {
-    idx = map[hash];
-  }
-  return idx;
-}
-
-// make a hash map of a whole array of vertices at once
-function vertexArrayToMap(map, vertices, p) {
-  for (var v=0; v<vertices.length; v++) {
-    map[vertexHash(vertices[v], p)] = v;
-  }
+  if (axis == "x") return v.y*w.z - v.z*w.y;
+  if (axis == "y") return v.z*w.x - v.x*w.z;
+  if (axis == "z") return v.x*w.y - v.y*w.x;
+  return 0;
 }
 
 // intersection between line segment and plane normal to axis
@@ -472,6 +420,38 @@ function collinear(a, b, c, axis, epsilon) {
   var area = triangleArea(a, b, c, axis);
 
   return Math.abs(area) < epsilon;
+}
+
+
+
+// for vertex hash maps
+
+// gets the index of a vertex in a hash map, adding it to the map and vertex
+// array if necessary
+// inputs:
+//  map: hash map ({hash:idx} object)
+//  v: vertex whose index to get, adding it to the map and array as necessary
+//  vertices: array of vertices whose indices are stored in the hash map
+//  p: precision factor
+function vertexMapIdx(map, v, vertices, p) {
+  var hash = vertexHash(v, p);
+  var idx = -1;
+  if (map[hash]===undefined) {
+    idx = vertices.length;
+    map[hash] = idx;
+    vertices.push(v);
+  }
+  else {
+    idx = map[hash];
+  }
+  return idx;
+}
+
+// make a hash map of a whole array of vertices at once
+function vertexArrayToMap(map, vertices, p) {
+  for (var v=0; v<vertices.length; v++) {
+    map[vertexHash(vertices[v], p)] = v;
+  }
 }
 
 
