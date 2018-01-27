@@ -460,7 +460,7 @@ function segmentSegmentIntersection(a, b, c, d, axis) {
 }
 
 function coincident(a, b, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   return a.clone().sub(b).length() < epsilon;
 }
