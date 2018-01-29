@@ -407,12 +407,14 @@ function segmentSegmentIntersection(a, b, c, d, axis) {
           (left(c, d, a, axis) ^ left(c, d, b, axis)));
 }
 
+// approximate coincidence testing for vectors
 function coincident(a, b, epsilon) {
   if (epsilon === undefined) epsilon = 0.0000001;
 
   return a.clone().sub(b).length() < epsilon;
 }
 
+// approximate collinearity testing for three vectors
 function collinear(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
@@ -420,6 +422,11 @@ function collinear(a, b, c, axis, epsilon) {
   var area = triangleArea(a, b, c, axis);
 
   return Math.abs(area) < epsilon;
+}
+
+// approximate equality for real numbers
+function equal(i, j, epsilon) {
+  return Math.abs(i-j) < epsilon;
 }
 
 

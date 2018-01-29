@@ -355,7 +355,7 @@ Stage.prototype.buildSliceFolderActive = function() {
     this.sliceFolder.add(
       this,
       "sliceMode",
-      ["preview", "path"]
+      ["preview", "layer"]
     ).onChange(this.setSliceMode.bind(this));
     this.sliceFolder.add(this, "deactivateSliceMode");
   }

@@ -45,7 +45,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.sliceMode = "preview";
   this.slicer = null; // instance of module responsible for slicing
   this.slicePreviewMesh = null;
-  this.slicePathMesh = null;
+  this.sliceLayerMesh = null;
 
   this.scene = scene;
   this.camera = camera;
@@ -72,7 +72,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     slicePreviewMeshSliceSurface: new THREE.MeshStandardMaterial({
       color: 0x6666ff
     }),
-    slicePathMesh: new THREE.LineBasicMaterial({
+    sliceLayerMesh: new THREE.LineBasicMaterial({
       color: 0xffffff,
       linewidth: 1
     }),
@@ -729,7 +729,7 @@ Model.prototype.makeBasicMesh = function() {
 // Create a slice mesh for the current slice mode.
 Model.prototype.makeSliceMesh = function() {
   if (this.sliceMode=="preview") this.makeSlicePreviewMesh();
-  else if (this.sliceMode=="path") this.makeSlicePathMesh();
+  else if (this.sliceMode=="layer") this.makeSliceLayerMesh();
 
   this.setSliceMeshGeometry();
 }
@@ -738,8 +738,8 @@ Model.prototype.addSliceMesh = function() {
   if (this.sliceMode=="preview") {
     if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
   }
-  else if (this.sliceMode=="path") {
-    if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
+  else if (this.sliceMode=="layer") {
+    if (this.sliceLayerMesh) this.scene.add(this.sliceLayerMesh);
   }
 }
 
@@ -761,8 +761,8 @@ Model.prototype.setSliceMeshGeometry = function() {
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
   }
-  else if (this.sliceMode=="path") {
-    var mesh = this.slicePathMesh;
+  else if (this.sliceMode=="layer") {
+    var mesh = this.sliceLayerMesh;
     if (!mesh) return;
 
     mesh.geometry.vertices = sliceVertices;
@@ -792,17 +792,17 @@ Model.prototype.makeSlicePreviewMesh = function(vertices, faces) {
   this.slicePreviewMesh = mesh;
 }
 
-// Create the slice-mode path visualization mesh.
-Model.prototype.makeSlicePathMesh = function(vertices, faces) {
-  if (this.slicePathMesh) return;
+// Create the slice-mode layer visualization mesh.
+Model.prototype.makeSliceLayerMesh = function(vertices, faces) {
+  if (this.sliceLayerMesh) return;
 
   var geo = new THREE.Geometry();
 
-  var mesh = new THREE.LineSegments(geo, this.materials.slicePathMesh);
+  var mesh = new THREE.LineSegments(geo, this.materials.sliceLayerMesh);
   mesh.name = "model";
   mesh.frustumCulled = false;
 
-  this.slicePathMesh = mesh;
+  this.sliceLayerMesh = mesh;
 }
 
 
@@ -1944,7 +1944,7 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 // Turn on slice mode: set mode to "slice", passing sliceHeight. Slice mode
 // defaults to "preview".
 Model.prototype.activateSliceMode = function(sliceHeight, sliceAxis) {
-  this.sliceMode = "path"; // todo: switch back to preview
+  this.sliceMode = "layer"; // todo: switch back to preview
 
   this.setMode("slice", {
     sliceHeight: sliceHeight,
@@ -1957,7 +1957,7 @@ Model.prototype.deactivateSliceMode = function() {
   this.setMode("basic");
   this.slicer = null;
   this.slicePreviewMesh = null;
-  this.slicePathMesh = null;
+  this.sliceLayerMesh = null;
 }
 
 Model.prototype.getNumSlices = function() {
