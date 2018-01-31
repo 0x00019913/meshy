@@ -1221,11 +1221,11 @@ StraightSkeleton = function(poly) {
   }
 
   var ct = 0;
-  var lim = 300;
+  var lim = 900;
   var t = true, f = false;
   var limitIterations = f;
   var debugSkeleton = t;
-  var shiftSkeleton = t;
+  var skeletonShiftDistance = -3;
   var iterativelyShiftSkeleton = f;
   while (pq.length > 0) {
     ct++;
@@ -1238,8 +1238,7 @@ StraightSkeleton = function(poly) {
 
     var eventType = lnodeV.eventType;
 
-    var lnv = lnodeV.v;
-    debugPt(lnv, ct>=lim?.3:.1, true, eventType&this.eventTypes.edgeEvent ? 3 : 2);
+    //debugPt(lnodeV.v, ct>=lim?.3:.1, true, eventType&this.eventTypes.edgeEvent ? 3 : 2);
 
     // just in case
     if (eventType == this.eventTypes.noEvent) continue;
@@ -1334,6 +1333,10 @@ StraightSkeleton = function(poly) {
         var lnodeC = lnodeA.prev;
         var heC = lnodeC.he;
 
+        if (ct>=lim) {
+          debugLAV(lnodeI, 1, 500, true);
+        }
+
         connector.connectHalfedgeToHalfedge(heC, heIB);
 
         lnodeC.processed = true;
@@ -1375,7 +1378,18 @@ StraightSkeleton = function(poly) {
         if (eventType & this.eventTypes.endSplitEvent) logstring += " END";
         console.log(ct, logstring, lnodeV.L, lnodeV.processed ? "DISCARD" : "USE");
       }
-      // in split event, V's bisector causes a given edge to split
+      // in split event, V's bisector causes a given A-B edge to split.
+      // the new node structure looks like this:
+      //
+      // B---A
+      //  *?*
+      //   I
+      //   |
+      //   V
+      //  / \
+      // P   N
+      // where the original LAV went P -> V -> N -> ... -> A -> B -> ... -> P; we
+      // create an I hanging off the V, splitting the LAV on either side of I
 
       if (lnodeV.processed) continue;
 
@@ -1435,6 +1449,14 @@ StraightSkeleton = function(poly) {
         }
       }
 
+      if (false && Math.abs(lnodeV.v.x+13)<2 && Math.abs(lnodeV.v.y-7)<1) {
+        debugLn(lnodeV.v, lnodeV.intersection, -1, 4, true);
+        if (true) {
+          console.log(ct);
+          debugLAV(lnodeV, 4, 500, true);
+        }
+      }
+
       if (logEvent && (lnodeA.processed || lnodeB.processed)) console.log("UPDATE: DISCARD");
       if (lnodeA.processed || lnodeB.processed) continue;
 
@@ -1471,57 +1493,18 @@ StraightSkeleton = function(poly) {
       else if (startSplit) {
         var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
         lnodeLeft = this.makelavnode(heIA);
-
-        if (lnodeA == lnodeV.next) {
-          lnodeP.next = lnodeLeft;
-          lnodeLeft.prev = lnodeP;
-          lnodeB.prev = lnodeLeft;
-          lnodeLeft.next = lnodeB;
-
-          lnodeLeft.ef = edge;
-          lnodeLeft.eb = lnodeV.eb;
-
-          this.calculateBisector(lnodeLeft);
-          this.calculateEdgeEvent(lnodeLeft);
-
-          if (ct>=lim) {
-            debugLAV(lnodeLeft, 1, 500, true);
-          }
-
-          continue;
-        }
       }
       else if (endSplit) {
         var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIV);
         lnodeLeft = this.makelavnode(heIB);
-
-        if (lnodeB == lnodeV.prev) {
-          lnodeA.next = lnodeRight;
-          lnodeRight.prev = lnodeA;
-          lnodeN.prev = lnodeRight;
-          lnodeRight.next = lnodeN;
-
-          lnodeRight.ef = lnodeV.ef;
-          lnodeRight.eb = edge;
-
-          this.calculateBisector(lnodeRight);
-          this.calculateEdgeEvent(lnodeRight);
-
-          if (ct>=lim) {
-            debugLAV(lnodeRight, 1, 500, true);
-          }
-
-          continue;
-        }
       }
       else {
         lnodeLeft = this.makelavnode(heIV);
         // note to self: bug here? heIV is on the A-N side, so we might break
         // the edge flow if we try to connect on the P-B side to heIV.
-        // possibly fix by tracking the LAV node's twin and, when the twin
-        // causes an event, update its twin (if any) with the new halfedge that
-        // starts at I
-        // shouldn't be important for offsetting, though
+        // possibly fix by tracking the *incoming* edge instead and, when we try to
+        // connect to a LAV node with such an edge, use its next instead.
+        // shouldn't be important for offsetting, though.
       }
 
       // link the new LAV nodes accounting for the possibility that A and/or B
@@ -1566,7 +1549,10 @@ StraightSkeleton = function(poly) {
       // 2. else, calculate bisectors and potential new events
 
       // A-N side of I
-      if (lnodeRight.prev == lnodeRight.next) {
+      if (lnodeV.next == lnodeA) {
+        connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeRight.he);
+      }
+      else if (lnodeRight.prev == lnodeRight.next) {
         connector.connectHalfedgeToHalfedge(heIV, lnodeRight.prev.he);
         lnodeRight.prev.processed = true;
       }
@@ -1575,19 +1561,22 @@ StraightSkeleton = function(poly) {
         this.calculateReflex(lnodeRight);
         this.calculateBisector(lnodeRight);
         this.calculateEdgeEvent(lnodeRight);
-        //this.calculateSplitEvent(lnodeRight, slav);
 
         // if potential new edge event, push to PQ
         if (lnodeRight.eventType != this.eventTypes.noEvent) pq.queue(lnodeRight);
 
         if (ct >= lim) {
-          //console.log("right", lnodeRight);
+          console.log("right", lnodeRight);
           debugLAV(lnodeRight, 1, 500, true);
         }
       }
 
       // P-B side of I
-      if (lnodeLeft.next == lnodeLeft.prev) {
+      if (lnodeV.prev == lnodeB) {
+        connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeLeft.he);
+        lnodeB.processed = true;
+      }
+      else if (lnodeLeft.next == lnodeLeft.prev) {
         connector.connectHalfedgeToHalfedge(heIV.twin.next, lnodeLeft.next.he);
         lnodeLeft.next.processed = true;
       }
@@ -1595,13 +1584,12 @@ StraightSkeleton = function(poly) {
         this.calculateReflex(lnodeLeft);
         this.calculateBisector(lnodeLeft);
         this.calculateEdgeEvent(lnodeLeft);
-        //this.calculateSplitEvent(lnodeLeft, slav);
 
         // if potential new edge event, push to PQ
         if (lnodeLeft.eventType != this.eventTypes.noEvent) pq.queue(lnodeLeft);
 
         if (ct >= lim) {
-          //console.log("left", lnodeLeft);
+          console.log("left", lnodeLeft);
           //debugRay(lnodeLeft.ef.start, lnodeLeft.ef.forward, -.2, 5, 0.3, true);
           //debugRay(lnodeLeft.eb.start, lnodeLeft.eb.backward, -.2, 6, 0.3, true);
 
@@ -1612,7 +1600,7 @@ StraightSkeleton = function(poly) {
   }
 
   if (debugSkeleton) {
-    var offset = shiftSkeleton ? -0.5 : 0;
+    var offset = skeletonShiftDistance;
     for (var i=contourNodeCount; i<nodes.length; i++) {
       var node = nodes[i];
 
@@ -1668,7 +1656,7 @@ StraightSkeleton = function(poly) {
     if (maxct === undefined) maxct = Infinity;
 
     var dct = 0;
-    if (debugResultLav && ct >= lim) {
+    if (debugResultLav) {
       var o = 0;
       var ss = lnode;
       var lv = ss;
@@ -1885,7 +1873,6 @@ StraightSkeleton.prototype.calculateSplitEvent = function(lnodeV, slav) {
   if (!lnodeV.reflex) return;
 
   var v = lnodeV.v;
-  debugVertex(v);
   var b = lnodeV.bisector;
   var axis = this.axis;
   var epsilon = this.epsilon;
@@ -2002,8 +1989,6 @@ StraightSkeleton.prototype.calculateSplitEvent = function(lnodeV, slav) {
     lnodeV.intersection = splitPoint;
     lnodeV.eventNode = eventNode;
   }
-
-  debugLines();
 }
 
 // add pairs of verts with .addSegment, then get the layer with .getLayer
