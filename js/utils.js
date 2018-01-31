@@ -315,6 +315,25 @@ function rayLineIntersection(s, t, sd, td, axis) {
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
+// same as rayLineIntersection, but doesn't check bounds on either ray
+function lineLineIntersection(s, t, sd, td, axis) {
+  if (axis === undefined) axis = 'z';
+
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var det = sd[ah]*td[av] - sd[av]*td[ah];
+  // lines are exactly parallel, so no intersection
+  if (det == 0) return null;
+
+  var dh = t[ah] - s[ah];
+  var dv = t[av] - s[av];
+
+  var u = (td[av]*dh - td[ah]*dv) / det;
+
+  return s.clone().add(sd.clone().multiplyScalar(u));
+}
+
 // same as rayLineIntersection, but also checks that the intersection is between
 // t and t+td
 function raySegmentIntersection(s, t, sd, td, axis) {
@@ -336,7 +355,7 @@ function raySegmentIntersection(s, t, sd, td, axis) {
 
   var v = (sd[av]*dh - sd[ah]*dv) / det;
 
-  // v is otuside the segment bounds
+  // v is outside the segment bounds
   if (v < 0 || v > 1) return null;
 
   return s.clone().add(sd.clone().multiplyScalar(u));
@@ -380,31 +399,47 @@ function projectToLine(v, a, b, axis) {
 }
 
 // true if c is strictly left of a-b segment
-function left(a, b, c, axis) {
+function left(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
 
-  return triangleArea(a, b, c, axis) > 0;
+  var area = triangleArea(a, b, c, axis);
+
+  // false because collinear and left comparison is exclusive
+  if (Math.abs(area) < epsilon) return false;
+
+  return area > 0;
 }
 
 // true if c is left or equal to a-b segment
-function leftOn(a, b, c, axis) {
+function leftOn(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
 
-  return triangleArea(a, b, c, axis) >= 0;
+  var area = triangleArea(a, b, c, axis);
+
+  // true because collinear and left comparison is inclusive
+  if (Math.abs(area) < epsilon) return true;
+
+  return area > 0;
 }
 
-function pointInsideTriangle(p, a, b, c, axis) {
+function pointInsideTriangle(p, a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
 
-  return left(a, b, p, axis) && left(b, c, p, axis) && left(c, a, p, axis);
+  return left(a, b, p, axis, epsilon) &&
+         left(b, c, p, axis, epsilon) &&
+         left(c, a, p, axis, epsilon);
 }
 
 // bool check if segment ab intersects segment cd
-function segmentSegmentIntersection(a, b, c, d, axis) {
+function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
 
-  return ((left(a, b, c, axis) ^ left(a, b, d, axis)) &&
-          (left(c, d, a, axis) ^ left(c, d, b, axis)));
+  return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
+          (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
 }
 
 // approximate coincidence testing for vectors
