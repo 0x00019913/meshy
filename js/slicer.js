@@ -1232,13 +1232,9 @@ StraightSkeleton = function(poly) {
   this.lfactory = new SSLAVNodeFactory();
 
   var nfactory = this.nfactory;
-  var hefactory = this.hefactory;
   var connector = this.connector;
-  var lfactory = this.lfactory;
 
   var nodes = nfactory.nodes;
-  var halfedges = hefactory.halfedges;
-  var lnodes = lfactory.lnodes;
 
   // polygon and its holes in one array
   var contours = [poly].concat(poly.holes);
@@ -1282,13 +1278,40 @@ StraightSkeleton = function(poly) {
     this.entryHalfedges.push(heprev.twin);
   }
 
-  var slav = this.makeslav();
+  this.contourNodeCount = nodes.length;
 
-  var contourNodeCount = nodes.length;
+  this.build();
+}
 
+StraightSkeleton.prototype.makePQ = function() {
   // pq retrieves smallest-L node first
   var pqComparator = function (a, b) { return a.L - b.L; }
-  var pq = new PriorityQueue({ comparator: pqComparator });
+
+  return new PriorityQueue({
+    comparator: pqComparator,
+    // using BHeap instead of the default because the default exhibits a
+    // weird bug which I can't reproduce under any other circumstances except
+    // on my curve1 testing meshes (the underlying heap ends up with an element
+    // on top that's larger than the elements under it).
+    // todo: figure this bug out as, right now, it's quite baffling
+    strategy: PriorityQueue.BHeapStrategy
+  });
+}
+
+StraightSkeleton.prototype.build = function() {
+  var axis = this.axis;
+  var epsilon = this.epsilon;
+
+  var nfactory = this.nfactory;
+  var hefactory = this.hefactory;
+  var connector = this.connector;
+  var lfactory = this.lfactory;
+
+  var lnodes = lfactory.lnodes;
+
+  var slav = this.makeslav();
+
+  var pq = this.makePQ();
 
   // put all valid events on the priority queue
   for (var lav of slav) {
@@ -1301,7 +1324,7 @@ StraightSkeleton = function(poly) {
   }
 
   var ct = 0;
-  var lim = 27;
+  var lim = 2700;
   var t = true, f = false;
   var limitIterations = t;
   var debugSkeleton = t;
@@ -1360,7 +1383,7 @@ StraightSkeleton = function(poly) {
         debugPt(lnodeA.v, -0.1);
         debugPt(lnodeB.v, -0.2);
         debugPt(vI, -0.3);
-        while (pq.length>0) console.log(pq.dequeue().L);
+        //while (pq.length>0) console.log(pq.dequeue().L);
         //debugLAV(lnodeA, 1, 250, true, 0, false);
         //debugEvent(lnodeV);
       }
@@ -1379,9 +1402,7 @@ StraightSkeleton = function(poly) {
         lnodeI.ef.removeNode(lnodeI);
         lnodeB.ef.replaceNode(lnodeB, lnodeI);
 
-        if (ct >= lim) {
-          //debugEdge(lnodeB.next.ef, 4);
-        }
+        if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
 
         lnodeB.processed = true;
         continue;
@@ -1400,9 +1421,7 @@ StraightSkeleton = function(poly) {
 
         lnodeA.ef.removeNode(lnodeA);
 
-        if (ct >= lim) {
-          //debugEdge(lnodeA.prev.ef, 5);
-        }
+        if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
 
         lnodeA.processed = true;
         continue;
@@ -1551,42 +1570,6 @@ StraightSkeleton = function(poly) {
         //debugEdge(lnodeV.ef);
         debugEvent(lnodeV);
       }
-
-      /*
-      var lnodeB;
-
-      // if poly has no holes, we can just say that B is A's next
-      if (!this.hasHoles) lnodeB = lnodeA.next;
-      // if poly has holes, analogously searching backwards for B might land us
-      // on a LAV node that is associated with the correct edge but isn't A's
-      // neighbor, so we'll need to decide which of A/B is the true A/B and then
-      // just set the other one to the correct node's neighbor
-      else {
-        // analogously search backwards for B
-        lnodeB = lnodeV;
-        do {
-          if (lnodeB.eb == edge) break;
-          lnodeB = lnodeB.prev;
-        } while (lnodeB != lnodeV);
-
-        // as above, this LAV might not contain any LAV nodes associated with
-        // the requisite edge
-        if (lnodeB == lnodeV) lnodeB = lnodeE.next;
-
-        // if mismatch: looking from V, intersection must be left of A and
-        // right of B - use this to find the true A/B and set the false A/B to
-        // be its neighbor
-        if (lnodeA.next != lnodeB) {
-          // if A is correct, set B to its next
-          if (left(lnodeV.v, lnodeA.v, vI, axis)) {
-            lnodeB = lnodeA.next;
-          }
-          // if B is correct, set A to its prev
-          else {
-            lnodeA = lnodeB.prev;
-          }
-        }
-      }*/
 
       if (false && Math.abs(vI.x-(-3.5))<-.5 && Math.abs(vI.y-(-0.5))<0.5) {
         debugLn(lnodeV.v, lnodeV.intersection, -1, 4, true);
@@ -1771,7 +1754,8 @@ StraightSkeleton = function(poly) {
 
   if (debugSkeleton) {
     var offset = skeletonShiftDistance;
-    for (var i=contourNodeCount; i<nodes.length; i++) {
+    var nodes = this.nfactory.nodes;
+    for (var i=this.contourNodeCount; i<nodes.length; i++) {
       var node = nodes[i];
 
       var he = node.halfedge;
