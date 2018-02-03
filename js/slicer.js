@@ -1293,7 +1293,7 @@ StraightSkeleton.prototype.makePQ = function() {
     // weird bug which I can't reproduce under any other circumstances except
     // on my curve1 testing meshes (the underlying heap ends up with an element
     // on top that's larger than the elements under it).
-    // todo: figure this bug out as, right now, it's quite baffling
+    // todo: figure this bug out as it's quite baffling
     strategy: PriorityQueue.BHeapStrategy
   });
 }
@@ -1306,6 +1306,8 @@ StraightSkeleton.prototype.build = function() {
   var hefactory = this.hefactory;
   var connector = this.connector;
   var lfactory = this.lfactory;
+
+  var contourNodeCount = this.contourNodeCount; // todo: remove
 
   var lnodes = lfactory.lnodes;
 
@@ -1324,15 +1326,30 @@ StraightSkeleton.prototype.build = function() {
   }
 
   var ct = 0;
-  var lim = 2700;
+  var lim = 5500;
   var t = true, f = false;
   var limitIterations = t;
-  var debugSkeleton = t;
   var skeletonShiftDistance = 0;
   var iterativelyShiftSkeleton = f;
+  var validate = f;
   while (pq.length > 0) {
     ct++;
     if (limitIterations && ct > lim) break;
+
+    if (validate) {
+      var validated = true;
+      validated = validateEdges(this.edges, lnodes);
+      if (!validated) {
+        console.log(ct);
+        break;
+      }
+
+      validated = validateLAV(lnodeV);
+      if (!validated) {
+        console.log(ct);
+        break;
+      }
+    }
 
     var lnodeV = pq.dequeue();
 
@@ -1380,50 +1397,57 @@ StraightSkeleton.prototype.build = function() {
       if (procA && procB) continue;
 
       if (ct >= lim) {
-        debugPt(lnodeA.v, -0.1);
-        debugPt(lnodeB.v, -0.2);
-        debugPt(vI, -0.3);
-        //while (pq.length>0) console.log(pq.dequeue().L);
-        //debugLAV(lnodeA, 1, 250, true, 0, false);
-        //debugEvent(lnodeV);
+        debugPt(lnodeA.v, 0.1, true);
+        debugPt(lnodeB.v, 0.2, true);
+        debugPt(vI, 0.3, true);
+        debugLAV(procA ? lnodeB : lnodeA, 1, 250, true, -0.05, false);
       }
 
       if (procA) {
-        lnodeB.he = connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeB.prev.he);
+        if (equal(lnodeA.L, lnodeB.L, epsilon)) {
+          if (logEvent) console.log("A PROCESSED");
+          lnodeB.he = connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeB.prev.he);
 
-        var lnodeI = lnodeB.prev;
-        lnodeI.next = lnodeB.next;
-        lnodeB.next.prev = lnodeI;
+          var lnodeI = lnodeB.prev;
+          lnodeI.next = lnodeB.next;
+          lnodeB.next.prev = lnodeI;
 
-        lnodeI.ef = lnodeB.ef;
-        this.calculateBisector(lnodeI);
-        this.calculateEdgeEvent(lnodeI);
+          lnodeI.ef.removeNode(lnodeI);
+          lnodeB.ef.replaceNode(lnodeB, lnodeI);
 
-        lnodeI.ef.removeNode(lnodeI);
-        lnodeB.ef.replaceNode(lnodeB, lnodeI);
+          lnodeI.ef = lnodeB.ef;
 
-        if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
+          this.calculateBisector(lnodeI);
+          this.calculateEdgeEvent(lnodeI);
 
-        lnodeB.processed = true;
+          if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
+
+          lnodeB.processed = true;
+        }
+
         continue;
       }
 
       if (procB) {
-        lnodeA.he = connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeA.next.he);
+        if (equal(lnodeA.L, lnodeB.L, epsilon)) {
+          if (logEvent) console.log("B PROCESSED");
+          lnodeA.he = connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeA.next.he);
 
-        var lnodeI = lnodeA.next;
-        lnodeI.prev = lnodeA.prev;
-        lnodeA.prev.next = lnodeI;
+          var lnodeI = lnodeA.next;
+          lnodeI.prev = lnodeA.prev;
+          lnodeA.prev.next = lnodeI;
 
-        lnodeI.eb = lnodeA.eb;
-        this.calculateBisector(lnodeI);
-        this.calculateEdgeEvent(lnodeI);
+          lnodeA.ef.removeNode(lnodeA);
 
-        lnodeA.ef.removeNode(lnodeA);
+          lnodeI.eb = lnodeA.eb;
 
-        if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
+          this.calculateBisector(lnodeI);
+          this.calculateEdgeEvent(lnodeI);
 
-        lnodeA.processed = true;
+          if (lnodeI.eventType != SSEventTypes.noEvent) pq.queue(lnodeI);
+
+          lnodeA.processed = true;
+        }
         continue;
       }
 
@@ -1485,7 +1509,7 @@ StraightSkeleton.prototype.build = function() {
 
       if (ct >= lim) {
         //debugEdge(lnodeV.eventNode.ef, 6);
-        debugLAV(lnodeA.prev, 1, 250, true, 0, false);
+        //debugLAV(lnodeA.prev, 1, 250, true, 0, false);
       }
     }
 
@@ -1752,10 +1776,12 @@ StraightSkeleton.prototype.build = function() {
     }
   }
 
-  if (debugSkeleton) {
+  debugSkeleton();
+
+  function debugSkeleton() {
     var offset = skeletonShiftDistance;
-    var nodes = this.nfactory.nodes;
-    for (var i=this.contourNodeCount; i<nodes.length; i++) {
+    var nodes = nfactory.nodes;
+    for (var i=contourNodeCount; i<nodes.length; i++) {
       var node = nodes[i];
 
       var he = node.halfedge;
@@ -1770,8 +1796,65 @@ StraightSkeleton.prototype.build = function() {
       } while (he != node.halfedge);
       if (iterativelyShiftSkeleton) offset += -0.1;
     }
+    debugLines();
   }
-  debugLines();
+
+  function validateEdges(edges, lnodes) {
+    var valid = true;
+
+    for (var e=0; e<edges.length; e++) {
+      var edge = edges[e];
+      for (var lidx of edge.lnodes) {
+        var lnode = lnodes[lidx];
+        if (lnode.ef!=edge) {
+          valid = false;
+          console.log("WRONG EDGE ON NODE", lnode.id, edge);
+          debugLn(lnode.v, lnode.next.v, 0.2);
+          debugLn(edge.start, edge.end, 0.3);
+        }
+      }
+    }
+
+    for (var l=0; l<lnodes.length; l++) {
+      var lnode = lnodes[l];
+      var ef = lnode.ef;
+      if (!lnode.processed && !ef.lnodes.has(lnode.id)) {
+        valid = false;
+        console.log("NODE NOT PRESENT IN EDGE'S SET", lnode.id, edge);
+        debugLn(lnode.v, lnode.next.v, 0.2, 1);
+        debugLn(edge.start, edge.end, 0.4, 2);
+      }
+    }
+
+    return valid;
+  }
+
+  function validateLAV(start) {
+    var valid = true;
+    var seen = new Set();
+
+    if (start.processed) return true;
+
+    var lnode = start;
+    do {
+      if (seen.has(lnode.id)) {
+        console.log("LOOP WITH NODE", lnode.id);
+        valid = false;
+        break;
+      }
+
+      if (lnode.next.prev != lnode) {
+        console.log("BRANCH AT NODE", lnode.id);
+        valid = false;
+        break;
+      }
+
+      seen.add(lnode.id);
+      lnode = lnode.next;
+    } while (lnode != start);
+
+    return valid;
+  }
 
   function debugPt(v, o, includeStart, c) {
     if (o===undefined) o = 0;
@@ -1817,26 +1900,20 @@ StraightSkeleton.prototype.build = function() {
       var lv = lnode;
       do {
         c = c===undefined ? 0 : c;
-        debugLn(lv.v, lv.prev.v, o, c, false);
+        debugLn(lv.v, lv.next.v, o, c, false);
         //debugPt(lv.v, o-increment, true, c);
         if (bisectors && lv.bisector) debugRay(lv.v, lv.bisector, o, c+2, 0.1);
         if (edges) {
           debugLn(lv.v, lv.ef.start.clone().add(lv.ef.end).multiplyScalar(0.5), o-0.1, c+3, true);
-          if (!lv.ef.lnodes.has(lv.id)) console.log("MISMATCH BETWEEN EDGES AND LAV NODES");
-        }
-        if (lv != lv.next.prev) {
-          debugPt(lv.v, -0.5, true, 0);
-          console.log("MISMATCH IN LAV CHAIN");
         }
 
-        lv = lv.prev;
+        lv = lv.next;
         o += increment;
         if (++dct > maxct) {
-          console.log("debugging LAV node", lv.id, "went over the limit");
+          console.log("debugging LAV node", lv.id, "went over the limit", maxct);
           break;
         }
       } while (lv != lnode);
-      //console.log(dct);
     }
   }
 
@@ -1889,6 +1966,8 @@ StraightSkeleton.prototype.makeslav = function() {
     var lav = null;
     var lstart = null;
 
+    this.edges = []; // todo: remove
+
     var he = hestart;
     do {
       // lav node, implicitly signifies vertex at start of given halfedge
@@ -1920,6 +1999,7 @@ StraightSkeleton.prototype.makeslav = function() {
       lcurr.ef = edge;
       lcurr.next.eb = edge;
       edge.addNode(lcurr);
+      this.edges.push(edge); // todo: remove
 
       lcurr = lcurr.next;
     } while (lcurr != lav);
