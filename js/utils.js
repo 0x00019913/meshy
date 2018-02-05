@@ -461,16 +461,19 @@ function collinear(a, b, c, axis, epsilon) {
 
 // approximate equality for real numbers
 function equal(i, j, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0000001;
   return Math.abs(i-j) < epsilon;
 }
 
 // approximate less-than testing for real numbers
 function less(i, j, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0000001;
   return i < j && !equal(i, j, epsilon);
 }
 
 // approximate greater-than testing for real numbers
 function greater(i, j, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0000001;
   return i > j && !equal(i, j, epsilon);
 }
 
