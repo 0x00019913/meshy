@@ -1461,11 +1461,6 @@ StraightSkeleton.prototype.buildInterior = function() {
         continue;
       }
 
-      if (ct >= lim) {
-        debugPt(lnodeA.v, -0.2, true, 0);
-        debugPt(lnodeB.v, -0.3, true, 0);
-      }
-
       var procA = lnodeA.processed;
       var procB = lnodeB.processed;
 
@@ -1479,7 +1474,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         if (logEvent) console.log("A PROCESSED");
 
         lnodeI = lnodeB.prev;
-        if (lnodeI.L < lnodeB.L) continue;
+        if (less(lnodeI.L, lnodeB.L, epsilon)) continue;
 
         // connect
         lnodeI.next = lnodeB.next;
@@ -1495,7 +1490,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         if (logEvent) console.log("B PROCESSED");
 
         lnodeI = lnodeA.next;
-        if (lnodeI.L < lnodeA.L) continue;
+        if (less(lnodeI.L, lnodeA.L, epsilon)) continue;
 
         lnodeI.prev = lnodeA.prev;
         lnodeA.prev.next = lnodeI;
