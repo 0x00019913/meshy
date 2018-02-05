@@ -464,6 +464,16 @@ function equal(i, j, epsilon) {
   return Math.abs(i-j) < epsilon;
 }
 
+// approximate less-than testing for real numbers
+function less(i, j, epsilon) {
+  return i < j && !equal(i, j, epsilon);
+}
+
+// approximate greater-than testing for real numbers
+function greater(i, j, epsilon) {
+  return i > j && !equal(i, j, epsilon);
+}
+
 
 
 // for vertex hash maps
