@@ -1392,7 +1392,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.calculateInitialEvents(slav);
 
   var ct = 0;
-  var lim = 125;
+  var lim = 227 ;
   var t = true, f = false;
   var limitIterations = t;
   var skeletonShiftDistance = -0.1;
@@ -1464,15 +1464,14 @@ StraightSkeleton.prototype.buildInterior = function() {
       var procA = lnodeA.processed;
       var procB = lnodeB.processed;
 
-      if (logEvent && (procA && procB)) console.log("DISCARD");
-      if (procA && procB) continue;
-
       if (ct >= lim) {
-        console.log(procA, procB);
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.2, true);
-        debugLAV(procA ? lnodeB : lnodeA, 2, 250, true, 0);
+        //debugLAV(procA ? lnodeB : lnodeA, 2, 250, true, 0);
       }
+
+      if (logEvent && (procA && procB)) console.log("DISCARD");
+      if (procA && procB) continue;
 
       var lnodeI;
 
@@ -1508,6 +1507,15 @@ StraightSkeleton.prototype.buildInterior = function() {
         connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeI.he);
       }
       else {
+        if (lnodeB.next == lnodeA) {
+          if (logEvent) console.log("2-NODE LAV, CONTINUE");
+          connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeB.he);
+          lnodeA.setProcessed();
+          lnodeB.setProcessed();
+
+          continue;
+        }
+
         // new node at intersection
         var nI = nfactory.create(vI, event.L);
 
@@ -1551,6 +1559,11 @@ StraightSkeleton.prototype.buildInterior = function() {
       this.calculateBisector(lnodeI);
       this.calculateEdgeEvent(eventI);
       this.queueEvent(eventI);
+
+      if (ct >= lim) {
+        debugLAV(lnodeI, 2, 250, true, 0);
+        debugPt(eventI.intersection, 0.5, true);
+      }
     }
 
     else if (eventType & SSEventTypes.splitEvent) {
@@ -1577,6 +1590,11 @@ StraightSkeleton.prototype.buildInterior = function() {
       // "left" denotes the ... -> A -> I -> N -> ... sequence
       // except for the special cases where I is directly on the bisector of
       // A, B, or both (referred to as start split and end split, respectively)
+
+      if (ct >= lim) {
+        debugPt(lnodeV.v, 0.1, true);
+        debugLn(lnodeE.ef.start, lnodeE.ef.end, 0.4, 0);
+      }
 
       if (logEvent && lnodeV.processed) console.log("DISCARD");
       if (lnodeV.processed) continue;
@@ -1612,7 +1630,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       if (ct >= lim) {
         debugPt(lnodeA.v, 0.2, true);
-        debugPt(lnodeB.v, 0.4, true)
+        debugPt(lnodeB.v, 0.2, true);
+        debugPt(vI, 0.3, true);
       }
 
       if (logEvent && (lnodeA.processed && lnodeB.processed)) console.log("UPDATE: DISCARD");
@@ -1750,8 +1769,8 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       if (ct >= lim) {
-        if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0)
-        if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0.02, true);
+        if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0.02)
+        if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0.02);
       }
     }
   }
