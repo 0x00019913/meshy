@@ -401,7 +401,7 @@ function projectToLine(v, a, b, axis) {
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -414,7 +414,7 @@ function left(a, b, c, axis, epsilon) {
 // true if c is left or equal to a-b segment
 function leftOn(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -426,7 +426,7 @@ function leftOn(a, b, c, axis, epsilon) {
 
 function pointInsideTriangle(p, a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   return left(a, b, p, axis, epsilon) &&
          left(b, c, p, axis, epsilon) &&
@@ -436,7 +436,7 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
 // bool check if segment ab intersects segment cd
 function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
           (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
@@ -444,7 +444,7 @@ function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
 
 // approximate coincidence testing for vectors
 function coincident(a, b, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   return a.clone().sub(b).length() < epsilon;
 }
@@ -452,7 +452,7 @@ function coincident(a, b, epsilon) {
 // approximate collinearity testing for three vectors
 function collinear(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -461,19 +461,19 @@ function collinear(a, b, c, axis, epsilon) {
 
 // approximate equality for real numbers
 function equal(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
   return Math.abs(i-j) < epsilon;
 }
 
 // approximate less-than testing for real numbers
 function less(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
   return i < j && !equal(i, j, epsilon);
 }
 
 // approximate greater-than testing for real numbers
 function greater(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 0.00001;
   return i > j && !equal(i, j, epsilon);
 }
 

@@ -472,7 +472,7 @@ Polygon = function(axis, vertices, indices) {
   this.up = new THREE.Vector3();
   this.up[axis] = 1;
 
-  this.epsilon = 0.0000001;
+  this.epsilon = 0.00001;
 
   this.count = 0;
   this.area = 0;
