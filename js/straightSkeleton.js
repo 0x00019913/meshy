@@ -25,6 +25,35 @@ SSHalfedge.prototype.rotated = function() {
   return this.twin.next;
 }
 
+// true if given value L is between the endpoint offset "height"; excludes the
+// upper bound
+SSHalfedge.prototype.aliveAt = function(L) {
+  var sL = this.nstart().L;
+  var eL = this.nend().L;
+
+  return (sL <= L && eL > L) || (eL <= L && sL > L);
+}
+
+// true if the "height" at the start is greater than at the end
+SSHalfedge.prototype.downhill = function() {
+  return this.nstart().L > this.nend().L;
+}
+
+// returns the point along the halfedge that has the given "height"
+SSHalfedge.prototype.interpolate = function(L) {
+  var s = this.nstart();
+  var e = this.nend();
+
+  var d = e.L - s.L;
+  if (d == 0) return s.v;
+
+  // interpolation parameter
+  var t = (L - s.L) / d;
+
+  // return s*(1-t) + e*t
+  return s.v.clone().multiplyScalar(1-t).add(e.v.clone().multiplyScalar(t));
+}
+
 function SSHalfedgeFactory() {
   this.id = 0;
   this.halfedges = [];
@@ -443,12 +472,12 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 3700;
+  var lim = 510000;
   var t = true, f = false;
-  var limitIterations = t;
+  var limitIterations = f;
   var skeletonShiftDistance = 0;
   var iterativelyShiftSkeleton = f;
-  var validate = t;
+  var validate = f;
 
   var logEvent = f;
 
@@ -625,13 +654,15 @@ StraightSkeleton.prototype.buildInterior = function() {
         var eventI = this.computeEdgeEvent(lnodeI);
         this.queueEvent(eventI);
 
-        //if (eventI.prevNode) debugLn(eventI.intersection, eventI.prevNode.v);
-        //if (eventI.nextNode) debugLn(eventI.intersection, eventI.nextNode.v);
-        //if (eventI.intersection) debugLn(eventI.intersection, lnodeI.v);
+        if (ct >= lim) {
+          if (eventI.prevNode) debugLn(eventI.intersection, eventI.prevNode.v);
+          if (eventI.nextNode) debugLn(eventI.intersection, eventI.nextNode.v);
+          if (eventI.intersection) debugLn(eventI.intersection, lnodeI.v);
+        }
       }
 
       if (ct >= lim) {
-        debugLAV(lnodeI, 2, 250, true, 0.1);
+        debugLAV(lnodeI, 2, 250, true, 0.0);
       }
     }
 
@@ -665,11 +696,16 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       if (ct >= lim) {
         debugPt(lnodeV.v, 0.1, true);
+        debugPt(vI, 0.05, true);
         debugLn(edge.start, edge.end, 0.4, 0);
       }
 
       if (logEvent && lnodeV.processed) console.log("DISCARD");
       if (lnodeV.processed) continue;
+
+      if (ct >= lim) {
+        debugLAV(lnodeV, 5, 250, true, 0, false, 0.1);
+      }
 
       // true if intersection is on the start/end bisectors, respectively
       var startSplit = !!(eventType & SSEventTypes.startSplitEvent);
@@ -680,6 +716,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       // see which LAV nodes F are associated with the edge - choose one of
       // these to split
+
       for (var lidx of edge.lnodes) {
         var lnodeF = lnodes[lidx];
         var lnodeS = lnodeF.next;
@@ -688,16 +725,21 @@ StraightSkeleton.prototype.buildInterior = function() {
         var vFoffset = vF.clone().add(lnodeF.bisector);
         var vSoffset = vS.clone().add(lnodeS.bisector);
 
+        lnodeA = lnodeF;
+
+        if (ct >= lim) {
+          debugLn(vF, vS, 0.1, 2, true);
+        }
+
         // intersection must be within the sweep area between F and S
         if (left(vF, vFoffset, vI, axis, epsilon)) continue;
         if (left(vSoffset, vS, vI, axis, epsilon)) continue;
 
-        lnodeA = lnodeF;
         break;
       }
 
       if (!lnodeA) {
-        if (logEvent) console.log("FAILED TO FIND SPLIT EDGE START");
+        console.log(ct, "FAILED TO FIND SPLIT EDGE START");
         continue;
       }
 
@@ -834,6 +876,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   }
 
   debugSkeleton();
+  debugFaces(this.hefactory.halfedges);
 
   function debugPQ() {
     while (pq.length>0) {
@@ -878,6 +921,54 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (iterativelyShiftSkeleton) offset += -0.1;
     }
     debugLines();
+  }
+
+  function debugFaces(halfedges) {
+    var seen = new Array(halfedges.length);
+    seen.fill(false);
+
+    for (var h=0; h<halfedges.length; h++) {
+      var hestart = halfedges[h];
+
+      if (seen[h]) continue;
+
+      var level = h/2 + 1;
+
+      var he = hestart;
+      do {
+        seen[he.id] = true;
+        var vs = he.nstart().v.clone();
+        var ve = he.nend().v.clone();
+        vs.z += level;
+        ve.z += level;
+        debugLn(vs, ve, 0, 5);
+
+        he = he.next;
+      } while (he != hestart);
+    }
+  }
+
+  function debugRoof(halfedges) {
+    var seen = new Array(halfedges.length);
+    seen.fill(false);
+
+    for (var h=0; h<halfedges.length; h++) {
+      var hestart = halfedges[h];
+
+      if (seen[h]) continue;
+
+      var he = hestart;
+      do {
+        seen[he.id] = true;
+        var vs = he.nstart().v.clone();
+        var ve = he.nend().v.clone();
+        vs.z += he.nstart().L;
+        ve.z += he.nend().L;
+        debugLn(vs, ve, 0, 5);
+
+        he = he.next;
+      } while (he != hestart);
+    }
   }
 
   function validateEdges(edges, lnodes) {
@@ -973,9 +1064,10 @@ StraightSkeleton.prototype.buildInterior = function() {
     debugLn(v, vo, o, c, dir);
   }
 
-  function debugLAV(lnode, c, maxct, bisectors, increment, edges) {
+  function debugLAV(lnode, c, maxct, bisectors, increment, edges, blength) {
     if (maxct === undefined) maxct = Infinity;
     if (increment === undefined) increment = 0.05;
+    if (blength === undefined) blength = 0.2;
 
     if (lnode.processed) return;
 
@@ -987,7 +1079,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       c = c===undefined ? 0 : c;
       debugLn(lv.v, lv.next.v, o, c, false);
       //debugPt(lv.v, o-increment, true, c);
-      if (bisectors && lv.bisector) debugRay(lv.v, lv.bisector, o, c+2, 0.1);
+      if (bisectors && lv.bisector) debugRay(lv.v, lv.bisector, o, c+2, blength);
       if (edges) {
         var efCenter = lv.ef.start.clone().add(lv.ef.end).multiplyScalar(0.5);
         var ebCenter = lv.eb.start.clone().add(lv.eb.end).multiplyScalar(0.5);
