@@ -234,15 +234,33 @@ SSEdgeFactory.prototype.create = function(he) {
 
 
 // represents a node in a circular, double-linked list of active vertices
-function SSLAVNode(he) {
+// params:
+//  node: the skeleton node to which this LAV node is attached
+//  isolated: normally, a LAV is contained inside a CCW loop of halfedges,
+//    such that the loop is closed and some/all of its nodes lie on the skeleton
+//    vertex nodes; however, in the case of a normal split event (see Felkel),
+//    the LAV node formed to the "left" of the intersection doesn't have a CCW
+//    halfedge that starts on its corresponding skeleton node and whose
+//    following skeleton nodes are also in the "left" LAV - we still have a
+//    halfedge, but it leads into the "right" LAV.
+//    => isolated is set to true in this case; when connecting to this LAV node,
+//    we'll use this.he.twin.next instead this.he, which will get us the
+//    halfedge, if any, that's closer counterclockwise to the "left" LAV than
+//    the original halfedge emanating from the skeleton node at the intersection
+function SSLAVNode(node, isolated) {
   this.id = -1;
 
+  // skeleton node
+  this.node = node;
+
   // skeleton halfedge that starts at this vertex
-  this.he = he;
+  this.he = node.halfedge;
   // for ease of access
-  this.v = he.node.v;
-  this.L = he.node.L;
-  this.reflex = he.node.reflex;
+  this.v = node.v;
+  this.L = node.L;
+  this.reflex = node.reflex;
+
+  this.isolated = isolated === true;
 
   // prev/next nodes in lav
   this.prev = null;
@@ -261,7 +279,7 @@ function SSLAVNode(he) {
 
 SSLAVNode.prototype.setProcessed = function() {
   // unlink this LAV node's edge from this node
-  this.ef.removeNode(this);
+  if (this.ef) this.ef.removeNode(this);
   // set flag
   this.processed = true;
 }
@@ -280,13 +298,38 @@ SSLAVNode.prototype.setEdgeBackward = function(edge) {
   this.eb = edge;
 }
 
+// connect the skeleton node at this LAV node to that at the target LAV node and
+// sets the target's halfedge to the resulting halfedge; the halfedge returned
+// by the connector goes in the opposite direction, so ensure that the halfedge
+// winds CCW around the narrowed subpolygon by calling this in the right
+// source-target order;
+// e.g., if we have an edge event at LAV nodes A and B (A CW from B), we first
+// make skeleton node I at the intersection, put a new LAV node there, then
+// connect A to I, then B to I
+SSLAVNode.prototype.connect = function(target, connector) {
+  // see the description of the .isolated parameter in SSLAVNode constructor
+  var heSource = this.isolated ? this.he.twin.next : this.he;
+
+  if (!target.he) {
+    target.he = connector.connectHalfedgeToNode(heSource, target.node);
+  }
+  else {
+    var heTarget = target.isolated ? target.he.twin.next : target.he;
+
+    target.he = connector.connectHalfedgeToHalfedge(heSource, heTarget);
+  }
+
+  this.isolated = false;
+  target.isolated = false;
+}
+
 function SSLAVNodeFactory() {
   this.id = 0;
   this.lnodes = [];
 }
 
-SSLAVNodeFactory.prototype.create = function(he) {
-  var lnode = new SSLAVNode(he);
+SSLAVNodeFactory.prototype.create = function(node, isolated) {
+  var lnode = new SSLAVNode(node, isolated);
 
   this.lnodes.push(lnode);
   lnode.id = this.id++;
@@ -472,14 +515,14 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 510000;
+  var lim = 1700;
   var t = true, f = false;
-  var limitIterations = f;
+  var limitIterations = t;
   var skeletonShiftDistance = 0;
   var iterativelyShiftSkeleton = f;
-  var validate = f;
+  var validate = t;
 
-  var logEvent = f;
+  var logEvent = t;
 
   var prevL = 0;
 
@@ -552,6 +595,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.2, true);
         debugPt(vI, 0.3, true);
+        debugLAV(lnodeB, 2, 250, true, 0);
       }
 
       if (logEvent && (procA && procB)) console.log("DISCARD");
@@ -567,8 +611,15 @@ StraightSkeleton.prototype.buildInterior = function() {
         continue;
       }
 
-      if (this.handlePeak(lnodeA, vI, event.L)) continue;
-      if (this.handlePeak(lnodeB, vI, event.L)) continue;
+      //if (ct>=lim) break;
+      if (this.handlePeak(lnodeA, vI, event.L)) {
+        if (logEvent) console.log("PEAK A");
+        continue;
+      }
+      if (this.handlePeak(lnodeB, vI, event.L)) {
+        if (logEvent) console.log("PEAK B");
+        continue;
+      }
 
       // the LAV node at the bisector intersection
       var lnodeI = null;
@@ -580,10 +631,11 @@ StraightSkeleton.prototype.buildInterior = function() {
 
         if (!equal(lnodeB.prev.L, event.L, epsilon)) continue;
 
-        //if (lnodeA.next != lnodeB) continue;
-
         lnodeI = lnodeB.prev;
-        //if (less(lnodeI.L, lnodeB.L, epsilon)) continue;
+
+        if (ct>=lim) {
+          console.log(lnodeA.isolated, lnodeB.isolated, lnodeI.isolated);
+        }
 
         // connect
         lnodeI.next = lnodeB.next;
@@ -592,7 +644,8 @@ StraightSkeleton.prototype.buildInterior = function() {
         lnodeI.setEdgeForward(lnodeB.ef);
         lnodeB.setProcessed();
 
-        lnodeI.he = connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeI.he);
+        lnodeB.connect(lnodeI, connector);
+        //lnodeI.he = connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeI.he);
       }
       // if A is not processed and B is processed
       else if (procB) {
@@ -600,10 +653,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
         if (!equal(lnodeA.next.L, event.L, epsilon)) continue;
 
-        //if (lnodeB.prev != lnodeA) continue;
-
         lnodeI = lnodeA.next;
-        //if (less(lnodeI.L, lnodeA.L, epsilon)) continue;
 
         lnodeI.prev = lnodeA.prev;
         lnodeA.prev.next = lnodeI;
@@ -611,7 +661,8 @@ StraightSkeleton.prototype.buildInterior = function() {
         lnodeI.setEdgeBackward(lnodeA.eb);
         lnodeA.setProcessed();
 
-        connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeI.he);
+        lnodeI.connect(lnodeA, connector);
+        //connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeI.he);
       }
       else {
         if (procA) lnodeA = lnodeB.prev;
@@ -620,18 +671,20 @@ StraightSkeleton.prototype.buildInterior = function() {
         // new node at intersection
         var nI = nfactory.create(vI, event.L);
 
+        // make a new LAV node at the intersection
+        lnodeI = lfactory.create(nI);
+
         // link A to I
-        var heA = lnodeA.he;
-        var heIA = connector.connectHalfedgeToNode(heA, nI);
+        lnodeA.connect(lnodeI, connector);
+        //var heA = lnodeA.he;
+        //var heIA = connector.connectHalfedgeToNode(heA, nI);
         lnodeA.setProcessed();
 
         // link B to I
-        var heB = lnodeB.he;
-        var heIB = connector.connectHalfedgeToHalfedge(heB, heIA);
+        lnodeB.connect(lnodeI, connector);
+        //var heB = lnodeB.he;
+        //var heIB = connector.connectHalfedgeToHalfedge(heB, heIA);
         lnodeB.setProcessed();
-
-        // make a new LAV node at the intersection
-        lnodeI = lfactory.create(heIB);
 
         var newprev = lnodeA.prev;
         var newnext = lnodeB.next;
@@ -661,7 +714,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         }
       }
 
-      if (ct >= lim) {
+      if (false && ct >= lim) {
         debugLAV(lnodeI, 2, 250, true, 0.0);
       }
     }
@@ -727,10 +780,6 @@ StraightSkeleton.prototype.buildInterior = function() {
 
         lnodeA = lnodeF;
 
-        if (ct >= lim) {
-          debugLn(vF, vS, 0.1, 2, true);
-        }
-
         // intersection must be within the sweep area between F and S
         if (left(vF, vFoffset, vI, axis, epsilon)) continue;
         if (left(vSoffset, vS, vI, axis, epsilon)) continue;
@@ -745,7 +794,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       var lnodeB = lnodeA.next;
 
-      if (ct >= lim) {
+      if (false && ct >= lim) {
         debugPt(lnodeA.v, 0.2, true);
         debugPt(lnodeB.v, 0.2, true);
         debugPt(vI, 0.3, true);
@@ -762,31 +811,39 @@ StraightSkeleton.prototype.buildInterior = function() {
       var nI = nfactory.create(vI, event.L);
 
       // halfedge from V
-      var heV = lnodeV.he;
-
-      // connect V to I
-      var heIV = connector.connectHalfedgeToNode(heV, nI);
-      lnodeV.setProcessed();
+      //var heV = lnodeV.he;
 
       // split the LAV in two by creating two new LAV nodes at the intersection
       // and linking their neighbors and the split edge's endpoints accordingly
 
       // new LAV node on the A-N side of I (right node is always at the start
       // of the IV halfedge)
-      var lnodeRight = lfactory.create(heIV);
-      // new LAV node on the M-B side of I
-      var lnodeLeft = null;
+      var lnodeRight = lfactory.create(nI);
+
+      // connect V to I
+      lnodeV.connect(lnodeRight, connector);
+      //var heIV = connector.connectHalfedgeToNode(heV, nI);
+      lnodeV.setProcessed();
+
+      // new LAV node on the P-B side of I; pass the isolated param as true to
+      // ensure correct halfedge links
+      var lnodeLeft = lfactory.create(nI, true);
 
       // if intersection is on A or B bisector, link I to one or both and make
       // the left LAV node accordingly
-      if (startSplit && endSplit) {
-        var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
-        var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIA);
-        lnodeLeft = lfactory.create(heIB);
+      if (startSplit) lnodeRight.connect(lnodeA, connector);
+      if (endSplit) lnodeB.connect(lnodeLeft, connector);
+
+      /*if (startSplit && endSplit) {
+        lnodeRight.connect(lnodeA, connector);
+        lnodeB.connect(lnodeLeft, connector);
+        //var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
+        //var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIA);
+        //lnodeLeft = lfactory.create(heIB);
       }
       else if (startSplit) {
-        var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
-        lnodeLeft = lfactory.create(heIA);
+        //var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
+        //lnodeLeft = lfactory.create(heIA);
       }
       else if (endSplit) {
         var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIV);
@@ -799,7 +856,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         // possibly fix by tracking the *incoming* halfedge instead and, when we
         // try to connect to a LAV node with such an edge, use its next instead.
         // shouldn't be important for offsetting, though.
-      }
+      }*/
 
       // link the new LAV nodes accounting for the possibility that A and/or B
       // were eliminated by an exact bisector intersection
@@ -838,14 +895,13 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       // final processing:
       // 1. if V is adjacent to A/B, link A/B to the right/left node, resp.;
-      // 2. if one or both of the split LAVs incident on I ended up being
-      // degenerate (containing only two verts), just link those two verts with
-      // a halfedge;
-      // 3. else, calculate bisectors and potential new events
+      // 2. else, calculate bisectors and potential new events
 
       // A-N side of I
       if (lnodeN == lnodeA) {
-        connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeRight.he);
+        var sin = lnodeRight.he.prev();
+        lnodeRight.connect(lnodeA, connector);
+        //connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeRight.he);
         lnodeA.setProcessed();
         lnodeRight.setProcessed();
         if (logEvent) console.log("right split empty");
@@ -858,7 +914,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       // P-B side of I
       if (lnodeP == lnodeB) {
-        connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeLeft.he);
+        lnodeB.connect(lnodeLeft, connector);
+        //connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeLeft.he);
         lnodeB.setProcessed();
         lnodeLeft.setProcessed();
         if (logEvent) console.log("left split empty");
@@ -868,7 +925,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         this.queueEvent(eventLeft);
       }
 
-      if (ct >= lim) {
+      if (false && ct >= lim) {
         if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0.02)
         if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0.02);
       }
@@ -877,30 +934,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
   debugSkeleton();
   debugFaces(this.hefactory.halfedges);
-
-  function debugPQ() {
-    while (pq.length>0) {
-      var event = pq.dequeue();
-      var lnodeV = event.lnode;
-      var lnodeE = event.otherNode;
-
-      var lnodeA, lnodeB;
-
-      // if E CW of V
-      if (lnodeE == lnodeV.prev || lnodeE.next == lnodeV) {
-        lnodeA = lnodeE;
-        lnodeB = lnodeV;
-      }
-      // if V CW of E
-      else if (lnodeV == lnodeE.prev || lnodeV.next == lnodeE) {
-        lnodeA = lnodeV;
-        lnodeB = lnodeE;
-      }
-
-      debugLn(lnodeA.v, event.intersection, 2, 2);
-      debugLn(lnodeB.v, event.intersection, 2, 2);
-    }
-  }
+  //debugFace(this.hefactory.halfedges[26], null, 1.75);
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;
@@ -910,6 +944,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       var he = node.halfedge;
       do {
+        if (!he) break;
         var vs = node.v.clone();
         var ve = he.nend().v.clone();
         vs.z += offset;
@@ -934,18 +969,27 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       var level = h/2 + 1;
 
-      var he = hestart;
-      do {
-        seen[he.id] = true;
-        var vs = he.nstart().v.clone();
-        var ve = he.nend().v.clone();
-        vs.z += level;
-        ve.z += level;
-        debugLn(vs, ve, 0, 5);
-
-        he = he.next;
-      } while (he != hestart);
+      debugFace(hestart, seen, level, 0);
     }
+  }
+
+  function debugFace(hestart, seen, level, doff) {
+    if (doff===undefined) doff = 0.01;
+
+    var he = hestart;
+    var off = 0;
+    do {
+      if (seen) seen[he.id] = true;
+      var vs = he.nstart().v.clone();
+      var ve = he.nend().v.clone();
+      vs.z += level + off;
+      ve.z += level + off;
+      debugLn(vs, ve, 0, 5, true);
+
+      off += doff;
+
+      he = he.next;
+    } while (he != hestart);
   }
 
   function debugRoof(halfedges) {
@@ -1139,17 +1183,21 @@ StraightSkeleton.prototype.handlePeak = function(lnode, vI, L) {
 
   var nI = this.nfactory.create(vI, L);
 
+  // create a new LAV node for convenience
+  var lnodeI = this.lfactory.create(nI);
+
   var lnodeA = lnode;
   var lnodeB = lnodeA.next;
   var lnodeC = lnodeB.next;
 
-  var heIA = connector.connectHalfedgeToNode(lnodeA.he, nI);
-  var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIA);
-  connector.connectHalfedgeToHalfedge(lnodeC.he, heIB);
+  lnodeA.connect(lnodeI, connector);
+  lnodeB.connect(lnodeI, connector);
+  lnodeC.connect(lnodeI, connector);
 
   lnodeA.setProcessed();
   lnodeB.setProcessed();
   lnodeC.setProcessed();
+  lnodeI.setProcessed();
 
   return true;
 }
@@ -1174,7 +1222,8 @@ StraightSkeleton.prototype.makeslav = function() {
     var he = hestart;
     do {
       // lav node, implicitly signifies vertex at start of given halfedge
-      var lnode = this.lfactory.create(he);
+      var lnode = this.lfactory.create(he.nstart());
+      lnode.he = he;
 
       if (lav) {
         lnode.prev = lav;
