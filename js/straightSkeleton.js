@@ -26,12 +26,12 @@ SSHalfedge.prototype.rotated = function() {
 }
 
 // true if given value L is between the endpoint offset "height"; excludes the
-// upper bound
+// upper bound and assumes we're only considering "uphill" halfedges
 SSHalfedge.prototype.aliveAt = function(L) {
   var sL = this.nstart().L;
   var eL = this.nend().L;
 
-  return (sL <= L && eL > L) || (eL <= L && sL > L);
+  return sL <= L && eL > L;
 }
 
 // true if the "height" at the end is greater than that at the start
@@ -518,7 +518,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 170000;
+  var lim = 20000;
   var t = true, f = false;
   var limitIterations = f;
   var skeletonShiftDistance = 0;
@@ -576,7 +576,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       // if V crosses both P and N at the same point, the event is degenerate;
       // if degenerate, we'll handle just P and V, then enqueue the V-N half of
       // the event and handle that later
-      var degenerate = lnodeP && lnodeN;
+      var degenerate = !!lnodeP && !!lnodeN;
 
       // set the two nodes such that B is CCW from A
       var lnodeA, lnodeB;
@@ -598,7 +598,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.2, true);
         debugPt(vI, 0.3, true);
-        debugLAV(lnodeB, 2, 250, true, 0);
+        //debugLAV(lnodeB, 2, 250, true, 0);
       }
 
       if (logEvent && (procA && procB)) console.log("DISCARD");
@@ -629,10 +629,6 @@ StraightSkeleton.prototype.buildInterior = function() {
         if (!equal(lnodeB.prev.L, event.L, epsilon)) continue;
 
         lnodeI = lnodeB.prev;
-
-        if (ct>=lim) {
-          console.log(lnodeA.isolated, lnodeB.isolated, lnodeI.isolated);
-        }
 
         // connect
         lnodeI.next = lnodeB.next;
@@ -711,8 +707,8 @@ StraightSkeleton.prototype.buildInterior = function() {
         }
       }
 
-      if (false && ct >= lim) {
-        debugLAV(lnodeI, 2, 250, true, 0.0);
+      if (ct >= lim) {
+        debugLAV(lnodeI, 2, 250, true, 0.0, true);
       }
     }
 
@@ -754,7 +750,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (lnodeV.processed) continue;
 
       if (ct >= lim) {
-        debugLAV(lnodeV, 5, 250, true, 0, false, 0.1);
+        //debugLAV(lnodeV, 5, 250, true, 0, false, 0.1);
       }
 
       // true if intersection is on the start/end bisectors, respectively
@@ -831,30 +827,6 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (startSplit) lnodeRight.connect(lnodeA, connector);
       if (endSplit) lnodeB.connect(lnodeLeft, connector);
 
-      /*if (startSplit && endSplit) {
-        lnodeRight.connect(lnodeA, connector);
-        lnodeB.connect(lnodeLeft, connector);
-        //var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
-        //var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIA);
-        //lnodeLeft = lfactory.create(heIB);
-      }
-      else if (startSplit) {
-        //var heIA = connector.connectHalfedgeToHalfedge(lnodeA.he, heIV);
-        //lnodeLeft = lfactory.create(heIA);
-      }
-      else if (endSplit) {
-        var heIB = connector.connectHalfedgeToHalfedge(lnodeB.he, heIV);
-        lnodeLeft = lfactory.create(heIB);
-      }
-      else {
-        lnodeLeft = lfactory.create(heIV);
-        // note to self: bug here? heIV is on the A-N side, so we might break
-        // the edge flow if we try to connect on the P-B side to heIV.
-        // possibly fix by tracking the *incoming* halfedge instead and, when we
-        // try to connect to a LAV node with such an edge, use its next instead.
-        // shouldn't be important for offsetting, though.
-      }*/
-
       // link the new LAV nodes accounting for the possibility that A and/or B
       // were eliminated by an exact bisector intersection
 
@@ -895,26 +867,24 @@ StraightSkeleton.prototype.buildInterior = function() {
       // 2. else, calculate bisectors and potential new events
 
       // A-N side of I
-      if (lnodeN == lnodeA) {
-        var sin = lnodeRight.he.prev();
-        lnodeRight.connect(lnodeA, connector);
-        //connector.connectHalfedgeToHalfedge(lnodeA.he, lnodeRight.he);
-        lnodeA.setProcessed();
+      if (lnodeRight.next.next == lnodeRight) {
+        lnodeRight.connect(lnodeRight.next, connector);
+
         lnodeRight.setProcessed();
+        lnodeRight.next.setProcessed();
         if (logEvent) console.log("right split empty");
       }
-      // else, update bisectors and events
       else {
         var eventRight = this.computeEdgeEvent(lnodeRight);
         this.queueEvent(eventRight);
       }
 
       // P-B side of I
-      if (lnodeP == lnodeB) {
-        lnodeB.connect(lnodeLeft, connector);
-        //connector.connectHalfedgeToHalfedge(lnodeB.he, lnodeLeft.he);
-        lnodeB.setProcessed();
+      if (lnodeLeft.next.next == lnodeLeft) {
+        lnodeLeft.next.connect(lnodeLeft, connector);
+
         lnodeLeft.setProcessed();
+        lnodeLeft.next.setProcessed();
         if (logEvent) console.log("left split empty");
       }
       else {
@@ -922,18 +892,23 @@ StraightSkeleton.prototype.buildInterior = function() {
         this.queueEvent(eventLeft);
       }
 
-      if (false && ct >= lim) {
-        if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0.02)
-        if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0.02);
+      if (ct >= lim) {
+        debugPt(lnodeA.v, 0.5);
+        debugPt(lnodeB.v, 0.6);
+        console.log(lnodeP, lnodeB);
+        //if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0)
+        if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0);
       }
     }
   }
 
-  //debugSkeleton();
+  debugSkeleton();
+  //debugFaces(this.hefactory.halfedges);
 
+  var limoffset = 100;
   var offset = 0;
-  var doffset = 0.1;
-  while (offset < 100) {
+  var doffset = 0.05;
+  while (offset < limoffset) {
     var curves = this.generateOffsetCurve(doffset*(++offset));
 
     if (curves.length == 0) break;
@@ -941,7 +916,7 @@ StraightSkeleton.prototype.buildInterior = function() {
     for (var i=0; i<curves.length; i++) {
       var curve = curves[i];
       for (var j=0; j<curve.length; j++) {
-        debugLn(curve[j], curve[(j+1+curve.length)%curve.length], 0, 1);
+        debugLn(curve[j], curve[(j+1+curve.length)%curve.length], 0, (offset%5==0)?6:1);
       }
     }
   }
@@ -966,6 +941,36 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (iterativelyShiftSkeleton) offset += -0.1;
     }
     debugLines();
+  }
+
+  function validateFaces(halfedges) {
+    var seen = new Array(halfedges.length);
+    seen.fill(false);
+
+    var nseen = new Set();
+
+    var valid = true;
+
+    for (var h=0; h<halfedges.length; h++) {
+      var hestart = halfedges[h];
+
+      if (seen[h]) continue;
+
+      var he = hestart;
+      do {
+        if (nseen.has(he.nstart().id)) {
+          valid = false;
+          console.log("LOOP DETECTED");
+        }
+
+        nseen.add(he.nstart().id);
+        seen[he.id] = true;
+
+        he = he.next;
+      } while (he != hestart);
+    }
+
+    return valid;
   }
 
   function debugFaces(halfedges) {
@@ -1139,7 +1144,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       c = c===undefined ? 0 : c;
       debugLn(lv.v, lv.next.v, o, c, false);
       //debugPt(lv.v, o-increment, true, c);
-      if (bisectors && lv.bisector) debugRay(lv.v, lv.bisector, o, c+2, blength);
+      if (bisectors) debugRay(lv.v, lv.bisector, o, c+2, blength);
       if (edges) {
         var efCenter = lv.ef.start.clone().add(lv.ef.end).multiplyScalar(0.5);
         var ebCenter = lv.eb.start.clone().add(lv.eb.end).multiplyScalar(0.5);
