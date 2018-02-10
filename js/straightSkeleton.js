@@ -34,9 +34,9 @@ SSHalfedge.prototype.aliveAt = function(L) {
   return (sL <= L && eL > L) || (eL <= L && sL > L);
 }
 
-// true if the "height" at the start is greater than at the end
-SSHalfedge.prototype.downhill = function() {
-  return this.nstart().L > this.nend().L;
+// true if the "height" at the end is greater than that at the start
+SSHalfedge.prototype.uphill = function() {
+  return this.nstart().L < this.nend().L;
 }
 
 // returns the point along the halfedge that has the given "height"
@@ -406,14 +406,17 @@ function StraightSkeleton(poly) {
   // used for optimization
   this.hasHoles = poly.holes.length > 0;
 
-  // array of halfedges, one per separate contour
-  this.entryHalfedges = [];
-
   this.nfactory = new SSNodeFactory();
   this.hefactory = new SSHalfedgeFactory();
   this.connector = new SSConnector(this.nfactory, this.hefactory);
   this.lfactory = new SSLAVNodeFactory();
   this.efactory = new SSEdgeFactory();
+
+  // array of halfedges, one per separate contour
+  this.entryHalfedges = [];
+
+  // all halfedges in the skeleton
+  this.halfedges = this.hefactory.halfedges;
 
   this.makePQ();
 
@@ -515,14 +518,14 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 1700;
+  var lim = 170000;
   var t = true, f = false;
-  var limitIterations = t;
+  var limitIterations = f;
   var skeletonShiftDistance = 0;
   var iterativelyShiftSkeleton = f;
   var validate = t;
 
-  var logEvent = t;
+  var logEvent = f;
 
   var prevL = 0;
 
@@ -612,14 +615,8 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       //if (ct>=lim) break;
-      if (this.handlePeak(lnodeA, vI, event.L)) {
-        if (logEvent) console.log("PEAK A");
-        continue;
-      }
-      if (this.handlePeak(lnodeB, vI, event.L)) {
-        if (logEvent) console.log("PEAK B");
-        continue;
-      }
+      if (this.handlePeak(lnodeA, vI, event.L)) continue;
+      if (this.handlePeak(lnodeB, vI, event.L)) continue;
 
       // the LAV node at the bisector intersection
       var lnodeI = null;
@@ -932,9 +929,22 @@ StraightSkeleton.prototype.buildInterior = function() {
     }
   }
 
-  debugSkeleton();
-  debugFaces(this.hefactory.halfedges);
-  //debugFace(this.hefactory.halfedges[26], null, 1.75);
+  //debugSkeleton();
+
+  var offset = 0;
+  var doffset = 0.1;
+  while (offset < 100) {
+    var curves = this.generateOffsetCurve(doffset*(++offset));
+
+    if (curves.length == 0) break;
+
+    for (var i=0; i<curves.length; i++) {
+      var curve = curves[i];
+      for (var j=0; j<curve.length; j++) {
+        debugLn(curve[j], curve[(j+1+curve.length)%curve.length], 0, 1);
+      }
+    }
+  }
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;
@@ -976,10 +986,16 @@ StraightSkeleton.prototype.buildInterior = function() {
   function debugFace(hestart, seen, level, doff) {
     if (doff===undefined) doff = 0.01;
 
+    var nseen = new Set();
+
     var he = hestart;
     var off = 0;
     do {
       if (seen) seen[he.id] = true;
+
+      if (nseen.has(he.nstart().id)) console.log("LOOP DETECTED");
+      nseen.add(he.nstart().id);
+
       var vs = he.nstart().v.clone();
       var ve = he.nend().v.clone();
       vs.z += level + off;
@@ -1172,6 +1188,45 @@ StraightSkeleton.prototype.buildInterior = function() {
   }
 
   return;
+}
+
+StraightSkeleton.prototype.generateOffsetCurve = function(L) {
+  var halfedges = this.hefactory.halfedges;
+  var seen = new Array(halfedges.length);
+  var curves = [];
+
+  seen.fill(false);
+
+  for (var h = 0; h < halfedges.length; h++) {
+    var hestart = halfedges[h];
+
+    if (seen[h] || !hestart.aliveAt(L) || !hestart.uphill()) continue;
+
+    var curve = [];
+
+    // cycle through faces till we hit the starting halfedge again
+    var he = hestart;
+    do {
+      curve.push(he.interpolate(L));
+      seen[he.id] = true;
+      seen[he.twin.id] = true;
+
+      // flip to the next polygon
+      var henext = he.twin;
+      // search for the next halfedge in the polygon that's at the same L
+      do {
+        henext = henext.prev();
+      } while (!henext.aliveAt(L));
+
+      if (henext == he) console.log("FOOOOO");
+
+      he = henext;
+    } while (he != hestart);
+
+    curves.push(curve);
+  }
+
+  return curves;
 }
 
 StraightSkeleton.prototype.handlePeak = function(lnode, vI, L) {
