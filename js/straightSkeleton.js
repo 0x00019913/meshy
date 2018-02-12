@@ -400,15 +400,17 @@ function StraightSkeleton(poly) {
 
   var contours = [poly].concat(poly.holes);
 
-  for (var i=0; i<contours.length; i++) {
-    var contour = contours[i];
-    var c = contour.vertex;
-    do {
-      debugLine(c.v, c.next.v);
-      c = c.next;
-    } while (c!=contour.vertex);
+  if (false) {
+    for (var i=0; i<contours.length; i++) {
+      var contour = contours[i];
+      var c = contour.vertex;
+      do {
+        debugLine(c.v, c.next.v);
+        c = c.next;
+      } while (c!=contour.vertex);
+    }
+    debugLines(1);
   }
-  debugLines(1);
 
   this.axis = axis;
   this.ah = poly.ah;
@@ -535,7 +537,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   var limitIterations = f;
   var skeletonShiftDistance = 0;
   var iterativelyShiftSkeleton = f;
-  var validate = t;
+  var validate = f;
 
   var logEvent = f;
 
@@ -548,7 +550,7 @@ StraightSkeleton.prototype.buildInterior = function() {
     var event = pq.dequeue();
 
     if (less(event.L, prevL, epsilon)) {
-      console.log("EVENT IN WRONG ORDER", prevL, event.L);
+      //console.log("EVENT IN WRONG ORDER", prevL, event.L);
     }
     prevL = Math.max(prevL, event.L);
 
@@ -812,7 +814,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       if (!lnodeA) {
-        console.log(ct, "FAILED TO FIND SPLIT EDGE START");
+        //console.log(ct, "FAILED TO FIND SPLIT EDGE START");
         continue;
       }
 
@@ -932,7 +934,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   //debugSkeleton();
   //debugFaces(this.hefactory.halfe/dges);
 
-  debugRoof(this.hefactory.halfedges);
+  //debugRoof(this.hefactory.halfedges);
 
   var limoffset = 0;
   var offset = 0;
@@ -949,7 +951,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
     }
   }
-  console.log(offset);
+  //console.log(offset);
 
   debugPoints();
 

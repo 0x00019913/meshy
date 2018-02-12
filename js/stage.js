@@ -192,10 +192,10 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
-  this.sliceHeight = .05;
+  this.sliceHeight = .1;
   this.sliceAxis = "z";
   this.printLineWidth = this.sliceHeight;
-  this.sliceNumWalls = 0;
+  this.sliceNumWalls = 2;
   this.sliceFolder = this.gui.addFolder("Slice (beta)");
   this.buildSliceFolderInactive();
 
@@ -362,7 +362,7 @@ Stage.prototype.buildSliceFolderActive = function() {
       ["preview", "layer"]
     ).onChange(this.setSliceMode.bind(this));
 
-    this.sliceSettingsFolder = this.sliceFolder.addFolder("Settings");
+    this.sliceSettingsFolder = this.sliceFolder.addFolder("Layer Settings");
     this.sliceSettingsFolder.add(this, "printLineWidth", 0.001);
     this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).step(1);
     this.sliceSettingsFolder.add(this, "recalculateLayers");
@@ -679,7 +679,7 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  this.activateSliceMode();
+  //this.activateSliceMode();
 
   this.cameraToModel();
   this.filename = this.model.filename;

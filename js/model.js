@@ -763,10 +763,11 @@ Model.prototype.setSliceMeshGeometry = function() {
 
     // if we're adding more vertices than the existing geometry object can
     // contain, recreate the geometry
-    if (sliceVertices.length > mesh.geometry.vertices.length) {
-      mesh.geometry = new THREE.Geometry();
-    }
+    mesh.geometry = new THREE.Geometry();
     mesh.geometry.vertices = sliceVertices;
+
+    mesh.geometry.verticesNeedUpdate = true;
+    mesh.geometry.lineDistancesNeedUpdate = true;
   }
 }
 
