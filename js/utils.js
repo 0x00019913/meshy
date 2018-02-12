@@ -295,36 +295,38 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
 //
 // NB: returns null if intersection is "behind" s's origin, but not necessarily
 // if intersection is "behind" t's origin
-function rayLineIntersection(s, t, sd, td, axis) {
+function rayLineIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
   var det = sd[ah]*td[av] - sd[av]*td[ah];
   // lines are exactly parallel, so no intersection
-  if (det == 0) return null;
+  if (equal(det, 0, epsilon)) return null;
 
   var dh = t[ah] - s[ah];
   var dv = t[av] - s[av];
 
   var u = (td[av]*dh - td[ah]*dv) / det;
   // rays diverge, so intersection is "behind" ray a's origin
-  if (u < 0) return null;
+  if (less(u, 0, epsilon)) return null;
 
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
 // same as rayLineIntersection, but doesn't check bounds on either ray
-function lineLineIntersection(s, t, sd, td, axis) {
+function lineLineIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
   var det = sd[ah]*td[av] - sd[av]*td[ah];
   // lines are exactly parallel, so no intersection
-  if (det == 0) return null;
+  if (equal(det, 0, epsilon)) return null;
 
   var dh = t[ah] - s[ah];
   var dv = t[av] - s[av];
@@ -336,27 +338,28 @@ function lineLineIntersection(s, t, sd, td, axis) {
 
 // same as rayLineIntersection, but also checks that the intersection is between
 // t and t+td
-function raySegmentIntersection(s, t, sd, td, axis) {
+function raySegmentIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.00001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
   var det = sd[ah]*td[av] - sd[av]*td[ah];
   // lines are exactly parallel, so no intersection
-  if (det == 0) return null;
+  if (equal(det, 0, epsilon)) return null;
 
   var dh = t[ah] - s[ah];
   var dv = t[av] - s[av];
 
   var u = (td[av]*dh - td[ah]*dv) / det;
   // rays diverge, so intersection is "behind" ray a's origin
-  if (u < 0) return null;
+  if (less(u, 0, epsilon)) return null;
 
   var v = (sd[av]*dh - sd[ah]*dv) / det;
 
   // v is outside the segment bounds
-  if (v < 0 || v > 1) return null;
+  if (less(v, 0, epsilon) || greater(v, 1, epsilon)) return null;
 
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
@@ -406,7 +409,7 @@ function left(a, b, c, axis, epsilon) {
   var area = triangleArea(a, b, c, axis);
 
   // false because collinear and left comparison is exclusive
-  if (Math.abs(area) < epsilon) return false;
+  if (equal(area, 0, epsilon)) return false;
 
   return area > 0;
 }
@@ -419,7 +422,7 @@ function leftOn(a, b, c, axis, epsilon) {
   var area = triangleArea(a, b, c, axis);
 
   // true because collinear and left comparison is inclusive
-  if (Math.abs(area) < epsilon) return true;
+  if (equal(area, 0, epsilon)) return true;
 
   return area > 0;
 }
