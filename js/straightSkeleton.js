@@ -530,7 +530,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 29700;
+  var lim = 230000;
   var t = true, f = false;
   var limitIterations = f;
   var skeletonShiftDistance = 0;
@@ -547,7 +547,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
     var event = pq.dequeue();
 
-    if (logEvent && less(event.L, prevL, epsilon)) {
+    if (less(event.L, prevL, epsilon)) {
       console.log("EVENT IN WRONG ORDER", prevL, event.L);
     }
     prevL = Math.max(prevL, event.L);
@@ -610,7 +610,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.2, true);
         debugPt(vI, 0.3, true);
-        debugLAV(lnodeA, 2, 250, true, 0);
+        debugLAV(lnodeA, 4, 250, true, 0, false);
       }
 
       if (logEvent && (procA && procB)) console.log("DISCARD");
@@ -643,7 +643,12 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (procA) {
         if (logEvent) console.log("A PROCESSED");
 
-        if (!equal(lnodeB.prev.L, event.L, epsilon)) continue;
+        if (!equal(lnodeB.prev.L, event.L, epsilon)) {
+          if (logEvent) console.log("DISCARD");
+
+          this.queueEvent(this.computeEdgeEvent(lnodeB));
+          continue;
+        }
 
         lnodeI = lnodeB.prev;
 
@@ -661,7 +666,12 @@ StraightSkeleton.prototype.buildInterior = function() {
       else if (procB) {
         if (logEvent) console.log("B PROCESSED");
 
-        if (!equal(lnodeA.next.L, event.L, epsilon)) continue;
+        if (!equal(lnodeA.next.L, event.L, epsilon)) {
+          if (logEvent) console.log("DISCARD");
+
+          this.queueEvent(this.computeEdgeEvent(lnodeA));
+          continue;
+        }
 
         lnodeI = lnodeA.next;
 
@@ -709,6 +719,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       this.computeBisector(lnodeI);
 
+      if (logEvent) debugPt(lnodeI.v, -0.5, true, 1);
+
       if (degenerate) {
         event.prevNode = null;
         this.queueEvent(event);
@@ -716,6 +728,8 @@ StraightSkeleton.prototype.buildInterior = function() {
       else {
         var eventI = this.computeEdgeEvent(lnodeI);
         this.queueEvent(eventI);
+
+        if (logEvent) console.log("L", eventI.L);
 
         if (ct >= lim) {
           if (eventI.prevNode) debugLn(eventI.intersection, eventI.prevNode.v);
@@ -878,6 +892,8 @@ StraightSkeleton.prototype.buildInterior = function() {
       // 1. if V is adjacent to A/B, link A/B to the right/left node, resp.;
       // 2. else, calculate bisectors and potential new events
 
+      if (logEvent) debugPt(vI, -0.5, true, 3);
+
       // A-N side of I
       if (lnodeRight.next.next == lnodeRight) {
         lnodeRight.connect(lnodeRight.next, connector);
@@ -907,15 +923,16 @@ StraightSkeleton.prototype.buildInterior = function() {
       if (ct >= lim) {
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.15, true);
-        if (lnodeRight.next.next != lnodeRight) debugLAV(lnodeRight, 3, 250, true, 0.0)
-        if (lnodeLeft.next.next != lnodeLeft) debugLAV(lnodeLeft, 2, 250, true, 0.0);
+        if (lnodeRight.next.next != lnodeRight) debugLAV(lnodeRight, 3, 2500, true, 0.0)
+        if (lnodeLeft.next.next != lnodeLeft) debugLAV(lnodeLeft, 2, 2500, true, 0.0);
       }
     }
   }
-  debugSkeleton();
-  //debugFaces(this.hefactory.halfedges);
 
-  //debugRoof(this.hefactory.halfedges);
+  //debugSkeleton();
+  //debugFaces(this.hefactory.halfe/dges);
+
+  debugRoof(this.hefactory.halfedges);
 
   var limoffset = 0;
   var offset = 0;

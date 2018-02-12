@@ -359,7 +359,7 @@ Slicer.prototype.computeLayers = function() {
     var layer = layerBuilder.getLayer();
     layerBuilder.clear();
 
-    if (i!=4) continue;
+    //if (i!=4) continue;
 
     layers.push(layer);
   }

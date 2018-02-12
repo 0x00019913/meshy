@@ -14,7 +14,7 @@ Stage = function() {
   // toggles
   this.importEnabled = true;
   this.importingMeshName = "";
-  this.floorVisible = false;
+  this.floorVisible = true;
 
   // geometry
   this.model = null;
