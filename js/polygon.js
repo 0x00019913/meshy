@@ -292,7 +292,7 @@ Polygon.prototype.findVisiblePointFromHole = function(hole) {
       // source, intersection point, and ray source, then might need to update
       // the visible node to the current one
       if (pointInsideTriangle(current.v, S.v, I, M, axis)) {
-        var newEdge = current.v.clone.sub(M).normalize();
+        var newEdge = current.v.clone().sub(M).normalize();
         var newAngle = hEdge.angleTo(newEdge);
 
         if (newAngle < angle) {
@@ -394,6 +394,7 @@ Polygon.prototype.inCone = function(a, b) {
 
 Polygon.prototype.nonintersection = function(a, b) {
   var axis = this.axis;
+  var epsilon = this.epsilon;
   var c = this.vertex;
 
   do {
@@ -401,7 +402,7 @@ Polygon.prototype.nonintersection = function(a, b) {
 
     // only segments not sharing a/b as endpoints can intersect ab segment
     if (c!=a && c!=b && d!=a && d!=b) {
-      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis)) return false;
+      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis, epsilon)) return false;
     }
 
     c = c.next;
