@@ -398,6 +398,18 @@ function StraightSkeleton(poly) {
   var axis = poly.axis;
   var epsilon = poly.epsilon !== undefined ? poly.epsilon : 0.00001;
 
+  var contours = [poly].concat(poly.holes);
+
+  for (var i=0; i<contours.length; i++) {
+    var contour = contours[i];
+    var c = contour.vertex;
+    do {
+      debugLine(c.v, c.next.v);
+      c = c.next;
+    } while (c!=contour.vertex);
+  }
+  debugLines(1);
+
   this.axis = axis;
   this.ah = poly.ah;
   this.av = poly.av;
@@ -518,7 +530,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   this.computeInitialEvents(slav);
 
   var ct = 0;
-  var lim = 20000;
+  var lim = 29700;
   var t = true, f = false;
   var limitIterations = f;
   var skeletonShiftDistance = 0;
@@ -598,7 +610,7 @@ StraightSkeleton.prototype.buildInterior = function() {
         debugPt(lnodeA.v, 0.1, true);
         debugPt(lnodeB.v, 0.2, true);
         debugPt(vI, 0.3, true);
-        //debugLAV(lnodeB, 2, 250, true, 0);
+        debugLAV(lnodeA, 2, 250, true, 0);
       }
 
       if (logEvent && (procA && procB)) console.log("DISCARD");
@@ -615,6 +627,11 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       //if (ct>=lim) break;
+      if (ct>=lim && !lnodeA.processed && lnodeA.next.next.next == lnodeA) {
+        debugRay(lnodeA.v, lnodeA.bisector, 0.1, 0, 0.1, true);
+        debugRay(lnodeA.next.v, lnodeA.next.bisector, 0.1, 0, 0.1, true);
+      }
+
       if (this.handlePeak(lnodeA, vI, event.L)) continue;
       if (this.handlePeak(lnodeB, vI, event.L)) continue;
 
@@ -708,7 +725,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       if (ct >= lim) {
-        debugLAV(lnodeI, 2, 250, true, 0.0, true);
+        debugLAV(lnodeI, 2, 250, true, 0.0);
       }
     }
 
@@ -741,16 +758,16 @@ StraightSkeleton.prototype.buildInterior = function() {
       var edge = event.edge;
 
       if (ct >= lim) {
-        debugPt(lnodeV.v, 0.1, true);
-        debugPt(vI, 0.05, true);
-        debugLn(edge.start, edge.end, 0.4, 0);
+        debugPt(lnodeV.v, 0.05, true);
+        debugPt(vI, 0.1, true);
+        debugLn(edge.start, edge.end, 0.05, 0);
       }
 
       if (logEvent && lnodeV.processed) console.log("DISCARD");
       if (lnodeV.processed) continue;
 
       if (ct >= lim) {
-        //debugLAV(lnodeV, 5, 250, true, 0, false, 0.1);
+        //debugLAV(lnodeV, 5, 250, true, 0, false);
       }
 
       // true if intersection is on the start/end bisectors, respectively
@@ -787,14 +804,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       var lnodeB = lnodeA.next;
 
-      if (false && ct >= lim) {
-        debugPt(lnodeA.v, 0.2, true);
-        debugPt(lnodeB.v, 0.2, true);
-        debugPt(vI, 0.3, true);
-      }
-
-      if (logEvent && (lnodeA.processed && lnodeB.processed)) console.log("UPDATE: DISCARD");
-      if (lnodeA.processed && lnodeB.processed) continue;
+      if (logEvent && (lnodeA.processed || lnodeB.processed)) console.log("UPDATE: DISCARD");
+      if (lnodeA.processed || lnodeB.processed) continue;
 
       // V's predecessor and successor
       var lnodeP = lnodeV.prev;
@@ -830,7 +841,8 @@ StraightSkeleton.prototype.buildInterior = function() {
       // link the new LAV nodes accounting for the possibility that A and/or B
       // were eliminated by an exact bisector intersection
 
-      // I's neighbors depend on whether a start/end split occurred
+      // I's neighbors depend on whether a start/end split occurred:
+
       // prev node on A-I-N side
       var lnodeRPrev = startSplit ? lnodeA.prev : lnodeA;
       // next node on P-I-B side
@@ -893,21 +905,21 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
 
       if (ct >= lim) {
-        debugPt(lnodeA.v, 0.5);
-        debugPt(lnodeB.v, 0.6);
-        console.log(lnodeP, lnodeB);
-        //if (lnodeN != lnodeA) debugLAV(lnodeRight, 7, 250, true, 0)
-        if (lnodeP != lnodeB) debugLAV(lnodeLeft, 6, 250, true, 0);
+        debugPt(lnodeA.v, 0.1, true);
+        debugPt(lnodeB.v, 0.15, true);
+        if (lnodeRight.next.next != lnodeRight) debugLAV(lnodeRight, 3, 250, true, 0.0)
+        if (lnodeLeft.next.next != lnodeLeft) debugLAV(lnodeLeft, 2, 250, true, 0.0);
       }
     }
   }
-
   debugSkeleton();
   //debugFaces(this.hefactory.halfedges);
 
-  var limoffset = 100;
+  //debugRoof(this.hefactory.halfedges);
+
+  var limoffset = 0;
   var offset = 0;
-  var doffset = 0.05;
+  var doffset = .5;
   while (offset < limoffset) {
     var curves = this.generateOffsetCurve(doffset*(++offset));
 
@@ -920,6 +932,9 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
     }
   }
+  console.log(offset);
+
+  debugPoints();
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;
@@ -932,8 +947,8 @@ StraightSkeleton.prototype.buildInterior = function() {
         if (!he) break;
         var vs = node.v.clone();
         var ve = he.nend().v.clone();
-        vs.z += offset;
-        ve.z += offset;
+        vs[axis] += offset;
+        ve[axis] += offset;
         debugLine(vs, ve);
 
         he = he.rotated();
@@ -1003,8 +1018,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
       var vs = he.nstart().v.clone();
       var ve = he.nend().v.clone();
-      vs.z += level + off;
-      ve.z += level + off;
+      vs[axis] += level + off;
+      ve[axis] += level + off;
       debugLn(vs, ve, 0, 5, true);
 
       off += doff;
@@ -1027,8 +1042,8 @@ StraightSkeleton.prototype.buildInterior = function() {
         seen[he.id] = true;
         var vs = he.nstart().v.clone();
         var ve = he.nend().v.clone();
-        vs.z += he.nstart().L;
-        ve.z += he.nend().L;
+        vs[axis] += he.nstart().L;
+        ve[axis] += he.nend().L;
         debugLn(vs, ve, 0, 5);
 
         he = he.next;
@@ -1100,7 +1115,7 @@ StraightSkeleton.prototype.buildInterior = function() {
     if (c===undefined) c = 0;
 
     var vcopy = v.clone();
-    vcopy.z += o;
+    vcopy[axis] += o;
     debugVertex(vcopy);
 
     if (includeStart) {
@@ -1115,8 +1130,8 @@ StraightSkeleton.prototype.buildInterior = function() {
 
     var vcopy = v.clone();
     var wcopy = w.clone();
-    vcopy.z += o;
-    wcopy.z += o;
+    vcopy[axis] += o;
+    wcopy[axis] += o;
 
     if (dir) debugLine(vcopy, wcopy, 10, true);
     else debugLine(vcopy, wcopy);
@@ -1132,7 +1147,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   function debugLAV(lnode, c, maxct, bisectors, increment, edges, blength) {
     if (maxct === undefined) maxct = Infinity;
     if (increment === undefined) increment = 0.05;
-    if (blength === undefined) blength = 0.2;
+    if (blength === undefined) blength = 0.05;
 
     if (lnode.processed) return;
 
@@ -1144,7 +1159,7 @@ StraightSkeleton.prototype.buildInterior = function() {
       c = c===undefined ? 0 : c;
       debugLn(lv.v, lv.next.v, o, c, false);
       //debugPt(lv.v, o-increment, true, c);
-      if (bisectors) debugRay(lv.v, lv.bisector, o, c+2, blength);
+      if (bisectors) debugRay(lv.v, lv.bisector, o, c+1, blength);
       if (edges) {
         var efCenter = lv.ef.start.clone().add(lv.ef.end).multiplyScalar(0.5);
         var ebCenter = lv.eb.start.clone().add(lv.eb.end).multiplyScalar(0.5);
@@ -1172,24 +1187,6 @@ StraightSkeleton.prototype.buildInterior = function() {
       debugLAV(lnode, c, 250, true, oo);
     }
     console.log(ddct);
-  }
-
-  function debugEvent(lnode) {
-    var evt = lnode.eventType;
-    var en = lnode.otherNode;
-    if (evt&SSEventTypes.edgeEvent) {
-      debugPt(lnode.v, -0.1, true, 0);
-      debugPt(en.v, -0.1, true, 0);
-      var eef = en.ef;
-      debugLn(eef.start, eef.end, -0.1, 0, true);
-      debugPt(lnode.intersection, -0.2, true, 0);
-    }
-    else if (evt&SSEventTypes.splitEvent) {
-      debugPt(lnode.v, -0.2, true, 1);
-      var eef = lnode.otherNode.ef;
-      debugLn(eef.start, eef.end, -0.2, 1, true);
-      debugPt(lnode.intersection, -0.3, true, 1);
-    }
   }
 
   return;
@@ -1223,8 +1220,6 @@ StraightSkeleton.prototype.generateOffsetCurve = function(L) {
         henext = henext.prev();
       } while (!henext.aliveAt(L));
 
-      if (henext == he) console.log("FOOOOO");
-
       he = henext;
     } while (he != hestart);
 
@@ -1235,28 +1230,35 @@ StraightSkeleton.prototype.generateOffsetCurve = function(L) {
 }
 
 StraightSkeleton.prototype.handlePeak = function(lnode, vI, L) {
-  var isPeak = !lnode.processed && lnode.next.next.next == lnode;
-
-  if (!isPeak) return false;
+  if (lnode.processed || lnode.next.next.next != lnode) return false;
 
   var connector = this.connector;
 
-  var nI = this.nfactory.create(vI, L);
+  var lnodeX = lnode;
+  var lnodeY = lnodeX.next;
+  var lnodeZ = lnodeY.next;
 
-  // create a new LAV node for convenience
+  var vX = lnodeX.v, vY = lnodeY.v;
+  var bX = lnodeX.bisector, bY = lnodeY.bisector;
+
+  // original intersection vertex might not be the actual intersection point,
+  // so compute an intersection between two of the LAV nodes; however, in
+  // degenerate situations in which the verticess are very close together,
+  // computing a new intersection may fail, so fall back to the old vertex
+  // if necessary
+  var vInew = rayLineIntersection(vX, vY, bX, bY, this.axis, this.epsilon);
+  var nI = this.nfactory.create(vInew === null ? vI : vInew, L);
+
+  // create a new LAV node for uniformity in API usage
   var lnodeI = this.lfactory.create(nI);
 
-  var lnodeA = lnode;
-  var lnodeB = lnodeA.next;
-  var lnodeC = lnodeB.next;
+  lnodeX.connect(lnodeI, connector);
+  lnodeY.connect(lnodeI, connector);
+  lnodeZ.connect(lnodeI, connector);
 
-  lnodeA.connect(lnodeI, connector);
-  lnodeB.connect(lnodeI, connector);
-  lnodeC.connect(lnodeI, connector);
-
-  lnodeA.setProcessed();
-  lnodeB.setProcessed();
-  lnodeC.setProcessed();
+  lnodeX.setProcessed();
+  lnodeY.setProcessed();
+  lnodeZ.setProcessed();
   lnodeI.setProcessed();
 
   return true;
@@ -1369,8 +1371,8 @@ StraightSkeleton.prototype.computeEdgeEvent = function(lnodeV) {
   var vnext = lnext.v;
   var bnext = lnext.bisector;
 
-  var iprev = rayLineIntersection(v, vprev, b, bprev, axis);
-  var inext = rayLineIntersection(v, vnext, b, bnext, axis);
+  var iprev = rayLineIntersection(v, vprev, b, bprev, axis, epsilon);
+  var inext = rayLineIntersection(v, vnext, b, bnext, axis, epsilon);
 
   // 0 if no intersection; 1 if prev closer; 2 if next closer; 1|2==3 if equal
   var intersectionResult = 0;
@@ -1474,7 +1476,7 @@ StraightSkeleton.prototype.computeSplitEvent = function(lnodeV, lav) {
     var enV = (fndotAB < bndotAB) ? efnV : ebnV;
 
     // R is intersection point between the edge from V and the AB line
-    var vR = lineLineIntersection(v, vA, enV, eAB, axis);
+    var vR = lineLineIntersection(v, vA, enV, eAB, axis, epsilon);
 
     if (vR === null) continue;
 
@@ -1488,7 +1490,7 @@ StraightSkeleton.prototype.computeSplitEvent = function(lnodeV, lav) {
     var bRAB = eRV.add(eAB);
 
     // potential split event happens here
-    var vSplit = rayLineIntersection(v, vR, b, bRAB, axis);
+    var vSplit = rayLineIntersection(v, vR, b, bRAB, axis, epsilon);
 
     if (vSplit === null) continue;
 

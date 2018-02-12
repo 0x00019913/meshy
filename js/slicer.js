@@ -1,5 +1,11 @@
 /* slicer.js */
 
+// enum
+var SlicerModes = {
+  preview: 1,
+  layer: 2
+}
+
 var scene; // for debugging, todo: remove
 var debugGeo = new THREE.Geometry();
 var debugLineGeo = new THREE.Geometry();
@@ -15,19 +21,26 @@ function Slicer(sourceVertices, sourceFaces, params) {
 
   this.layerVertices = null;
 
-  this.sliceHeight = 0.5;
-  this.axis = "z";
+  this.layers = null;
+
   this.mode = "preview";
-  this.previewGeometryReady = false;
-  this.layerGeometryReady = false;
+  this.axis = "z";
+  this.sliceHeight = 0.5;
+  this.lineWidth = this.sliceHeight;
+  this.numWalls = 2;
 
   // set from params
   if (params) {
-    if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
-    if (params.hasOwnProperty("axis")) this.axis = params.axis;
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
+    if (params.hasOwnProperty("axis")) this.axis = params.axis;
+    if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
+    if (params.hasOwnProperty("lineWidth")) this.lineWidth = params.lineWidth;
+    if (params.hasOwnProperty("numWalls")) this.numWalls = params.numWalls;
     if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
+
+  this.previewGeometryReady = false;
+  this.layerGeometryReady = false;
 
   // for debugging, todo: remove
   scene = this.scene;
@@ -75,18 +88,33 @@ Slicer.prototype.calculateFaceBounds = function() {
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  if (mode=="preview") {
-    if (!this.previewGeometryReady) this.makePreviewGeometry();
-  }
-  else if (this.mode=="layer") {
-    if (!this.layerGeometryReady) this.makeLayerGeometry();
-  }
+  if (mode=="preview") this.makePreviewGeometry();
+  else if (this.mode=="layer") this.makeLayerGeometry();
 
   this.setSlice(this.currentSlice);
 }
 
 Slicer.prototype.getMode = function() {
   return this.mode;
+}
+
+Slicer.prototype.readyPreviewGeometry = function() {
+  this.previewGeometryReady = true;
+}
+Slicer.prototype.readyLayerGeometry = function() {
+  this.layerGeometryReady = true;
+}
+Slicer.prototype.unreadyPreviewGeometry = function() {
+  this.previewGeometryReady = false;
+}
+Slicer.prototype.unreadyLayerGeometry = function() {
+  this.layerGeometryReady = false;
+}
+Slicer.prototype.setLineWidth = function(lineWidth) {
+  this.lineWidth = lineWidth;
+}
+Slicer.prototype.setNumWalls = function(numWalls) {
+  this.numWalls = numWalls;
 }
 
 Slicer.prototype.getGeometry = function() {
@@ -276,6 +304,8 @@ Slicer.prototype.setLayerSlice = function() {
 }
 
 Slicer.prototype.makePreviewGeometry = function() {
+  if (this.previewGeometryReady) return;
+
   this.previewVertices = this.sourceVertices.slice();
   this.previewFaces = [];
 
@@ -290,13 +320,32 @@ Slicer.prototype.makePreviewGeometry = function() {
 }
 
 Slicer.prototype.makeLayerGeometry = function() {
+  if (this.layerGeometryReady) return;
+
+  // construct the layers array, which contains the structures necessary for
+  // computing the actual geometry
+  if (!this.layers) this.computeLayers();
+
+  var layers = this.layers;
+  var layerVertices = [];
+
+  for (var l=0; l<layers.length; l++) {
+    var layer = layers[l];
+
+    layer.computeContours(this.lineWidth, this.numWalls);
+    layer.writeContoursToVerts(layerVertices);
+  }
+
+  this.layerGeometryReady = true;
+  this.layerVertices = layerVertices;
+}
+
+Slicer.prototype.computeLayers = function() {
+  var layers = [];
+
   var segmentLists = this.buildLayerSegmentLists();
 
-  this.layerVertices = [];
-
   var layerBuilder = new LayerBuilder(this.axis);
-  var timer = new Timer();
-  timer.start();
 
   for (var i=0; i<segmentLists.length; i++) {
     var segmentList = segmentLists[i];
@@ -306,19 +355,16 @@ Slicer.prototype.makeLayerGeometry = function() {
       layerBuilder.addSegment(segment[0], segment[1], segment[2]);
     }
 
+
     var layer = layerBuilder.getLayer();
-
-    //if (i!=2) continue;
-
-    layer.writeBaseContoursToVerts(this.layerVertices);
-    layer.makeSkeletons();
     layerBuilder.clear();
+
+    if (i!=4) continue;
+
+    layers.push(layer);
   }
 
-  timer.stop();
-  debugPoints();
-
-  this.layerGeometryReady = true;
+  this.layers = layers;
 }
 
 
@@ -426,15 +472,22 @@ Slicer.prototype.buildLayerSegmentLists = function() {
 
 // contains a single slice of the mesh
 function Layer(polys) {
-  this.polys = polys;
-  this.skeletons = [];
-  this.contours = [];
-  this.infill = [];
+  // the original polygons made from the surface of the mesh
+  this.basePolygons = polys;
+  // arrays of vertices forming the printable contours of the mesh
+  this.contours = null;
+  // polygons delineating the boundary of infill
+  this.innerPolygons = null;
+  // straight skeleton for every base polygon; potentially replace this with an
+  // array of offsetters which will have different options for offsetting
+  this.skeletons = null;
+  // arrays of vertices forming the infill
+  this.infill = null;
 }
 
 Layer.prototype.triangulate = function() {
   // polys is an array of edgeloops signifying every polygon in the slice
-  var polys = this.polys;
+  var polys = this.basePolygons;
   var indices = [];
 
   for (var i=0; i<polys.length; i++) {
@@ -449,82 +502,51 @@ Layer.prototype.triangulate = function() {
 }
 
 Layer.prototype.makeSkeletons = function() {
-  for (var i=0; i<this.polys.length; i++) {
-    //if (i!=0) continue; // todo: remove
-    var skeleton = new StraightSkeleton(this.polys[i]);
-    this.skeletons.push(skeleton);
+  var skeletons = [];
+
+  var polys = this.basePolygons;
+
+  for (var i=0; i<polys.length; i++) {
+    skeletons.push(new StraightSkeleton(polys[i]));
+  }
+
+  this.skeletons = skeletons;
+}
+
+Layer.prototype.computeContours = function(lineWidth, numWalls) {
+  if (!this.skeletons) this.makeSkeletons();
+
+  var skeletons = this.skeletons;
+  var contours = [];
+
+  for (var i=0; i<skeletons.length; i++) {
+    var skeleton = skeletons[i];
+    for (var w=0; w<numWalls; w++) {
+      var offset = (w + 0.5) * lineWidth;
+      contours = contours.concat(skeleton.generateOffsetCurve(offset));
+    }
+  }
+
+  this.contours = contours;
+}
+
+Layer.prototype.writeContoursToVerts = function(vertices) {
+  if (!this.contours) return;
+
+  var contours = this.contours;
+
+  for (var c=0; c<contours.length; c++) {
+    var contour = contours[c];
+
+    for (var i=0; i<contour.length-1; i++) {
+      vertices.push(contour[i]);
+      vertices.push(contour[i+1]);
+    }
+    // to avoid n mod computations
+    vertices.push(contour[contour.length-1]);
+    vertices.push(contour[0]);
   }
 }
-
-Layer.prototype.writeBaseContoursToVerts = function(vertices) {
-  for (var i=0; i<this.polys.length; i++) {
-    var poly = this.polys[i];
-
-    poly.writeSegments(vertices);
-  }
-}
-
-
-
-// TODO: remove debugging
-function debugLoop(loop, fn) {
-  if (fn === undefined) fn = function() { return true; };
-  var curr = loop.vertex;
-  do {
-    if (fn(curr)) debugVertex(curr.v);
-    curr = curr.next;
-  } while (curr != loop.vertex);
-}
-function debugLine(v, w, n, lastonly, offset) {
-  if (n === undefined) n = 1;
-  if (offset === undefined) offset = 0;
-
-  for (var i=0; i<=n; i++) {
-    if (lastonly && (n==0 || i<n-1)) continue;
-    var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
-    vert.z += 0.1*offset;
-    //debugGeo.vertices.push(vert);
-  }
-  var vv = v.clone();
-  vv.z += 0.1*offset;
-  var ww = w.clone();
-  ww.z += 0.1*offset;
-  debugLineGeo.vertices.push(vv);
-  debugLineGeo.vertices.push(ww);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debugVertex(v) {
-  debugGeo.vertices.push(v);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debugPoints() {
-  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 3, sizeAttenuation: false });
-  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
-  debugMesh.name = "debug";
-  scene.add(debugMesh);
-
-  debugGeo = new THREE.Geometry();
-}
-function debugLines(idx, incr) {
-  var color = 0xff6666;
-  if (incr===undefined) incr = 0;
-  if (idx!==undefined) {
-    color = parseInt(('0.'+Math.sin(idx+incr).toString().substr(6))*0xffffff);
-    //console.log("%c idx "+idx, 'color: #'+color.toString(16));
-  }
-  else idx = 0;
-  var debugLineMaterial = new THREE.LineBasicMaterial({color: color, linewidth: 1 });
-  var debugLineMesh = new THREE.LineSegments(debugLineGeo, debugLineMaterial);
-  debugLineMesh.name = "debugLine";
-  scene.add(debugLineMesh);
-
-  debugLineGeo = new THREE.Geometry();
-}
-function debugCleanup() {
-  removeMeshByName(this.scene, "debug");
-  removeMeshByName(this.scene, "debugLine");
-}
-
 
 // add pairs of verts with .addSegment, then get the layer with .getLayer
 // and .clear if reusing
@@ -758,4 +780,66 @@ LayerBuilder.prototype.getLayer = function() {
   var polys = this.makePolys();
 
   return new Layer(polys);
+}
+
+
+
+
+// TODO: remove debugging
+function debugLoop(loop, fn) {
+  if (fn === undefined) fn = function() { return true; };
+  var curr = loop.vertex;
+  do {
+    if (fn(curr)) debugVertex(curr.v);
+    curr = curr.next;
+  } while (curr != loop.vertex);
+}
+function debugLine(v, w, n, lastonly, offset) {
+  if (n === undefined) n = 1;
+  if (offset === undefined) offset = 0;
+
+  for (var i=0; i<=n; i++) {
+    if (lastonly && (n==0 || i<n-1)) continue;
+    var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
+    vert.z += 0.1*offset;
+    //debugGeo.vertices.push(vert);
+  }
+  var vv = v.clone();
+  vv.z += 0.1*offset;
+  var ww = w.clone();
+  ww.z += 0.1*offset;
+  debugLineGeo.vertices.push(vv);
+  debugLineGeo.vertices.push(ww);
+  debugGeo.verticesNeedUpdate = true;
+}
+function debugVertex(v) {
+  debugGeo.vertices.push(v);
+  debugGeo.verticesNeedUpdate = true;
+}
+function debugPoints() {
+  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 3, sizeAttenuation: false });
+  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
+  debugMesh.name = "debug";
+  scene.add(debugMesh);
+
+  debugGeo = new THREE.Geometry();
+}
+function debugLines(idx, incr) {
+  var color = 0xff6666;
+  if (incr===undefined) incr = 0;
+  if (idx!==undefined) {
+    color = parseInt(('0.'+Math.sin(idx+incr).toString().substr(6))*0xffffff);
+    //console.log("%c idx "+idx, 'color: #'+color.toString(16));
+  }
+  else idx = 0;
+  var debugLineMaterial = new THREE.LineBasicMaterial({color: color, linewidth: 1 });
+  var debugLineMesh = new THREE.LineSegments(debugLineGeo, debugLineMaterial);
+  debugLineMesh.name = "debugLine";
+  scene.add(debugLineMesh);
+
+  debugLineGeo = new THREE.Geometry();
+}
+function debugCleanup() {
+  removeMeshByName(this.scene, "debug");
+  removeMeshByName(this.scene, "debugLine");
 }

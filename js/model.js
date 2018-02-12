@@ -700,12 +700,7 @@ Model.prototype.setMode = function(mode, params) {
     this.slicer = new Slicer(
       this.vertices,
       this.faces,
-      {
-        sliceHeight: params.sliceHeight,
-        axis: params.sliceAxis,
-        mode: this.sliceMode,
-        scene: this.scene
-      }
+      Object.assign({ mode: this.sliceMode }, params)
     );
 
     this.makeSliceMesh();
@@ -748,6 +743,7 @@ Model.prototype.setSliceMeshGeometry = function() {
   if (!this.slicer) return;
 
   var sliceGeometry = this.slicer.getGeometry();
+
   var sliceVertices = sliceGeometry.vertices;
   var sliceFaces = sliceGeometry.faces;
 
@@ -765,12 +761,17 @@ Model.prototype.setSliceMeshGeometry = function() {
     var mesh = this.sliceLayerMesh;
     if (!mesh) return;
 
+    // if we're adding more vertices than the existing geometry object can
+    // contain, recreate the geometry
+    if (sliceVertices.length > mesh.geometry.vertices.length) {
+      mesh.geometry = new THREE.Geometry();
+    }
     mesh.geometry.vertices = sliceVertices;
   }
 }
 
 // Create the slice-mode preview mesh.
-Model.prototype.makeSlicePreviewMesh = function(vertices, faces) {
+Model.prototype.makeSlicePreviewMesh = function() {
   if (this.slicePreviewMesh) return;
 
   var geo = new THREE.Geometry();
@@ -793,7 +794,7 @@ Model.prototype.makeSlicePreviewMesh = function(vertices, faces) {
 }
 
 // Create the slice-mode layer visualization mesh.
-Model.prototype.makeSliceLayerMesh = function(vertices, faces) {
+Model.prototype.makeSliceLayerMesh = function() {
   if (this.sliceLayerMesh) return;
 
   var geo = new THREE.Geometry();
@@ -1941,15 +1942,12 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 /* SLICING */
 
-// Turn on slice mode: set mode to "slice", passing sliceHeight. Slice mode
+// Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to "preview".
-Model.prototype.activateSliceMode = function(sliceHeight, sliceAxis) {
+Model.prototype.activateSliceMode = function(params) {
   this.sliceMode = "layer"; // todo: switch back to preview
 
-  this.setMode("slice", {
-    sliceHeight: sliceHeight,
-    sliceAxis: sliceAxis===undefined ? "z" : sliceAxis
-  });
+  this.setMode("slice", params);
 }
 
 // Turn off slice mode: set mode to "basic".
@@ -1994,6 +1992,20 @@ Model.prototype.setSlice = function(slice) {
   this.slicer.setSlice(slice);
 
   this.setSliceMeshGeometry();
+}
+
+Model.prototype.recalculateLayers = function(lineWidth, numWalls) {
+  if (!this.slicer) return;
+
+  this.slicer.setLineWidth(lineWidth);
+  this.slicer.setNumWalls(numWalls);
+  this.slicer.unreadyLayerGeometry();
+
+  // layer geometry is on the screen, so recalculate now
+  if (this.sliceMode == "layer") {
+    this.slicer.makeLayerGeometry();
+    this.setSliceMeshGeometry();
+  }
 }
 
 

@@ -14,7 +14,7 @@ Stage = function() {
   // toggles
   this.importEnabled = true;
   this.importingMeshName = "";
-  this.floorVisible = true;
+  this.floorVisible = false;
 
   // geometry
   this.model = null;
@@ -192,6 +192,10 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
+  this.sliceHeight = .05;
+  this.sliceAxis = "z";
+  this.printLineWidth = this.sliceHeight;
+  this.sliceNumWalls = 0;
   this.sliceFolder = this.gui.addFolder("Slice (beta)");
   this.buildSliceFolderInactive();
 
@@ -334,8 +338,8 @@ Stage.prototype.cancelPatch = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceHeight = .5;
   this.sliceFolder.add(this, "sliceHeight", 0.001, 1);
+  this.sliceFolder.add(this, "sliceAxis", ["x", "y", "z"]);
   this.sliceFolder.add(this, "activateSliceMode");
 }
 // build the Slice folder for when slice mode is on
@@ -357,6 +361,12 @@ Stage.prototype.buildSliceFolderActive = function() {
       "sliceMode",
       ["preview", "layer"]
     ).onChange(this.setSliceMode.bind(this));
+
+    this.sliceSettingsFolder = this.sliceFolder.addFolder("Settings");
+    this.sliceSettingsFolder.add(this, "printLineWidth", 0.001);
+    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).step(1);
+    this.sliceSettingsFolder.add(this, "recalculateLayers");
+
     this.sliceFolder.add(this, "deactivateSliceMode");
   }
 }
@@ -365,7 +375,13 @@ Stage.prototype.setSliceMode = function() {
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
-    this.model.activateSliceMode(this.sliceHeight);
+    this.model.activateSliceMode({
+      axis: this.sliceAxis,
+      sliceHeight: this.sliceHeight,
+      lineWidth: this.sliceHeight, // line width defaults to slice height
+      numWalls: this.sliceNumWalls,
+      scene: this.scene // todo: remove
+    });
     this.buildSliceFolderActive();
   }
 }
@@ -378,6 +394,11 @@ Stage.prototype.deactivateSliceMode = function() {
 Stage.prototype.setSlice = function() {
   if (this.model) {
     this.model.setSlice(this.currentSlice);
+  }
+}
+Stage.prototype.recalculateLayers = function() {
+  if (this.model) {
+    this.model.recalculateLayers(this.printLineWidth, this.sliceNumWalls);
   }
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
@@ -394,6 +415,9 @@ Stage.prototype.buildScaleToMeasurementFolder = function() {
 Stage.prototype.clearFolder = function(folder) {
   for (var i=folder.__controllers.length-1; i>=0; i--) {
     folder.remove(folder.__controllers[i]);
+  }
+  for (var folderName in folder.__folders) {
+    folder.removeFolder(folder.__folders[folderName]);
   }
 }
 Stage.prototype.scaleToRingSize = function() {
@@ -417,6 +441,9 @@ Stage.prototype.scaleToRingSize = function() {
 
 Stage.prototype.toggleFloor = function() {
   this.floorVisible = !this.floorVisible;
+  this.setFloorState();
+}
+Stage.prototype.setFloorState = function() {
   var visible = this.floorVisible;
   this.scene.traverse(function(o) {
     if (o.name=="floor") o.visible = visible;
@@ -588,6 +615,8 @@ Stage.prototype.initFloor = function() {
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
+
+  this.setFloorState();
 }
 
 // Interface for the dat.gui button.
