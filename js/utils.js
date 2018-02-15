@@ -135,6 +135,38 @@ function faceGetVerts(face, vertices) {
     vertices[face.c]
   ];
 }
+function faceGetMaxAxis(face, vertices, axis) {
+  var verts = faceGetVerts(face, vertices);
+  return Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis]));
+}
+function faceGetMinAxis(face, vertices, axis) {
+  var verts = faceGetVerts(face, vertices);
+  return Math.min(verts[0][axis], Math.min(verts[1][axis], verts[2][axis]));
+}
+function faceGetBounds(face, vertices) {
+  var min = new THREE.Vector3().setScalar(Infinity);
+  var max = new THREE.Vector3().setScalar(-Infinity);
+  var verts = faceGetVerts(face, vertices);
+
+  for (var v=0; v<3; v++) {
+    min.min(verts[v]);
+    max.max(verts[v]);
+  }
+
+  return {
+    min: min,
+    max: max
+  };
+}
+function faceGetBoundsAxis(face, vertices, axis) {
+  if (axis === undefined) axis = 'z';
+
+  var verts = faceGetVerts(face, vertices);
+  return {
+    max: Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis])),
+    min: Math.min(verts[0][axis], Math.min(verts[1][axis], verts[2][axis]))
+  };
+}
 // get THREE.Face3 vertices and sort them in ascending order on axis
 function faceGetVertsSorted(face, vertices, axis) {
   if (axis === undefined) axis = 'z';
@@ -175,6 +207,10 @@ function faceGetVertsSorted(face, vertices, axis) {
     ccw: ccw
   };
 }
+function faceGetCenter(face, vertices) {
+  var verts = faceGetVerts(face, vertices);
+  return verts[0].clone().add(verts[1]).add(verts[2]).divideScalar(3);
+}
 // compute THREE.Face3 normal
 function faceComputeNormal(face, vertices) {
   var verts = faceGetVerts(face, vertices);
@@ -185,15 +221,6 @@ function vertsComputeNormal(a, b, c) {
   var bc = c.clone().sub(b);
 
   return bc.cross(ba).normalize();
-}
-function faceGetBounds(face, axis, vertices) {
-  if (axis === undefined) axis = 'z';
-
-  var verts = faceGetVerts(face, vertices);
-  return {
-    max: Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis])),
-    min: Math.min(verts[0][axis], Math.min(verts[1][axis], verts[2][axis]))
-  };
 }
 // Get THREE.Face3 subscript ('a', 'b', or 'c') for a given 0-2 index.
 function faceGetSubscript(idx) {
@@ -297,7 +324,7 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
 // if intersection is "behind" t's origin
 function rayLineIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -319,7 +346,7 @@ function rayLineIntersection(s, t, sd, td, axis, epsilon) {
 // same as rayLineIntersection, but doesn't check bounds on either ray
 function lineLineIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -340,7 +367,7 @@ function lineLineIntersection(s, t, sd, td, axis, epsilon) {
 // t and t+td
 function raySegmentIntersection(s, t, sd, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -401,35 +428,53 @@ function projectToLine(v, a, b, axis) {
   return a.clone()
 }
 
+// given a point p, and a plane containing point d with normal n, project p to
+// the plane along axis
+// as the plane is the set of points r s.t. (r-d) dot n = 0, r dot n = d dot n;
+// if axis is z, rz = (d dot n - rx*nx - ry*ny) / nz
+// if nz == 0, then we can't project, so just return p
+function projectToPlaneOnAxis(p, d, n, axis) {
+  if (axis === undefined) axis = 'z';
+
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  // return p if can't project
+  if (n[axis] === 0) return p;
+
+  // get the .axis component
+  var rz = (d.dot(n) - p[ah]*n[ah] - p[av]*n[av]) / n[axis];
+
+  // set the component
+  var pp = p.clone();
+  pp[axis] = rz;
+
+  return pp;
+}
+
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var area = triangleArea(a, b, c, axis);
 
-  // false because collinear and left comparison is exclusive
-  if (equal(area, 0, epsilon)) return false;
-
-  return area > 0;
+  return greater(area, 0, epsilon);
 }
 
-// true if c is left or equal to a-b segment
+// true if c is left of or on a-b segment
 function leftOn(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var area = triangleArea(a, b, c, axis);
 
-  // true because collinear and left comparison is inclusive
-  if (equal(area, 0, epsilon)) return true;
-
-  return area > 0;
+  return !less(area, 0, epsilon);
 }
 
 function pointInsideTriangle(p, a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   return left(a, b, p, axis, epsilon) &&
          left(b, c, p, axis, epsilon) &&
@@ -439,7 +484,7 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
 // bool check if segment ab intersects segment cd
 function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
           (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
@@ -447,7 +492,7 @@ function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
 
 // approximate coincidence testing for vectors
 function coincident(a, b, epsilon) {
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   return a.clone().sub(b).length() < epsilon;
 }
@@ -455,7 +500,7 @@ function coincident(a, b, epsilon) {
 // approximate collinearity testing for three vectors
 function collinear(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -464,19 +509,19 @@ function collinear(a, b, c, axis, epsilon) {
 
 // approximate equality for real numbers
 function equal(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
   return Math.abs(i-j) < epsilon;
 }
 
 // approximate less-than testing for real numbers
 function less(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
   return i < j && !equal(i, j, epsilon);
 }
 
 // approximate greater-than testing for real numbers
 function greater(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.00001;
+  if (epsilon === undefined) epsilon = 0.0000001;
   return i > j && !equal(i, j, epsilon);
 }
 

@@ -1941,6 +1941,19 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 }
 
 
+/* SUPPORTS */
+
+Model.prototype.generateSupports = function(angle, resolution, layerHeight, axis) {
+  this.supportGenerator = new SupportGenerator(angle, resolution, layerHeight, axis);
+
+  this.supportGenerator.generate(this.vertices, this.faces, this.min);
+}
+
+Model.prototype.removeSupports = function() {
+  this.supportGenerator.cleanup();
+}
+
+
 /* SLICING */
 
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
