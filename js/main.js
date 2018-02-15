@@ -1,3 +1,4 @@
+var debug; // todo: remove
 var stage = new Stage();
 
 // Make the intro menu interactive.

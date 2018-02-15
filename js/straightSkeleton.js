@@ -396,7 +396,7 @@ function SSNoEvent() {
 // events"), IIRC
 function StraightSkeleton(poly) {
   var axis = poly.axis;
-  var epsilon = poly.epsilon !== undefined ? poly.epsilon : 0.00001;
+  var epsilon = poly.epsilon !== undefined ? poly.epsilon : 0.0000001;
 
   var contours = [poly].concat(poly.holes);
 
@@ -405,11 +405,11 @@ function StraightSkeleton(poly) {
       var contour = contours[i];
       var c = contour.vertex;
       do {
-        debugLine(c.v, c.next.v);
+        debug.debugLine(c.v, c.next.v);
         c = c.next;
       } while (c!=contour.vertex);
     }
-    debugLines(1);
+    debug.debugLines(1);
   }
 
   this.axis = axis;
@@ -953,7 +953,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   }
   //console.log(offset);
 
-  debugPoints();
+  debug.debugPoints();
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;
@@ -968,13 +968,13 @@ StraightSkeleton.prototype.buildInterior = function() {
         var ve = he.nend().v.clone();
         vs[axis] += offset;
         ve[axis] += offset;
-        debugLine(vs, ve);
+        debug.debugLine(vs, ve);
 
         he = he.rotated();
       } while (he != node.halfedge);
       if (iterativelyShiftSkeleton) offset += -0.1;
     }
-    debugLines();
+    debug.debugLines();
   }
 
   function validateFaces(halfedges) {
@@ -1135,12 +1135,12 @@ StraightSkeleton.prototype.buildInterior = function() {
 
     var vcopy = v.clone();
     vcopy[axis] += o;
-    debugVertex(vcopy);
+    debug.debugPoint(vcopy);
 
     if (includeStart) {
-      debugLine(v, vcopy);
+      debug.debugLine(v, vcopy);
     }
-    debugLines(c);
+    debug.debugLines(c);
   }
 
   function debugLn(v, w, o, c, dir) {
@@ -1152,9 +1152,9 @@ StraightSkeleton.prototype.buildInterior = function() {
     vcopy[axis] += o;
     wcopy[axis] += o;
 
-    if (dir) debugLine(vcopy, wcopy, 10, true);
-    else debugLine(vcopy, wcopy);
-    debugLines(c);
+    if (dir) debug.debugLine(vcopy, wcopy, 10, true);
+    else debug.debugLine(vcopy, wcopy);
+    debug.debugLines(c);
   }
 
   function debugRay(v, r, o, c, l, dir) {

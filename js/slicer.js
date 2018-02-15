@@ -6,10 +6,6 @@ var SlicerModes = {
   layer: 2
 }
 
-var scene; // for debugging, todo: remove
-var debugGeo = new THREE.Geometry();
-var debugLineGeo = new THREE.Geometry();
-
 function Slicer(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -36,14 +32,10 @@ function Slicer(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
     if (params.hasOwnProperty("lineWidth")) this.lineWidth = params.lineWidth;
     if (params.hasOwnProperty("numWalls")) this.numWalls = params.numWalls;
-    if (params.hasOwnProperty("scene")) this.scene = params.scene;
   }
 
   this.previewGeometryReady = false;
   this.layerGeometryReady = false;
-
-  // for debugging, todo: remove
-  scene = this.scene;
 
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
@@ -65,7 +57,7 @@ Slicer.prototype.calculateFaceBounds = function() {
 
   for (var i=0; i<this.sourceFaces.length; i++) {
     var face = this.sourceFaces[i];
-    var bounds = faceGetBounds(face, this.axis, this.sourceVertices);
+    var bounds = faceGetBoundsAxis(face, this.sourceVertices, this.axis);
 
     max = Math.max(max, bounds.max);
     min = Math.min(min, bounds.min);
@@ -495,8 +487,6 @@ Layer.prototype.triangulate = function() {
     poly.mergeHolesIntoPoly();
     indices = indices.concat(poly.triangulate());
   }
-  // todo: remove
-  if (polys.length>0) debugPoints();
 
   return indices;
 }
@@ -780,66 +770,4 @@ LayerBuilder.prototype.getLayer = function() {
   var polys = this.makePolys();
 
   return new Layer(polys);
-}
-
-
-
-
-// TODO: remove debugging
-function debugLoop(loop, fn) {
-  if (fn === undefined) fn = function() { return true; };
-  var curr = loop.vertex;
-  do {
-    if (fn(curr)) debugVertex(curr.v);
-    curr = curr.next;
-  } while (curr != loop.vertex);
-}
-function debugLine(v, w, n, lastonly, offset) {
-  if (n === undefined) n = 1;
-  if (offset === undefined) offset = 0;
-
-  for (var i=0; i<=n; i++) {
-    if (lastonly && (n==0 || i<n-1)) continue;
-    var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
-    vert.z += 0.1*offset;
-    //debugGeo.vertices.push(vert);
-  }
-  var vv = v.clone();
-  vv.z += 0.1*offset;
-  var ww = w.clone();
-  ww.z += 0.1*offset;
-  debugLineGeo.vertices.push(vv);
-  debugLineGeo.vertices.push(ww);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debugVertex(v) {
-  debugGeo.vertices.push(v);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debugPoints() {
-  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 3, sizeAttenuation: false });
-  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
-  debugMesh.name = "debug";
-  scene.add(debugMesh);
-
-  debugGeo = new THREE.Geometry();
-}
-function debugLines(idx, incr) {
-  var color = 0xff6666;
-  if (incr===undefined) incr = 0;
-  if (idx!==undefined) {
-    color = parseInt(('0.'+Math.sin(idx+incr).toString().substr(6))*0xffffff);
-    //console.log("%c idx "+idx, 'color: #'+color.toString(16));
-  }
-  else idx = 0;
-  var debugLineMaterial = new THREE.LineBasicMaterial({color: color, linewidth: 1 });
-  var debugLineMesh = new THREE.LineSegments(debugLineGeo, debugLineMaterial);
-  debugLineMesh.name = "debugLine";
-  scene.add(debugLineMesh);
-
-  debugLineGeo = new THREE.Geometry();
-}
-function debugCleanup() {
-  removeMeshByName(this.scene, "debug");
-  removeMeshByName(this.scene, "debugLine");
 }
