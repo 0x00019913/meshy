@@ -192,6 +192,18 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
+  this.supportAngle = 45;
+  this.supportResolution = .05;
+  this.supportSpacingFactor = 2.5;
+  this.supportAxis = "z";
+  var supportFolder = this.gui.addFolder("Supports");
+  supportFolder.add(this, "supportAngle", 0, 90);
+  supportFolder.add(this, "supportResolution", .0001, 10);
+  supportFolder.add(this, "supportSpacingFactor", 1, 10);
+  supportFolder.add(this, "supportAxis", ["x", "y", "z"]);
+  supportFolder.add(this, "generateSupports");
+  supportFolder.add(this, "removeSupports");
+
   this.sliceHeight = .1;
   this.sliceAxis = "z";
   this.printLineWidth = this.sliceHeight;
@@ -335,6 +347,18 @@ Stage.prototype.acceptPatch = function() {
 Stage.prototype.cancelPatch = function() {
   if (this.model) this.model.cancelPatch();
 }
+Stage.prototype.generateSupports = function() {
+  if (this.model) {
+    this.model.generateSupports(
+      this.supportAngle,
+      this.supportResolution * this.supportSpacingFactor,
+      this.supportResolution,
+      this.supportAxis);
+  }
+}
+Stage.prototype.removeSupports = function() {
+  if (this.model) this.model.removeSupports();
+}
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
@@ -379,8 +403,7 @@ Stage.prototype.activateSliceMode = function() {
       axis: this.sliceAxis,
       sliceHeight: this.sliceHeight,
       lineWidth: this.sliceHeight, // line width defaults to slice height
-      numWalls: this.sliceNumWalls,
-      scene: this.scene // todo: remove
+      numWalls: this.sliceNumWalls
     });
     this.buildSliceFolderActive();
   }
@@ -482,6 +505,7 @@ Stage.prototype.initViewport = function() {
     _this.camera.up.set(0, 0, 1);
 
     _this.scene = new THREE.Scene();
+    debug = new Debug(_this.scene); // todo: remove
     _this.scene.background = new THREE.Color(0x222222);
 
     _this.controls = new Controls(
@@ -680,6 +704,7 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.activateSliceMode();
+  //this.generateSupports();
 
   this.cameraToModel();
   this.filename = this.model.filename;
