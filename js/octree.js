@@ -1,5 +1,5 @@
 // Octree constructor
-// Octree instnace ontains the root node for the octree and some data (scene,
+// Octree instance contains the root node for the octree and some data (scene,
 // references to geometry lists) that apply to the entire octree.
 // params:
 //  depth: depth at the root node; child nodes will have smaller depth
