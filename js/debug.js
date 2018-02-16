@@ -3,15 +3,15 @@ function Debug(scene) {
   this.debugPointGeo = new THREE.Geometry();
   this.debugLineGeo = new THREE.Geometry();
 }
-Debug.prototype.debugLoop = function(loop, fn) {
+Debug.prototype.loop = function(loop, fn) {
   if (fn === undefined) fn = function() { return true; };
   var curr = loop.vertex;
   do {
-    if (fn(curr)) debugVertex(curr.v);
+    if (fn(curr)) this.point(curr.v);
     curr = curr.next;
   } while (curr != loop.vertex);
 }
-Debug.prototype.debugLine = function(v, w, n, lastonly, offset) {
+Debug.prototype.line = function(v, w, n, lastonly, offset) {
   if (n === undefined) n = 1;
   if (offset === undefined) offset = 0;
 
@@ -29,16 +29,16 @@ Debug.prototype.debugLine = function(v, w, n, lastonly, offset) {
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
-Debug.prototype.debugPoint = function(v) {
+Debug.prototype.point = function(v) {
   this.debugPointGeo.vertices.push(v);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
-Debug.prototype.debugFace = function(f, vs) {
-  var verts = faceGetVerts(f, vs);
-  this.debugPoint(verts[0].clone().add(verts[1]).add(verts[2]).divideScalar(3));
+Debug.prototype.face = function(f, vs) {
+  var [a, b, c] = faceGetVerts(f, vs);
+  this.point(a.clone().add(b).add(c).divideScalar(3));
   //this.debugPoints();
 }
-Debug.prototype.debugPoints = function(idx, incr) {
+Debug.prototype.points = function(idx, incr) {
   var color = 0xff6666;
   if (incr===undefined) incr = 0;
   if (idx!==undefined) {
@@ -52,7 +52,7 @@ Debug.prototype.debugPoints = function(idx, incr) {
 
   this.debugPointGeo = new THREE.Geometry();
 }
-Debug.prototype.debugLines = function(idx, incr) {
+Debug.prototype.lines = function(idx, incr) {
   var color = 0xff6666;
   if (incr===undefined) incr = 0;
   if (idx!==undefined) {
@@ -67,7 +67,7 @@ Debug.prototype.debugLines = function(idx, incr) {
 
   this.debugLineGeo = new THREE.Geometry();
 }
-Debug.prototype.debugCleanup = function() {
+Debug.prototype.cleanup = function() {
   removeMeshByName(this.scene, "debug");
   removeMeshByName(this.scene, "debugLine");
 }

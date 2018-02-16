@@ -405,11 +405,11 @@ function StraightSkeleton(poly) {
       var contour = contours[i];
       var c = contour.vertex;
       do {
-        debug.debugLine(c.v, c.next.v);
+        debug.line(c.v, c.next.v);
         c = c.next;
       } while (c!=contour.vertex);
     }
-    debug.debugLines(1);
+    debug.lines(1);
   }
 
   this.axis = axis;
@@ -953,7 +953,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   }
   //console.log(offset);
 
-  debug.debugPoints();
+  debug.points();
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;
@@ -968,13 +968,13 @@ StraightSkeleton.prototype.buildInterior = function() {
         var ve = he.nend().v.clone();
         vs[axis] += offset;
         ve[axis] += offset;
-        debug.debugLine(vs, ve);
+        debug.line(vs, ve);
 
         he = he.rotated();
       } while (he != node.halfedge);
       if (iterativelyShiftSkeleton) offset += -0.1;
     }
-    debug.debugLines();
+    debug.lines();
   }
 
   function validateFaces(halfedges) {
@@ -1135,12 +1135,12 @@ StraightSkeleton.prototype.buildInterior = function() {
 
     var vcopy = v.clone();
     vcopy[axis] += o;
-    debug.debugPoint(vcopy);
+    debug.point(vcopy);
 
     if (includeStart) {
-      debug.debugLine(v, vcopy);
+      debug.line(v, vcopy);
     }
-    debug.debugLines(c);
+    debug.lines(c);
   }
 
   function debugLn(v, w, o, c, dir) {
@@ -1152,9 +1152,9 @@ StraightSkeleton.prototype.buildInterior = function() {
     vcopy[axis] += o;
     wcopy[axis] += o;
 
-    if (dir) debug.debugLine(vcopy, wcopy, 10, true);
-    else debug.debugLine(vcopy, wcopy);
-    debug.debugLines(c);
+    if (dir) debug.line(vcopy, wcopy, 10, true);
+    else debug.line(vcopy, wcopy);
+    debug.lines(c);
   }
 
   function debugRay(v, r, o, c, l, dir) {

@@ -2,7 +2,10 @@ function SupportGenerator(angle, resolution, layerHeight, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
-  this.dotProductCutoff = Math.cos(angle * Math.PI / 180);
+  // angle in radians
+  this.angle = angle * Math.PI / 180;
+  // used to determine overhangs
+  this.dotProductCutoff = Math.cos(this.angle);
   this.resolution = resolution;
   this.layerHeight = layerHeight;
   this.axis = axis;
@@ -17,6 +20,7 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
   var epsilon = this.epsilon;
+  var angle = this.angle;
   var minHeight = min[axis] + this.layerHeight/2;
   var resolution = this.resolution;
 
@@ -43,9 +47,9 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
     var island = islands[i];
     for (var j=0; j<island.faces.length; j++) {
       var face3 = island.faces[j].face3;
-      debug.debugPoint(faceGetCenter(face3, vs));
+      debug.point(faceGetCenter(face3, vs));
     }
-    debug.debugPoints(i, 1);
+    debug.points(i, 1);
   }
 
   // rasterize each island to find sampling points over every island
@@ -53,12 +57,83 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
 
   console.log(pointSets);
 
-  for (var i=0; i<pointSets.length; i++) {
-    var points = pointSets[i];
-    for (var j=0; j<points.length; j++) {
-      debug.debugPoint(points[j]);
+  for (var psi=0; psi<pointSets.length; psi++) {
+    var points = pointSets[psi];
+    for (var pi=0; pi<points.length; pi++) {
+      debug.point(points[pi]);
     }
-    debug.debugPoints(i, 1);
+    debug.points(0);
+  }
+
+  // for every island's point set
+  for (var psi = 0; psi < pointSets.length; psi++) {
+    var points = pointSets[psi];
+
+    // orders a priority queue from highest to lowest coordinate on axis
+    var pqComparator = function (a, b) { return points[b][axis] - points[a][axis]; }
+    var pq = new PriorityQueue({
+      comparator: pqComparator
+    });
+    var activeIndices = new Set();
+
+    // put the point indices on the priority queue;
+    // also put them into a set of active indices so that we can take a point
+    // and test it against all other active points to find the nearest
+    // intersection; we could just iterate over the pq.priv.data to do the same,
+    // but that's a hack that breaks encapsulation
+    for (var pi = 0; pi < points.length; pi++) {
+      activeIndices.add(pi);
+      pq.queue(pi);
+    }
+
+    var ct = 0;
+    var lim = 100;
+    while (pq.length > 0) {
+      if (++ct>lim) break;
+
+      var pi = pq.dequeue();
+
+      if (!activeIndices.has(pi)) continue;
+
+      var p = points[pi];
+
+      // find the closest intersection between p's cone and another cone
+      var intersection = null;
+      var minDist = Infinity;
+      var qiTarget = -1;
+
+      for (var qi of activeIndices) {
+        var q = points[qi];
+        var ixn = coneConeIntersection(p, q, angle, axis);
+        if (ixn) {
+          var dist = p.distanceTo(ixn);
+          if (dist < minDist) {
+            minDist = dist;
+            intersection = ixn;
+            qiTarget = qi;
+          }
+        }
+      }
+
+      // if intersection exists, remove both p and q from set of active points
+      // and add the new point
+      if (intersection) {
+        activeIndices.delete(pi);
+        activeIndices.delete(qiTarget);
+
+        var newidx = points.length;
+        points.push(intersection);
+        activeIndices.add(newidx);
+        pq.queue(newidx);
+      }
+
+      debug.line(p, intersection);
+      debug.line(points[qiTarget], intersection);
+    }
+
+    debug.lines(psi);
+
+    console.log(pq.length);
   }
 
   function generateOverhangIslands(hds) {
@@ -107,7 +182,6 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
             var pt = new THREE.Vector3();
             pt[ah] = ph;
             pt[av] = pv;
-            //pt[axis] = min[axis] - 0.1;
 
             // two triangle verts are flipped because the triangle faces down
             // and is thus wound CW when looking into the plane
@@ -133,5 +207,5 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
 }
 
 SupportGenerator.prototype.cleanup = function() {
-  debug.debugCleanup();
+  debug.cleanup();
 }
