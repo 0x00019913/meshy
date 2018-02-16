@@ -199,7 +199,7 @@ Stage.prototype.generateUI = function() {
   var supportFolder = this.gui.addFolder("Supports");
   supportFolder.add(this, "supportAngle", 0, 90);
   supportFolder.add(this, "supportResolution", .0001, 10);
-  supportFolder.add(this, "supportSpacingFactor", 1, 10);
+  supportFolder.add(this, "supportSpacingFactor", 1, 100);
   supportFolder.add(this, "supportAxis", ["x", "y", "z"]);
   supportFolder.add(this, "generateSupports");
   supportFolder.add(this, "removeSupports");
@@ -704,7 +704,7 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.activateSliceMode();
-  //this.generateSupports();
+  this.generateSupports();
 
   this.cameraToModel();
   this.filename = this.model.filename;

@@ -24,7 +24,7 @@ Octree = function(depth, origin, size, faces, vertices, scene) {
 }
 
 // construct the entire octree at once
-Octree.prototype.contruct = function() {
+Octree.prototype.construct = function() {
   var faces = this.faces;
 
   for (var i=0; i<faces.length; i++) {
@@ -56,7 +56,7 @@ Octree.prototype.numLeaves = function() {
 // params:
 //  p: ray origin (THREE.Vector3)
 //  d: ray direction, assumed normalized (THREE.Vector3)
-// (variable names are as per the convention of "An efficient Parametric
+// (variable names are as per the convention of "An Efficient Parametric
 // Algorithm for Octree Traversal")
 Octree.prototype.castRayInternal = function(p, d) {
   if (!this.raycasterInternal) {
@@ -410,6 +410,7 @@ Raycaster = function(type) {
 // returns:
 //  {
 //   point: intersection point, possibly on the side of the octree
+//   dist: distance from ray origin to intersection point
 //   meshHit: true if mesh was hit; false if the ray hit the side of the octree
 //  }
 Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
@@ -448,9 +449,11 @@ Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
   var hit = this.castRayProc(node, t0, t1);
 
   var meshHit = hit !== null;
+  var hitPoint = meshHit ? hit : this.rayEnd;
 
   return {
-    point: meshHit ? hit : this.rayEnd,
+    point: hitPoint,
+    dist: p.distanceTo(hitPoint),
     meshHit: meshHit
   };
 
@@ -469,18 +472,22 @@ Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
 Raycaster.prototype.hitTest = function(faceIdx) {
   var face = this.faces[faceIdx];
 
+  var internal = this.type === raycasterTypes.internal;
+  var external = this.type === raycasterTypes.external;
   var dot = face.normal.dot(this.d);
   // if interior raycast, normal must have positive component along d
-  if (this.type === raycasterTypes.internal) {
-    if (dot<=0) return 0;
+  if (internal) {
+    if (dot <= 0) return 0;
   }
   // if exterior, normal must have a negative component
-  else if (this.type === raycasterTypes.external) {
-    if (dot>=0) return 0;
+  else if (external) {
+    if (dot >= 0) return 0;
   }
 
   // if correct normal, test intersection
-  var [a, b, c] = faceGetVerts(face, this.vertices);
+  var a, b, c;
+  if (internal) [a, b, c] = faceGetVerts(face, this.vertices);
+  else [b, a, c] = faceGetVerts(face, this.vertices);
 
   // get the intersection of the face with the ray
   var intersection = triSegmentIntersection(a, b, c, this.p, this.rayEnd);

@@ -910,7 +910,7 @@ Model.prototype.viewThickness = function(threshold) {
     var intersection = this.octree.castRayInternal(faceCenter, negativeNormal);
 
     var dist = 0;
-    if (intersection.meshHit) dist = faceCenter.distanceTo(intersection.point);
+    if (intersection.meshHit) dist = intersection.dist;
 
     var level = Math.min(dist/threshold, 1.0);
     face.color.setRGB(1.0, level, level);

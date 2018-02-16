@@ -19,7 +19,7 @@ Debug.prototype.line = function(v, w, n, lastonly, offset) {
     if (lastonly && (n==0 || i<n-1)) continue;
     var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
     vert.z += 0.1*offset;
-    //this.debugPointGeo.vertices.push(vert);
+    this.debugPointGeo.vertices.push(vert);
   }
   var vv = v.clone();
   vv.z += 0.1*offset;

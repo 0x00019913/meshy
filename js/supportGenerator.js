@@ -15,7 +15,7 @@ function SupportGenerator(angle, resolution, layerHeight, axis, epsilon) {
   this.down[axis] = -1;
 }
 
-SupportGenerator.prototype.generate = function(vertices, faces, min) {
+SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
   var axis = this.axis;
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -58,12 +58,30 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
   console.log(pointSets);
 
   for (var psi=0; psi<pointSets.length; psi++) {
+    break;
     var points = pointSets[psi];
     for (var pi=0; pi<points.length; pi++) {
       debug.point(points[pi]);
     }
     debug.points(0);
   }
+
+  // need an octree for raycasting
+
+  // octree size is this plus largest mesh size
+  var octreeOverflow = 0.01;
+  // other params
+  var octreeDepth = Math.round(Math.log(faces.length)*0.6);
+  var octreeSize = vector3Max(max.clone().sub(min)) + octreeOverflow;
+  var octreeCenter = max.clone().add(min).multiplyScalar(0.5);
+  var octreeOrigin = octreeCenter.subScalar((octreeSize + octreeOverflow)/2);
+
+  var octree = new Octree(octreeDepth, octreeOrigin, octreeSize, fs, vs, debug.scene);
+  octree.construct();
+
+  console.log(octree);
+
+  // iterate through sampled points, build support trees
 
   // for every island's point set
   for (var psi = 0; psi < pointSets.length; psi++) {
@@ -87,13 +105,14 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
     }
 
     var ct = 0;
-    var lim = 100;
+    var lim = 1000;
     while (pq.length > 0) {
-      if (++ct>lim) break;
+      //if (++ct>lim) break;
 
       var pi = pq.dequeue();
 
       if (!activeIndices.has(pi)) continue;
+      activeIndices.delete(pi);
 
       var p = points[pi];
 
@@ -115,25 +134,46 @@ SupportGenerator.prototype.generate = function(vertices, faces, min) {
         }
       }
 
-      // if intersection exists, remove both p and q from set of active points
-      // and add the new point
+      // if p-q intersection exists, either p and q connect or p's ray to q hits
+      // the mesh first
       if (intersection) {
-        activeIndices.delete(pi);
-        activeIndices.delete(qiTarget);
+        var qTarget = points[qiTarget];
+        var d = intersection.clone().sub(p);
+        var rayQ = octree.castRayExternal(p, d);
 
-        var newidx = points.length;
-        points.push(intersection);
-        activeIndices.add(newidx);
-        pq.queue(newidx);
+        // if p's ray to the intersection hits the mesh first, join it to the
+        // mesh and leave q to join to something else later
+        if (rayQ.dist < minDist) {
+          var rayDown = octree.castRayExternal(p, down);
+          if (rayQ.dist < rayDown.dist) {
+            debug.line(p, rayQ.point);
+          }
+          else {
+            debug.line(p, rayDown.point);
+          }
+        }
+        // p and q can be safely joined
+        else {
+          activeIndices.delete(qiTarget);
+
+          var newidx = points.length;
+          points.push(intersection);
+          activeIndices.add(newidx);
+          pq.queue(newidx);
+
+          debug.line(p, intersection);
+          debug.line(points[qiTarget], intersection);
+        }
       }
-
-      debug.line(p, intersection);
-      debug.line(points[qiTarget], intersection);
+      // if no intersection between p and q, cast a ray down and build a strut
+      // where it intersects the mesh or the ground
+      else {
+        var rayDown = octree.castRayExternal(p, down);
+        debug.line(p, rayDown.point);
+      }
     }
 
     debug.lines(psi);
-
-    console.log(pq.length);
   }
 
   function generateOverhangIslands(hds) {
