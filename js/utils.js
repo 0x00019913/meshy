@@ -136,12 +136,12 @@ function faceGetVerts(face, vertices) {
   ];
 }
 function faceGetMaxAxis(face, vertices, axis) {
-  var verts = faceGetVerts(face, vertices);
-  return Math.max(verts[0][axis], Math.max(verts[1][axis], verts[2][axis]));
+  var [a, b, c] = faceGetVerts(face, vertices);
+  return Math.max(a[axis], Math.max(b[axis], c[axis]));
 }
 function faceGetMinAxis(face, vertices, axis) {
-  var verts = faceGetVerts(face, vertices);
-  return Math.min(verts[0][axis], Math.min(verts[1][axis], verts[2][axis]));
+  var [a, b, c] = faceGetVerts(face, vertices);
+  return Math.min(a[axis], Math.min(b[axis], c[axis]));
 }
 function faceGetBounds(face, vertices) {
   var min = new THREE.Vector3().setScalar(Infinity);
@@ -210,6 +210,10 @@ function faceGetVertsSorted(face, vertices, axis) {
 function faceGetCenter(face, vertices) {
   var verts = faceGetVerts(face, vertices);
   return verts[0].clone().add(verts[1]).add(verts[2]).divideScalar(3);
+}
+function faceGetArea(face, vertices) {
+  var [a, b, c] = faceGetVerts(face, vertices);
+  return b.clone().sub(a).cross(c.clone().sub(a)).length()/2;
 }
 // compute THREE.Face3 normal
 function faceComputeNormal(face, vertices) {
@@ -391,6 +395,57 @@ function raySegmentIntersection(s, t, sd, td, axis, epsilon) {
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
+// bool check if segment ab intersects segment cd
+function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
+  if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
+
+  return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
+          (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
+}
+
+// find the highest point of intersection between two cones; the cones have
+// origins p and q, both open downward on axis, and both have walls forming
+// the given angle (in radians) with the axis
+// if one cone's origin is inside the other cone, return null
+// principle:
+// points P and P cast rays at the given angle with the vertical to the closest
+// intersection I; first move Q along the I-Q line such that it's level with P
+// on axis, find the midpoint of the P-Q line, then move that point down by
+// (1/2)|P-Q|/tan(angle)
+function coneConeIntersection(p, q, angle, axis) {
+  if (p === q) return null;
+
+  var up = new THREE.Vector3();
+  up[axis] = 1;
+
+  var cos = Math.cos(angle);
+  var d = q.clone().sub(p).normalize();
+
+  var dot = -d.dot(up);
+  // if p's cone contains q or vice versa, no intersection
+  if (dot>cos || dot<cos-1) return null;
+
+  // horizontal (orthogonal to axis), normalized vector from p to q
+  d[axis] = 0;
+  d.normalize();
+
+  var tan = Math.tan(angle);
+
+  // lift or lower q to be level with p on axis
+  var diff = q[axis] - p[axis];
+  var qnew = q.clone();
+  qnew.addScaledVector(up, -diff);
+  qnew.addScaledVector(d, -diff * tan);
+
+  // get the midpoint, lower it as described above, that's the intersection
+  var midpoint = p.clone().add(qnew).divideScalar(2);
+  var len = midpoint.distanceTo(p);
+  midpoint[axis] -= len/tan;
+
+  return midpoint;
+}
+
 // returns v's distance to the line through a and b
 function distanceToLine(v, a, b, axis) {
   if (axis === undefined) axis = 'z';
@@ -479,15 +534,6 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
   return left(a, b, p, axis, epsilon) &&
          left(b, c, p, axis, epsilon) &&
          left(c, a, p, axis, epsilon);
-}
-
-// bool check if segment ab intersects segment cd
-function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
-
-  return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
-          (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
 }
 
 // approximate coincidence testing for vectors
