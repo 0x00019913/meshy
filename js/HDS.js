@@ -75,21 +75,14 @@ function HDSIsland(vs) {
   this.vs = vs;
   this.faces = [];
   this.count = 0;
-  this.min = new THREE.Vector3().setScalar(Infinity);
-  this.max = new THREE.Vector3().setScalar(-Infinity);
+  this.area = 0;
 }
 
 HDSIsland.prototype.addFace = function(face) {
   // add face
   this.faces.push(face);
   this.count++;
-
-  // update bounds
-  var verts = faceGetVerts(face.face3, this.vs);
-  for (var v=0; v<3; v++) {
-    this.min.min(verts[v]);
-    this.max.max(verts[v]);
-  }
+  this.area += faceGetArea(face.face3, this.vs);
 }
 
 
