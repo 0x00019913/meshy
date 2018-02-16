@@ -6,9 +6,7 @@
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
 //  scene: optional, used for visualizing the octree
-//  fillLater: if false, fill the octree with faces upon creation; if true,
-//    manually call addFace(i) to add the ith face
-Octree = function(depth, origin, size, faces, vertices, scene, fillLater) {
+Octree = function(depth, origin, size, faces, vertices, scene) {
   this.depth = depth;
   this.origin = origin;
   this.size = size;
@@ -20,16 +18,18 @@ Octree = function(depth, origin, size, faces, vertices, scene, fillLater) {
 
   this.node = new TreeNode(depth, origin, size);
 
-  // fill out the tree with geometry if not doing it later
-  if (!fillLater) {
-    for (var i=0; i<faces.length; i++) {
-      this.addFace(i);
-    }
-  }
-
   // for visualizing the octree, optional
   this.scene = scene;
   this.density = 0;
+}
+
+// construct the entire octree at once
+Octree.prototype.contruct = function() {
+  var faces = this.faces;
+
+  for (var i=0; i<faces.length; i++) {
+    this.addFace(i);
+  }
 }
 
 // add the ith face to the octree
@@ -58,9 +58,21 @@ Octree.prototype.numLeaves = function() {
 //  d: ray direction, assumed normalized (THREE.Vector3)
 // (variable names are as per the convention of "An efficient Parametric
 // Algorithm for Octree Traversal")
-Octree.prototype.castRay = function(p, d) {
-  if (!this.raycaster) this.raycaster = new Raycaster();
-  return this.raycaster.castRay(this.node, p, d, this.faces, this.vertices);
+Octree.prototype.castRayInternal = function(p, d) {
+  if (!this.raycasterInternal) {
+    this.raycasterInternal = new Raycaster(raycasterTypes.internal);
+  }
+
+  return this.raycasterInternal.castRay(this.node, p, d, this.faces, this.vertices);
+}
+
+// same as above, but for external raycasts
+Octree.prototype.castRayExternal = function(p, d) {
+  if (!this.raycasterExternal) {
+    this.raycasterExternal = new Raycaster(raycasterTypes.external);
+  }
+
+  return this.raycasterExternal.castRay(this.node, p, d, this.faces, this.vertices);
 }
 
 // visualize the octree
@@ -362,11 +374,16 @@ TreeNode.prototype.visualizeBorderEdges = function(geo) {
   }
 }
 
+var raycasterTypes = {
+  internal: 1,
+  external: 2
+}
 
-// Raycaster constructor - made it a separate class b/c we want to have the
-// various ray-related functions exist in this singleton instead of being
-// defined locally
-Raycaster = function() {
+// Raycaster constructor - made it a separate class b/c we may want to have
+// different raycasters over the same octree
+// params:
+//  type: internal or external depending on where we're casting
+Raycaster = function(type) {
   this.p = null;
   this.d = null;
   this.dir = null;
@@ -375,6 +392,9 @@ Raycaster = function() {
   this.vertices = null;
 
   this.rayEnd = null;
+
+  // internal by default
+  this.type = type!==undefined ? type : raycasterTypes.internal;
 }
 
 // return the point where the ray hits a face that has a normal with a positive
@@ -383,9 +403,15 @@ Raycaster = function() {
 //  node: starting node in the octree
 //  p: ray origin (THREE.Vector3)
 //  d: ray direction, assumed normalized (THREE.Vector3)
+//  faces: face array; need these for intersection testing
 //  vertices: vertex array; need this to get vertices out of a face
 // (variable names are as per the convention of "An Efficient Parametric
 // Algorithm for Octree Traversal")
+// returns:
+//  {
+//   point: intersection point, possibly on the side of the octree
+//   meshHit: true if mesh was hit; false if the ray hit the side of the octree
+//  }
 Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
   this.p = p;
   this.d = d;
@@ -409,30 +435,30 @@ Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
     Math.sign(d.z)
   );
   // swap t0 and t1 values for the axes on which the ray is decreasing
-  if (dir.x<0) {
-    var tmp = t0.x;
-    t0.x = t1.x;
-    t1.x = tmp;
-  }
-  if (dir.y<0) {
-    var tmp = t0.y;
-    t0.y = t1.y;
-    t1.y = tmp;
-  }
-  if (dir.z<0) {
-    var tmp = t0.z;
-    t0.z = t1.z;
-    t1.z = tmp;
-  }
+  if (dir.x<0) swapAttributes(t0, t1, "x");
+  if (dir.y<0) swapAttributes(t0, t1, "y");
+  if (dir.z<0) swapAttributes(t0, t1, "z");
+
   this.dir = dir;
 
   // get the point where the ray exits the far end of the root node
-  this.rayEnd = p.clone().add(d.clone().multiplyScalar(vector3Min(t1)));
+  this.rayEnd = p.clone().addScaledVector(d, vector3Min(t1));
 
   // cast the ray and get the point at which it hits
   var hit = this.castRayProc(node, t0, t1);
 
-  return hit;
+  var meshHit = hit !== null;
+
+  return {
+    point: meshHit ? hit : this.rayEnd,
+    meshHit: meshHit
+  };
+
+  function swapAttributes(v0, v1, attr) {
+    var tmp = v0[attr];
+    v0[attr] = v1[attr];
+    v1[attr] = tmp;
+  }
 }
 
 // intersection-checking function to be passed to the ray-casting process:
@@ -442,21 +468,26 @@ Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
 //  faceIdx: index of a face in this.faces
 Raycaster.prototype.hitTest = function(faceIdx) {
   var face = this.faces[faceIdx];
-  // normal must have positive component along d
-  if (face.normal.dot(this.d)<=0) return 0;
+
+  var dot = face.normal.dot(this.d);
+  // if interior raycast, normal must have positive component along d
+  if (this.type === raycasterTypes.internal) {
+    if (dot<=0) return 0;
+  }
+  // if exterior, normal must have a negative component
+  else if (this.type === raycasterTypes.external) {
+    if (dot>=0) return 0;
+  }
 
   // if correct normal, test intersection
-  var v1 = this.vertices[face.a];
-  var v2 = this.vertices[face.b];
-  var v3 = this.vertices[face.c];
+  var [a, b, c] = faceGetVerts(face, this.vertices);
 
   // get the intersection of the face with the ray
-  var intersection = triSegmentIntersection(v1, v2, v3, this.p, this.rayEnd);
+  var intersection = triSegmentIntersection(a, b, c, this.p, this.rayEnd);
 
   // if intersection exists, compute distance from ray source and return it;
-  // else, return 0
-  if (intersection) return intersection;
-  else return null;
+  // else, return this.rayEnd because we hit the side of the octree
+  return intersection;
 }
 
 // returns the distance from the ray origin to the closest face it hits
@@ -813,7 +844,7 @@ function triSegmentIntersection(v1, v2, v3, s1, s2) {
 
   // test t parameter; has to be positive and not farther from s1 than s2
   var t = e2.dot(Q) * inv_det;
-  if (t > 0.0 && t < L) return s1.clone().add(D.clone().multiplyScalar(t));
+  if (t > 0.0 && t < L) return s1.clone().addScaledVector(D, t);
 
   return null;
 }

@@ -837,7 +837,7 @@ Model.prototype.buildOctree = function(d, nextIterator) {
 
   // create the octree; the last argument means that we will manually fill out
   // the geometry
-  this.octree = new Octree(depth, origin, size, this.faces, this.vertices, this.scene, true);
+  this.octree = new Octree(depth, origin, size, this.faces, this.vertices, this.scene);
 
 
   // fill out the octree in a non-blocking way
@@ -904,14 +904,13 @@ Model.prototype.viewThickness = function(threshold) {
   function viewFaceThickness(i) {
     var face = this.faces[i];
 
-    var verts = faceGetVerts(face, this.vertices);
-    var faceCenter = verts[0].clone().add(verts[1]).add(verts[2]).multiplyScalar(1/3);
-    var negativeNormal = face.normal.clone().multiplyScalar(-1);
+    var faceCenter = faceGetCenter(face, this.vertices);
+    var negativeNormal = face.normal.clone().negate();
 
-    var intersection = this.octree.castRay(faceCenter, negativeNormal);
+    var intersection = this.octree.castRayInternal(faceCenter, negativeNormal);
 
     var dist = 0;
-    if (intersection) dist = faceCenter.distanceTo(intersection);
+    if (intersection.meshHit) dist = faceCenter.distanceTo(intersection.point);
 
     var level = Math.min(dist/threshold, 1.0);
     face.color.setRGB(1.0, level, level);
@@ -920,6 +919,8 @@ Model.prototype.viewThickness = function(threshold) {
 
   function onDone() {
     this.basicMesh.geometry.colorsNeedUpdate = true;
+    debug.lines(1); // todo: remove
+    debug.points(0);
 
     this.printout.log("Mesh thickness below the threshold is displayed in red.");
   }
@@ -1095,76 +1096,6 @@ Model.prototype.stopIterator = function(type) {
     var nextAll = iterListEntry.next;
     for (var i=0; i<nextAll; i++) {
       this.removeIterator(nextAll[i]);
-    }
-  }
-}
-
-
-// testing some octree stuff; leave in for future testing
-Model.prototype.colorTest = function(color) {
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    if (color) face.color.set(color);
-    else face.color.set(0xff0000);
-
-  }
-  this.basicMesh.geometry.colorsNeedUpdate = true;
-}
-
-Model.prototype.rayTest = function(repeats) {
-  // for visualizing verts
-  var vertGeo = new THREE.Geometry();
-  var vertMat = new THREE.PointsMaterial({color: 0xff0000, size: 0.04});
-  var vertMesh = new THREE.Points(vertGeo, vertMat);
-  this.scene.add(vertMesh);
-  var vertLineGeo = new THREE.Geometry();
-  var vertLineMat = new THREE.LineBasicMaterial({color: 0x8888ff});
-  var vertLineMesh = new THREE.LineSegments(vertLineGeo, vertLineMat);
-  this.scene.add(vertLineMesh);
-  var _this = this;
-
-  var threshold = 0.2;
-
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    var n = face.normal;
-    var dist = castRay(face);
-    if (dist<0.000001) {
-      console.log(i);
-    }
-    else {
-      var level = Math.min(dist/threshold, 1.0);
-      face.color.setRGB(1.0, level, level);
-    }
-    if (repeats===undefined) break;
-    else {
-      if (repeats<=0) break;
-      else repeats--;
-    }
-  }
-
-  this.basicMesh.geometry.colorsNeedUpdate = true;
-
-  function castRay(face) {
-    var verts = faceGetVerts(face, _this.vertices);
-    var faceCenter = verts[0].clone().add(verts[1]).add(verts[2]).multiplyScalar(1/3);
-
-    if (!_this.octree) _this.buildOctree();
-    var p = faceCenter;
-    var d = face.normal.clone().multiplyScalar(-1);
-    var hit = _this.octree.castRay(p, d, _this.faces, _this.vertices);
-    if (!hit) return 0;
-    showLine(p, hit);
-    showLine(hit);
-    return hit.distanceTo(p);
-  }
-
-  function showLine(v1, v2) {
-    vertGeo.vertices.push(v1);
-    if (v2) {
-      vertGeo.vertices.push(v2);
-      vertLineGeo.vertices.push(v1);
-      vertLineGeo.vertices.push(v2);
     }
   }
 }
@@ -1946,7 +1877,7 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 Model.prototype.generateSupports = function(angle, resolution, layerHeight, axis) {
   this.supportGenerator = new SupportGenerator(angle, resolution, layerHeight, axis);
 
-  this.supportGenerator.generate(this.vertices, this.faces, this.min);
+  this.supportGenerator.generate(this.faces, this.vertices, this.min, this.max);
 }
 
 Model.prototype.removeSupports = function() {
