@@ -217,8 +217,8 @@ function faceGetArea(face, vertices) {
 }
 // compute THREE.Face3 normal
 function faceComputeNormal(face, vertices) {
-  var verts = faceGetVerts(face, vertices);
-  face.normal.copy(vertsComputeNormal(...verts));
+  var [a, b, c] = faceGetVerts(face, vertices);
+  face.normal.copy(vertsComputeNormal(a, b, c));
 }
 function vertsComputeNormal(a, b, c) {
   var ba = a.clone().sub(b);

@@ -1877,7 +1877,15 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 Model.prototype.generateSupports = function(angle, resolution, layerHeight, axis) {
   this.supportGenerator = new SupportGenerator(angle, resolution, layerHeight, axis);
 
-  this.supportGenerator.generate(this.faces, this.vertices, this.min, this.max);
+  var supportGeometry = this.supportGenerator.generate(
+    this.faces,
+    this.vertices,
+    this.min,
+    this.max
+  );
+
+  var supportMesh = new THREE.Mesh(supportGeometry, this.materials.basicMesh);
+  this.scene.add(supportMesh);
 }
 
 Model.prototype.removeSupports = function() {

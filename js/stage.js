@@ -194,7 +194,7 @@ Stage.prototype.generateUI = function() {
 
   this.supportAngle = 45;
   this.supportResolution = .05;
-  this.supportSpacingFactor = 2.5;
+  this.supportSpacingFactor = 5;
   this.supportAxis = "z";
   var supportFolder = this.gui.addFolder("Supports");
   supportFolder.add(this, "supportAngle", 0, 90);
