@@ -1,98 +1,88 @@
-function SupportGenerator(angle, resolution, layerHeight, axis, epsilon) {
+// params:
+//  faces, vertices: the geometry of the mesh for which we'll generate supports
+function SupportGenerator(faces, vertices) {
+  this.faces = faces;
+  this.vertices = vertices;
+
+  this.octree = null;
+}
+
+// params:
+//  angleDegrees: the maximal angle, given in degrees, between a face's normal
+//    and the downward vector; essentially specifies the steepness range in
+//    which faces require support
+//  resolution: horizontal resolution for spacing out support points
+//  layerHeight: for finding points that don't need supporting
+//  supportRadius: radius of support struts
+//  axis: up axis
+//  min, max: min and max bounds of the mesh
+//  epsilon: optional
+SupportGenerator.prototype.generate = function(
+    angleDegrees,
+    resolution,
+    layerHeight,
+    supportRadius,
+    axis,
+    min,
+    max,
+    epsilon
+) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
-  // angle in radians
-  this.angle = angle * Math.PI / 180;
-  // used to determine overhangs
-  this.dotProductCutoff = Math.cos(this.angle);
-  this.resolution = resolution;
-  this.layerHeight = layerHeight;
-  this.axis = axis;
-  this.epsilon = epsilon;
-
-  this.down = new THREE.Vector3();
-  this.down[axis] = -1;
-}
-
-SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
-  var axis = this.axis;
+  // axes in the horizontal plane
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
-  var epsilon = this.epsilon;
-  var angle = this.angle;
-  var minHeight = min[axis] + this.layerHeight/2;
-  var resolution = this.resolution;
 
-  var vs = vertices;
-  var fs = faces;
+  // angle in radians
+  var angle = angleDegrees * Math.PI / 180;
+  var minHeight = min[axis] + layerHeight/2;
+  var resolution = resolution;
+
+  var vs = this.vertices;
+  var fs = this.faces;
 
   var nv = vs.length;
   var nf = fs.length;
 
-  if (min===undefined) min = new THREE.Vector3().setScalar(-Infinity);
+  // used to determine overhangs
+  var dotProductCutoff = Math.cos(angle);
 
-  var dotProductCutoff = this.dotProductCutoff;
-  var down = this.down;
+  var down = new THREE.Vector3();
+  down[axis] = -1;
   var up = down.clone().negate();
 
-  var hds = new HDS(vertices, faces);
+  var hds = new HDS(vs, fs);
 
   // generate islands of overhang faces in the mesh
   var islands = generateOverhangIslands(hds);
 
-  console.log(islands);
-
-  for (var i=0; i<islands.length; i++) {
-    break;
-    var island = islands[i];
-    for (var j=0; j<island.faces.length; j++) {
-      var face3 = island.faces[j].face3;
-      debug.point(faceGetCenter(face3, vs));
-    }
-    debug.points(i, 1);
-  }
-
   // rasterize each island to find sampling points over every island
   var pointSets = samplePoints(islands);
 
-  console.log(pointSets);
-
-  for (var psi=0; psi<pointSets.length; psi++) {
-    break;
-    var points = pointSets[psi];
-    for (var pi=0; pi<points.length; pi++) {
-      debug.point(points[pi]);
-    }
-    debug.points(0);
-  }
-
   // need an octree for raycasting
 
-  // octree size is this plus largest mesh size
-  var octreeOverflow = 0.01;
-  // other params
-  var octreeDepth = Math.round(Math.log(faces.length)*0.6);
-  var octreeSize = vector3Max(max.clone().sub(min)) + octreeOverflow;
-  var octreeCenter = max.clone().add(min).multiplyScalar(0.5);
-  var octreeOrigin = octreeCenter.subScalar((octreeSize + octreeOverflow)/2);
+  if (this.octree === null) {
+    // octree size is some epsilon plus largest mesh size
+    var octreeOverflow = 0.01;
+    var octreeSize = vector3Max(max.clone().sub(min)) + octreeOverflow;
+    // other params
+    var octreeDepth = Math.round(Math.log(fs.length)*0.6);
+    var octreeCenter = max.clone().add(min).multiplyScalar(0.5);
+    var octreeOrigin = octreeCenter.subScalar((octreeSize + octreeOverflow)/2);
 
-  var octree = new Octree(octreeDepth, octreeOrigin, octreeSize, fs, vs, debug.scene);
-  octree.construct();
+    this.octree = new Octree(octreeDepth, octreeOrigin, octreeSize, fs, vs);
+    this.octree.construct();
+  }
 
-  console.log(octree);
+  var octree = this.octree;
 
-  // iterate through sampled points, build support trees
-  var supportGeometry = new THREE.Geometry();
-  var strutRadius = 0.03;
-  var strutThetaSteps = 2;
-  var strutPhiSteps = 8;
-
-  buildGeometry(supportGeometry);
-
-  console.log(supportGeometry);
+  // construct a Geometry object with the support verts and faces
+  var supportGeometry = buildGeometry();
 
   return supportGeometry;
+
+
 
   function generateOverhangIslands(hds) {
     // return true if the given HDS face is an overhang and above the base plane
@@ -163,7 +153,13 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
     return pointSets;
   }
 
-  function buildGeometry(supportGeometry) {
+  function buildGeometry() {
+    // iterate through sampled points, build support trees
+    var supportGeometry = new THREE.Geometry();
+    var strutRadius = supportRadius;
+    var strutThetaSteps = 2;
+    var strutPhiSteps = 8;
+
     // for every island's point set
     for (var psi = 0; psi < pointSets.length; psi++) {
       var points = pointSets[psi];
@@ -222,15 +218,14 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
           // mesh and leave q to join to something else later
           if (rayQ.dist < minDist) {
             var rayDown = octree.castRayExternal(p, down);
+
+            // hit along p's ray to intersection is closer, so join there
             if (rayQ.dist < rayDown.dist) {
-              writeCapsuleGeometry(
-                supportGeometry, strutRadius, p, rayQ.point, strutPhiSteps, strutThetaSteps
-              );
+              writeCapsuleGeometry(supportGeometry, p, rayQ.point);
             }
+            // downward connection is closer, so join downward
             else {
-              writeCapsuleGeometry(
-                supportGeometry, strutRadius, p, rayDown.point, strutPhiSteps, strutThetaSteps
-              );
+              writeCapsuleGeometry(supportGeometry, p, rayDown.point);
             }
           }
           // p and q can be safely joined
@@ -242,23 +237,31 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
             activeIndices.add(newidx);
             pq.queue(newidx);
 
-            writeCapsuleGeometry(
-              supportGeometry, strutRadius, p, intersection, strutPhiSteps, strutThetaSteps
-            );
-            writeCapsuleGeometry(
-              supportGeometry, strutRadius, points[qiTarget], intersection, strutPhiSteps, strutThetaSteps
-            );
+            writeCapsuleGeometry(supportGeometry, p, intersection);
+            writeCapsuleGeometry(supportGeometry, points[qiTarget], intersection);
+
+            writeSphereGeometry(supportGeometry, intersection);
           }
         }
         // if no intersection between p and q, cast a ray down and build a strut
         // where it intersects the mesh or the ground
         else {
           var rayDown = octree.castRayExternal(p, down);
-          writeCapsuleGeometry(
-            supportGeometry, strutRadius, p, rayDown.point, strutPhiSteps, strutThetaSteps
-          );
+          writeCapsuleGeometry(supportGeometry, p, rayDown.point);
         }
       }
+    }
+
+    supportGeometry.computeFaceNormals();
+
+    return supportGeometry;
+
+    function writeCapsuleGeometry(geo, start, end) {
+      writeCapsuleGeometryImpl(geo, strutRadius, start, end, strutPhiSteps, strutThetaSteps);
+    }
+
+    function writeSphereGeometry(geo, center) {
+      writeSphereGeometryImpl(geo, strutRadius * 1.1, center, 8, strutPhiSteps);
     }
   }
 
@@ -268,7 +271,7 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
   //  x = r cos phi sin theta
   //  y = r sin phi sin theta
   //  z = r cos theta
-  function writeCapsuleGeometry(geo, radius, start, end, phiSteps, thetaSteps) {
+  function writeCapsuleGeometryImpl(geo, radius, start, end, phiSteps, thetaSteps) {
     var len = start.distanceTo(end);
 
     phiSteps = Math.max(phiSteps || 3, 3);
@@ -300,7 +303,7 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
     // count the number of verts in this capsule, then rotate and translate
     // them into place
     var count = 2 * (1 + phiSteps * thetaSteps);
-    positionGeometry(geo, count, rotationAngle, rotationAxis, start);
+    positionCapsuleGeometry(geo, count, rotationAngle, rotationAxis, start);
 
     writeCapsuleTorso(geo, ibot, itop, phiSteps);
 
@@ -313,7 +316,7 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
 
   // dir is 1 if upper cap, -1 if lower
   // returns length of geo.vertices
-  function writeCapsuleCap(geo, radius, center, phiSteps, thetaSteps, dir, rAxis, rAngle) {
+  function writeCapsuleCap(geo, radius, center, phiSteps, thetaSteps, dir) {
     var vertices = geo.vertices;
     var faces = geo.faces;
 
@@ -358,16 +361,10 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
           d -= phiSteps;
         }
 
-        var f0 = new THREE.Face3(a, c, d);
-        faceComputeNormal(f0, vertices);
-        faces.push(f0);
+        faces.push(new THREE.Face3(a, c, d));
 
         // add a second face if not on the first row of the cap
-        if (itheta > 1) {
-          var f1 = new THREE.Face3(a, d, b);
-          faceComputeNormal(f1, vertices);
-          faces.push(f1);
-        }
+        if (itheta > 1) faces.push(new THREE.Face3(a, d, b));
       }
     }
 
@@ -375,7 +372,7 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
   }
 
   // takes the last count verts from geo, rotates them, shifts them to pos
-  function positionGeometry(geo, count, rotationAngle, rotationAxis, pos) {
+  function positionCapsuleGeometry(geo, count, rotationAngle, rotationAxis, pos) {
     var vertices = geo.vertices;
     var nv = vertices.length;
 
@@ -401,13 +398,38 @@ SupportGenerator.prototype.generate = function(faces, vertices, min, max) {
       var d = c - 1;
       if (i == 0) c -= phiSteps;
 
-      var f0 = new THREE.Face3(a, c, d);
-      faceComputeNormal(f0, vertices);
-      faces.push(f0);
+      faces.push(new THREE.Face3(a, c, d));
+      faces.push(new THREE.Face3(a, d, b));
+    }
+  }
 
-      var f1 = new THREE.Face3(a, d, b);
-      faceComputeNormal(f1, vertices);
-      faces.push(f1);
+  // write a new sphere into a geometry object
+  function writeSphereGeometryImpl(geo, radius, center, phiSteps, thetaSteps) {
+    var sphereGeometry = new THREE.SphereGeometry(
+      radius, thetaSteps, phiSteps
+    );
+    sphereGeometry.translate(center.x, center.y, center.z);
+
+    var vertices = geo.vertices;
+    var faces = geo.faces;
+    var svertices = sphereGeometry.vertices;
+    var sfaces = sphereGeometry.faces;
+
+    var nv = vertices.length;
+
+    // write vertices
+    for (var i = 0; i < svertices.length; i++) {
+      vertices.push(svertices[i]);
+    }
+
+    // write faces
+    for (var i = 0; i < sfaces.length; i++) {
+      var face = sfaces[i].clone();
+      face.a += nv;
+      face.b += nv;
+      face.c += nv;
+
+      faces.push(face);
     }
   }
 

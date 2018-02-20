@@ -1874,22 +1874,38 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 /* SUPPORTS */
 
-Model.prototype.generateSupports = function(angle, resolution, layerHeight, axis) {
-  this.supportGenerator = new SupportGenerator(angle, resolution, layerHeight, axis);
+Model.prototype.generateSupports = function(
+  angle,
+  resolution,
+  layerHeight,
+  supportRadius,
+  axis
+) {
+  this.removeSupports();
+
+  if (!this.supportGenerator) {
+    this.supportGenerator = new SupportGenerator(this.faces, this.vertices);
+  }
 
   var supportGeometry = this.supportGenerator.generate(
-    this.faces,
-    this.vertices,
+    angle,
+    resolution,
+    layerHeight,
+    supportRadius,
+    axis,
     this.min,
     this.max
   );
 
   var supportMesh = new THREE.Mesh(supportGeometry, this.materials.basicMesh);
+  supportMesh.name = "support";
   this.scene.add(supportMesh);
 }
 
 Model.prototype.removeSupports = function() {
-  this.supportGenerator.cleanup();
+  if (this.supportGenerator) this.supportGenerator.cleanup();
+
+  removeMeshByName(this.scene, "support");
 }
 
 

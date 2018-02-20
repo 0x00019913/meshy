@@ -192,23 +192,26 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
+  this.verticalResolution = 0.05;
+  this.planarResolution = 0.05;
+  this.upAxis = "z";
+  var supportSlicingFolder = this.gui.addFolder("Supports & Slicing (beta)");
+  supportSlicingFolder.add(this, "verticalResolution", .0001, 1);
+  supportSlicingFolder.add(this, "planarResolution", .0001, 1);
+  supportSlicingFolder.add(this, "upAxis", ["x", "y", "z"]);
+
   this.supportAngle = 45;
-  this.supportResolution = .05;
   this.supportSpacingFactor = 5;
-  this.supportAxis = "z";
-  var supportFolder = this.gui.addFolder("Supports");
+  this.supportRadius = this.planarResolution;
+  var supportFolder = supportSlicingFolder.addFolder("Supports");
   supportFolder.add(this, "supportAngle", 0, 90);
-  supportFolder.add(this, "supportResolution", .0001, 10);
-  supportFolder.add(this, "supportSpacingFactor", 1, 100);
-  supportFolder.add(this, "supportAxis", ["x", "y", "z"]);
+  supportFolder.add(this, "supportSpacingFactor", 1, 20);
+  supportFolder.add(this, "supportRadius", 0.0001, 1);
   supportFolder.add(this, "generateSupports");
   supportFolder.add(this, "removeSupports");
 
-  this.sliceHeight = .1;
-  this.sliceAxis = "z";
-  this.printLineWidth = this.sliceHeight;
   this.sliceNumWalls = 2;
-  this.sliceFolder = this.gui.addFolder("Slice (beta)");
+  this.sliceFolder = supportSlicingFolder.addFolder("Slice");
   this.buildSliceFolderInactive();
 
   this.gui.add(this, "undo");
@@ -349,11 +352,16 @@ Stage.prototype.cancelPatch = function() {
 }
 Stage.prototype.generateSupports = function() {
   if (this.model) {
+    if (this.supportRadius < this.planarResolution) {
+      this.printout.warn("Support radius is lower than the planar resolution.");
+    }
+
     this.model.generateSupports(
       this.supportAngle,
-      this.supportResolution * this.supportSpacingFactor,
-      this.supportResolution,
-      this.supportAxis);
+      this.planarResolution * this.supportSpacingFactor,
+      this.verticalResolution,
+      this.supportRadius,
+      this.upAxis);
   }
 }
 Stage.prototype.removeSupports = function() {
@@ -362,8 +370,6 @@ Stage.prototype.removeSupports = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceFolder.add(this, "sliceHeight", 0.0001, 1);
-  this.sliceFolder.add(this, "sliceAxis", ["x", "y", "z"]);
   this.sliceFolder.add(this, "activateSliceMode");
 }
 // build the Slice folder for when slice mode is on
@@ -387,12 +393,11 @@ Stage.prototype.buildSliceFolderActive = function() {
     ).onChange(this.setSliceMode.bind(this));
 
     this.sliceSettingsFolder = this.sliceFolder.addFolder("Layer Settings");
-    this.sliceSettingsFolder.add(this, "printLineWidth", 0.001);
     this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).step(1);
     this.sliceSettingsFolder.add(this, "recalculateLayers");
-
-    this.sliceFolder.add(this, "deactivateSliceMode");
   }
+
+  this.sliceFolder.add(this, "deactivateSliceMode");
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
@@ -400,9 +405,9 @@ Stage.prototype.setSliceMode = function() {
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
     this.model.activateSliceMode({
-      axis: this.sliceAxis,
-      sliceHeight: this.sliceHeight,
-      lineWidth: this.sliceHeight, // line width defaults to slice height
+      axis: this.upAxis,
+      sliceHeight: this.verticalResolution,
+      lineWidth: this.planarResolution,
       numWalls: this.sliceNumWalls
     });
     this.buildSliceFolderActive();
