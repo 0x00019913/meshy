@@ -55,10 +55,10 @@ function getZeroVector() { return new THREE.Vector3(0,0,0); }
 function getOneVector() { return new THREE.Vector3(1,1,1); }
 
 // element max/min
-function vector3Max(v) {
+function vector3MaxElement(v) {
   return Math.max(v.x, v.y, v.z);
 }
-function vector3Min(v) {
+function vector3MinElement(v) {
   return Math.min(v.x, v.y, v.z);
 }
 // return 'x', 'y', or 'z' depending on which element is greater/lesser

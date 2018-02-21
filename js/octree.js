@@ -443,7 +443,7 @@ Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
   this.dir = dir;
 
   // get the point where the ray exits the far end of the root node
-  this.rayEnd = p.clone().addScaledVector(d, vector3Min(t1));
+  this.rayEnd = p.clone().addScaledVector(d, vector3MinElement(t1));
 
   // cast the ray and get the point at which it hits
   var hit = this.castRayProc(node, t0, t1);
