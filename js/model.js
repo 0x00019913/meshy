@@ -47,6 +47,10 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.slicePreviewMesh = null;
   this.sliceLayerMesh = null;
 
+  // will contain the bounds of distinct components in the geometry (main mesh
+  // geometry, patch, supports)
+  this.geometryComponents = {};
+
   this.scene = scene;
   this.camera = camera;
   this.container = container;
@@ -92,6 +96,9 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
   this.measurement.setOutput(this.infoOutput);
 
+  // for supports
+  this.supportGenerator = null;
+
   // currently active non-thread-blocking calculations; each is associated with
   // an iterator and a progress bar and label in the UI
   this.iterators = {};
@@ -99,7 +106,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 }
 
 // Add a Face3 to the model.
-Model.prototype.add = function(face) {
+Model.prototype.addFace = function(face) {
   this.faces.push(face);
   this.count++;
   this.updateBoundsF(face);
@@ -107,12 +114,8 @@ Model.prototype.add = function(face) {
 
 // All bounds to Infinity.
 Model.prototype.resetBounds = function() {
-  this.min.x = Infinity;
-  this.min.y = Infinity;
-  this.min.z = Infinity;
-  this.max.x = -Infinity;
-  this.max.y = -Infinity;
-  this.max.z = -Infinity;
+  this.min.setScalar(Infinity);
+  this.max.setScalar(-Infinity);
 }
 
 // Update the bounds with a new face.
@@ -720,6 +723,29 @@ Model.prototype.setMode = function(mode, params) {
   }
 }
 
+Model.prototype.addGeometryComponent = function(name, vstart, vcount, fstart, fcount) {
+  this.geometryComponents[name] = {
+    vstart: vstart,
+    vcount: vcount,
+    fstart: fstart,
+    fcount: fcount
+  };
+}
+
+Model.prototype.removeGeometryComponent = function(name) {
+  if (!this.geometryComponents.hasOwnProperty(name)) return;
+
+  var component = this.geometryComponents[name];
+
+  this.vertices.splice(component.vstart, component.vcount);
+  this.faces.splice(component.fstart, component.fcount);
+
+  this.basicMesh.geometry.verticesNeedUpdate = true;
+  this.basicMesh.geometry.elementsNeedUpdate = true;
+
+  delete this.geometryComponents[name];
+}
+
 // Create the basic mesh (as opposed to another display mode).
 Model.prototype.makeBasicMesh = function() {
   if (this.basicMesh) return;
@@ -1121,6 +1147,10 @@ Model.prototype.acceptPatch = function() {
 
   var vertices = this.patchMesh.geometry.vertices;
   var faces = this.patchMesh.geometry.faces;
+
+  var vstart = this.vertices.length;
+  var fstart = this.faces.length;
+
   var vertexMap = {};
   var p = this.p;
 
@@ -1134,10 +1164,19 @@ Model.prototype.acceptPatch = function() {
     face.a = vertexMapIdx(vertexMap, vertices[face.a], this.vertices, p);
     face.b = vertexMapIdx(vertexMap, vertices[face.b], this.vertices, p);
     face.c = vertexMapIdx(vertexMap, vertices[face.c], this.vertices, p);
-    this.add(face);
+    this.addFace(face);
   }
   this.basicMesh.geometry.verticesNeedUpdate = true;
   this.basicMesh.geometry.elementsNeedUpdate = true;
+
+  // record the starts and counts for the added patch geometry
+  this.addGeometryComponent(
+    "patch",
+    vstart,
+    this.vertices.length - vstart,
+    fstart,
+    this.faces.length - fstart
+  );
 
   this.printout.log("Mesh patched.");
 
@@ -1909,15 +1948,25 @@ Model.prototype.generateSupports = function(
     this.max
   );
 
-  var supportMesh = new THREE.Mesh(supportGeometry, this.materials.basicMesh);
-  supportMesh.name = "support";
-  this.scene.add(supportMesh);
+  this.addGeometryComponent(
+    "support",
+    this.vertices.length,
+    supportGeometry.vertices.length,
+    this.faces.length,
+    supportGeometry.faces.length
+  );
+
+  var geometry = this.basicMesh.geometry;
+
+  geometry.merge(supportGeometry);
+  geometry.verticesNeedUpdate = true;
+  geometry.elementsNeedUpdate = true;
 }
 
 Model.prototype.removeSupports = function() {
   if (this.supportGenerator) this.supportGenerator.cleanup();
 
-  removeMeshByName(this.scene, "support");
+  this.removeGeometryComponent("support");
 }
 
 
@@ -2143,6 +2192,10 @@ Model.prototype.import = function(file, callback) {
     try {
       parseResult(fr.result);
       success = true;
+
+      // record where the main geometry begins
+      _this.addGeometryComponent("model", 0, _this.vertices.length, 0, _this.faces.length);
+
       // set mode to basic mesh, which creates the mesh and puts it in the scene
       _this.setMode("basic");
       _this.printout.log("Imported file: " + file.name);
@@ -2239,7 +2292,7 @@ Model.prototype.import = function(file, callback) {
 
         // ignore "attribute byte count" (2 bytes)
         offset += 2;
-        _this.add(face);
+        _this.addFace(face);
       }
 
       function getVector3(dv, offset, isLittleEndian) {
@@ -2292,7 +2345,7 @@ Model.prototype.import = function(file, callback) {
 
           getLine(); // clear the "endloop" line
           getLine(); // clear the "endfacet" line
-          _this.add(face);
+          _this.addFace(face);
         }
       }
 
@@ -2340,7 +2393,7 @@ Model.prototype.import = function(file, callback) {
         else if (line[0]=='f') {
           hasVertNormals = (_this.vertices.length==vertexNormals.length);
           var triangles = getTriangles(line.substring(2));
-          for (var tri=0; tri<triangles.length; tri++) _this.add(triangles[tri]);
+          for (var tri=0; tri<triangles.length; tri++) _this.addFace(triangles[tri]);
         }
       }
 

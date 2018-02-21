@@ -709,7 +709,7 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.activateSliceMode();
-  this.generateSupports();
+  //this.generateSupports();
 
   this.cameraToModel();
   this.filename = this.model.filename;
