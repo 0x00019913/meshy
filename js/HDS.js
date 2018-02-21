@@ -71,14 +71,14 @@ function HDSFace(he, face3) {
 
 
 
-function HDSIsland(vs) {
+function HDSFaceArray(vs) {
   this.vs = vs;
   this.faces = [];
   this.count = 0;
   this.area = 0;
 }
 
-HDSIsland.prototype.addFace = function(face) {
+HDSFaceArray.prototype.addFace = function(face) {
   // add face
   this.faces.push(face);
   this.count++;
@@ -197,7 +197,7 @@ HDS.prototype.groupIntoIslands = function(valid) {
 
   // does the depth-first search
   function search(fstart) {
-    var island = new HDSIsland(vs);
+    var island = new HDSFaceArray(vs);
 
     var faceStack = [];
 
@@ -225,4 +225,18 @@ HDS.prototype.groupIntoIslands = function(valid) {
 
     return island;
   }
+}
+
+HDS.prototype.filterFaces = function(valid) {
+  var faces = this.faces;
+  var nf = faces.length;
+
+  var result = new HDSFaceArray(this.vs);
+
+  for (var f = 0; f < nf; f++) {
+    var face = faces[f];
+    if (valid(face)) result.addFace(face);
+  }
+
+  return result;
 }

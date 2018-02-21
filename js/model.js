@@ -228,6 +228,9 @@ Model.prototype.translate = function(axis, amount) {
   this.octree = null;
   this.stopIterator();
 
+  this.removeSupports();
+  this.supportGenerator = null;
+
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
 
@@ -267,6 +270,9 @@ Model.prototype.rotate = function(axis, amount) {
   // invalidate the octree and stop any active iterators
   this.octree = null;
   this.stopIterator();
+
+  this.removeSupports();
+  this.supportGenerator = null;
 
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
@@ -317,6 +323,9 @@ Model.prototype.scale = function (axis, amount) {
   this.octree = null;
   this.stopIterator();
 
+  this.removeSupports();
+  this.supportGenerator = null;
+
   // erase the vertex colors signifying thickness
   this.clearThicknessView();
 
@@ -361,6 +370,9 @@ Model.prototype.mirror = function(axis) {
   // invalidate the octree and stop any active iterators
   this.octree = null;
   this.stopIterator();
+
+  this.removeSupports();
+  this.supportGenerator = null;
 
   // erase the vertex colors signifying thickness
   this.clearThicknessView();

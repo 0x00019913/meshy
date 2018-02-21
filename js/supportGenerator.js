@@ -1,3 +1,9 @@
+// Generates a support structure for a mesh with the given vertices and faces.
+// This is a modified version of "Clever Support: Efficient Support Structure
+// Generation for Digital Fabrication" by Vanek et al. The main difference is
+// that we don't use the GPU to find the nearest point-mesh interesection,
+// instead using an octree to check the down and diagonal directions only.
+//
 // params:
 //  faces, vertices: the geometry of the mesh for which we'll generate supports
 function SupportGenerator(faces, vertices) {
@@ -55,17 +61,17 @@ SupportGenerator.prototype.generate = function(
   var hds = new HDS(vs, fs);
 
   // generate islands of overhang faces in the mesh
-  var islands = generateOverhangIslands(hds);
+  var overhangFaceSets = getOverhangFaceSets(hds);
 
-  // rasterize each island to find sampling points over every island
-  var pointSets = samplePoints(islands);
+  // rasterize each overhang face set to find sampling points over every set
+  var pointSets = samplePoints(overhangFaceSets);
 
   // need an octree for raycasting
 
   if (this.octree === null) {
     // octree size is some epsilon plus largest mesh size
     var octreeOverflow = 0.01;
-    var octreeSize = vector3Max(max.clone().sub(min)) + octreeOverflow;
+    var octreeSize = vector3MaxElement(max.clone().sub(min)) + octreeOverflow;
     // other params
     var octreeDepth = Math.round(Math.log(fs.length)*0.6);
     var octreeCenter = max.clone().add(min).multiplyScalar(0.5);
@@ -84,7 +90,7 @@ SupportGenerator.prototype.generate = function(
 
 
 
-  function generateOverhangIslands(hds) {
+  function getOverhangFaceSets(hds) {
     // return true if the given HDS face is an overhang and above the base plane
     var overhang = function(face) {
       var face3 = face.face3;
@@ -93,23 +99,24 @@ SupportGenerator.prototype.generate = function(
       return down.dot(normal) > dotProductCutoff && mx > minHeight;
     }
 
-    return hds.groupIntoIslands(overhang);
+    //return hds.groupIntoIslands(overhang);
+    return [hds.filterFaces(overhang)];
   }
 
-  function samplePoints(islands) {
+  function samplePoints(faceSets) {
     var pointSets = [];
 
     // rasterization lower bounds on h and v axes
     var rhmin = min[ah];
     var rvmin = min[av];
 
-    // for each island
-    for (var i = 0; i < islands.length; i++) {
-      var island = islands[i];
-      var faces = island.faces;
+    // for each face set
+    for (var i = 0; i < faceSets.length; i++) {
+      var faceSet = faceSets[i];
+      var faces = faceSet.faces;
       var points = [];
 
-      // iterate over all faces in the island
+      // iterate over all faces in the face set
       for (var f = 0; f < faces.length; f++) {
         var face3 = faces[f].face3;
         var normal = face3.normal;
@@ -140,7 +147,7 @@ SupportGenerator.prototype.generate = function(
         }
       }
 
-      // if the island is too small to hit any points in rasterization space,
+      // if the point set is too small to hit any points in rasterization space,
       // just store the center of its first face
       if (points.length == 0) {
         var center = faceGetCenter(faces[0].face3, vs);
@@ -157,8 +164,11 @@ SupportGenerator.prototype.generate = function(
     // iterate through sampled points, build support trees
     var supportGeometry = new THREE.Geometry();
     var strutRadius = supportRadius;
-    var strutThetaSteps = 2;
+    var strutThetaSteps = 1;
     var strutPhiSteps = 8;
+    // set this to 1 for spherical caps; setting this larger than 1 elongates
+    // the cap along the axis of the capsule
+    var strutSpikeFactor = 2;
 
     // for every island's point set
     for (var psi = 0; psi < pointSets.length; psi++) {
@@ -197,7 +207,8 @@ SupportGenerator.prototype.generate = function(
         for (var qi of activeIndices) {
           var q = points[qi];
           var ixn = coneConeIntersection(p, q, angle, axis);
-          if (ixn) {
+          // if valid intersection and it's inside the mesh boundary
+          if (ixn && ixn[axis] > minHeight) {
             var dist = p.distanceTo(ixn);
             if (dist < minDist) {
               minDist = dist;
@@ -206,6 +217,10 @@ SupportGenerator.prototype.generate = function(
             }
           }
         }
+
+        // will need to check if connecting down is cheaper than connecting in
+        // the direction of intersection
+        var rayDown = octree.castRayExternal(p, down);
 
         // if p-q intersection exists, either p and q connect or p's ray to q hits
         // the mesh first
@@ -217,14 +232,15 @@ SupportGenerator.prototype.generate = function(
           // if p's ray to the intersection hits the mesh first, join it to the
           // mesh and leave q to join to something else later
           if (rayQ.dist < minDist) {
-            var rayDown = octree.castRayExternal(p, down);
-
             // hit along p's ray to intersection is closer, so join there
             if (rayQ.dist < rayDown.dist) {
               writeCapsuleGeometry(supportGeometry, p, rayQ.point);
             }
             // downward connection is closer, so join downward
             else {
+              // ray hits the bottom side of the octree, which may not coincide
+              // with mesh min
+              rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
               writeCapsuleGeometry(supportGeometry, p, rayDown.point);
             }
           }
@@ -237,16 +253,20 @@ SupportGenerator.prototype.generate = function(
             activeIndices.add(newidx);
             pq.queue(newidx);
 
+            // write two capsules as struts, joined at intersection
             writeCapsuleGeometry(supportGeometry, p, intersection);
             writeCapsuleGeometry(supportGeometry, points[qiTarget], intersection);
 
+            // write a sphere as a "joint" between struts
             writeSphereGeometry(supportGeometry, intersection);
           }
         }
         // if no intersection between p and q, cast a ray down and build a strut
         // where it intersects the mesh or the ground
         else {
-          var rayDown = octree.castRayExternal(p, down);
+          // ray hits the bottom side of the octree, which may not coincide
+          // with mesh min
+          rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
           writeCapsuleGeometry(supportGeometry, p, rayDown.point);
         }
       }
@@ -256,12 +276,18 @@ SupportGenerator.prototype.generate = function(
 
     return supportGeometry;
 
+
+
     function writeCapsuleGeometry(geo, start, end) {
-      writeCapsuleGeometryImpl(geo, strutRadius, start, end, strutPhiSteps, strutThetaSteps);
+      writeCapsuleGeometryImpl(
+        geo, strutRadius, start, end, strutPhiSteps, strutThetaSteps, strutSpikeFactor
+      );
     }
 
     function writeSphereGeometry(geo, center) {
-      writeSphereGeometryImpl(geo, strutRadius * 1.1, center, 8, strutPhiSteps);
+      writeSphereGeometryImpl(
+        geo, strutRadius * 1.1, center, strutPhiSteps, strutPhiSteps
+      );
     }
   }
 
@@ -271,7 +297,7 @@ SupportGenerator.prototype.generate = function(
   //  x = r cos phi sin theta
   //  y = r sin phi sin theta
   //  z = r cos theta
-  function writeCapsuleGeometryImpl(geo, radius, start, end, phiSteps, thetaSteps) {
+  function writeCapsuleGeometryImpl(geo, radius, start, end, phiSteps, thetaSteps, spikeFactor) {
     var len = start.distanceTo(end);
 
     phiSteps = Math.max(phiSteps || 3, 3);
@@ -292,13 +318,27 @@ SupportGenerator.prototype.generate = function(
       }
     }
 
-    // make the bottom cap
+    var capOffset = radius * spikeFactor / 2.5;
+
+    // centers for the top and bottom caps
     var bot = new THREE.Vector3();
-    var ibot = writeCapsuleCap(geo, radius, bot, phiSteps, thetaSteps, -1);
+    var top = up.clone().multiplyScalar(len);
+    // shift the top and bottom caps to accommodate for the length of the spike,
+    // but only if this doesn't cause them to intersect each other
+    if (capOffset < len/2) {
+      bot[axis] += capOffset;
+      top[axis] -= capOffset;
+    }
+    // if moving the caps makes them intersect each other, just make spherical caps
+    else {
+      spikeFactor = 1;
+    }
+
+    // make the bottom cap
+    var ibot = writeCapsuleCap(geo, radius, bot, phiSteps, thetaSteps, -1, spikeFactor);
 
     // make the top cap
-    var top = up.clone().multiplyScalar(len);
-    var itop = writeCapsuleCap(geo, radius, top, phiSteps, thetaSteps, 1);
+    var itop = writeCapsuleCap(geo, radius, top, phiSteps, thetaSteps, 1, spikeFactor);
 
     // count the number of verts in this capsule, then rotate and translate
     // them into place
@@ -316,20 +356,24 @@ SupportGenerator.prototype.generate = function(
 
   // dir is 1 if upper cap, -1 if lower
   // returns length of geo.vertices
-  function writeCapsuleCap(geo, radius, center, phiSteps, thetaSteps, dir) {
+  function writeCapsuleCap(geo, radius, center, phiSteps, thetaSteps, dir, spikeFactor) {
     var vertices = geo.vertices;
     var faces = geo.faces;
 
-    var thetaStart = dir === 1 ? 0 : Math.PI;
+    // theta is 0 if dir==1 (top cap), else pi
+    var thetaStart = (1 - dir) * Math.PI / 2;
     var dtheta = dir * Math.PI / (2 * thetaSteps);
     var dphi = dir * Math.PI * 2 / phiSteps;
+
+    var scaleFactor = new THREE.Vector3().setScalar(1);
+    scaleFactor[axis] = spikeFactor;
 
     var nv = vertices.length;
 
     // vertices
 
     // top of the cap
-    vertices.push(vertexFromSpherical(radius, thetaStart, 0, center));
+    vertices.push(vertexFromSpherical(radius, thetaStart, 0, center, scaleFactor));
 
     // rest of the cap
     for (var itheta = 1; itheta <= thetaSteps; itheta++) {
@@ -338,7 +382,7 @@ SupportGenerator.prototype.generate = function(
       for (var iphi = 0; iphi < phiSteps; iphi++) {
         var phi = iphi * dphi;
 
-        vertices.push(vertexFromSpherical(radius, theta, phi, center));
+        vertices.push(vertexFromSpherical(radius, theta, phi, center, scaleFactor));
       }
     }
 
@@ -433,16 +477,16 @@ SupportGenerator.prototype.generate = function(
     }
   }
 
-  function vertexFromSpherical(r, theta, phi, center) {
+  function vertexFromSpherical(r, theta, phi, center, scale) {
     var v = new THREE.Vector3();
     var cp = Math.cos(phi);
     var sp = Math.sin(phi);
     var ct = Math.cos(theta);
     var st = Math.sin(theta);
 
-    v.x = r * cp * st + center.x;
-    v.y = r * sp * st + center.y;
-    v.z = r * ct + center.z;
+    v.x = r * cp * st * scale.x + center.x;
+    v.y = r * sp * st * scale.y + center.y;
+    v.z = r * ct * scale.z + center.z;
 
     return v;
   }
