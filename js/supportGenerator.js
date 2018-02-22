@@ -149,7 +149,7 @@ SupportGenerator.prototype.generate = function(
 
       // if the point set is too small to hit any points in rasterization space,
       // just store the center of its first face
-      if (points.length == 0) {
+      if (points.length == 0 && faceSet.count > 0) {
         var center = faceGetCenter(faces[0].face3, vs);
         points.push(center);
       }
