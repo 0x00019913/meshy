@@ -41,7 +41,7 @@ SupportGenerator.prototype.generate = function(
   var av = cycleAxis(ah);
 
   // angle in radians
-  var angle = angleDegrees * Math.PI / 180;
+  var angle = (90 - angleDegrees) * Math.PI / 180;
   var minHeight = min[axis] + layerHeight/2;
   var resolution = resolution;
 
@@ -52,7 +52,7 @@ SupportGenerator.prototype.generate = function(
   var nf = fs.length;
 
   // used to determine overhangs
-  var dotProductCutoff = Math.cos(angle);
+  var dotProductCutoff = Math.cos(Math.PI / 2 - angle);
 
   var down = new THREE.Vector3();
   down[axis] = -1;
