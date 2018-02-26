@@ -447,12 +447,7 @@ function coneConeIntersection(p, q, angle, axis) {
 }
 
 // returns v's distance to the line through a and b
-function distanceToLine(v, a, b, axis) {
-  if (axis === undefined) axis = 'z';
-
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
+function distanceToLine(v, a, b) {
   // unit vector from a to b (unit vector along line)
   var abhat = b.clone().sub(a).normalize();
 
@@ -505,6 +500,12 @@ function projectToPlaneOnAxis(p, d, n, axis) {
   pp[axis] = rz;
 
   return pp;
+}
+
+// takes v and projects out the n component; n is assumed normalized
+function projectOut(v, n) {
+  var projection = n.clone().multiplyScalar(v.dot(n));
+  return v.clone().sub(projection);
 }
 
 // true if c is strictly left of a-b segment

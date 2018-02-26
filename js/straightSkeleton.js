@@ -938,7 +938,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
   var limoffset = 0;
   var offset = 0;
-  var doffset = .5;
+  var doffset = .05;
   while (offset < limoffset) {
     var curves = this.generateOffsetCurve(doffset*(++offset));
 
@@ -1419,12 +1419,12 @@ StraightSkeleton.prototype.computeEdgeEvent = function(lnodeV) {
   if (intersectionResult & 1) {
     event.intersection = iprev;
     var edge = lprev.ef;
-    event.L = distanceToLine(iprev, edge.start, edge.end, axis);
+    event.L = distanceToLine(iprev, edge.start, edge.end);
   }
   else {
     event.intersection = inext;
     var edge = lnodeV.ef;
-    event.L = distanceToLine(inext, edge.start, edge.end, axis);
+    event.L = distanceToLine(inext, edge.start, edge.end);
   }
 
   return event;
@@ -1543,7 +1543,7 @@ StraightSkeleton.prototype.computeSplitEvent = function(lnodeV, lav) {
     }
 
     // valid split point, so see if it's the closest so far
-    var L = distanceToLine(vSplit, vA, vB, axis);
+    var L = distanceToLine(vSplit, vA, vB);
 
     if (L < minL) {
       minL = L;
