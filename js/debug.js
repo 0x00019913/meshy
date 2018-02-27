@@ -29,6 +29,9 @@ Debug.prototype.line = function(v, w, n, lastonly, offset) {
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
+Debug.prototype.ray = function(v, r, l) {
+  this.line(v, v.clone().add(r.clone().setLength(l)));
+}
 Debug.prototype.point = function(v) {
   this.debugPointGeo.vertices.push(v);
   this.debugPointGeo.verticesNeedUpdate = true;
@@ -66,6 +69,8 @@ Debug.prototype.lines = function(idx, incr) {
   this.scene.add(debugLineMesh);
 
   this.debugLineGeo = new THREE.Geometry();
+
+  this.points();
 }
 Debug.prototype.cleanup = function() {
   removeMeshByName(this.scene, "debug");

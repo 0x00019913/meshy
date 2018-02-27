@@ -1948,6 +1948,8 @@ Model.prototype.generateSupports = function(
     this.max
   );
 
+  return;
+
   this.addGeometryComponent(
     "support",
     this.vertices.length,

@@ -84,11 +84,17 @@ SupportGenerator.prototype.generate = function(
   var octree = this.octree;
 
   // construct a Geometry object with the support verts and faces
-  var supportGeometry = buildGeometry();
+  //var supportGeometry = buildGeometry();
 
-  return supportGeometry;
+  //return supportGeometry;
 
+  var supportTrees = buildSupportTrees();
 
+  for (var s=0; s<supportTrees.length; s++) {
+    var tree = supportTrees[s];
+    tree.debug();
+    tree.makeProfiles(0.1);
+  }
 
   function getOverhangFaceSets(hds) {
     // return true if the given HDS face is an overhang and above the base plane
@@ -160,7 +166,7 @@ SupportGenerator.prototype.generate = function(
     return pointSets;
   }
 
-  function buildGeometry() {
+  function buildSupportTrees() {
     // iterate through sampled points, build support trees
     var supportGeometry = new THREE.Geometry();
     var strutRadius = supportRadius;
@@ -170,12 +176,18 @@ SupportGenerator.prototype.generate = function(
     // the cap along the axis of the capsule
     var strutSpikeFactor = 2;
 
+    // list of support tree roots
+    var result = [];
+
     // for every island's point set
     for (var psi = 0; psi < pointSets.length; psi++) {
       var points = pointSets[psi];
 
+      // support tree nodes for this island
+      var nodes = [];
+
       // orders a priority queue from highest to lowest coordinate on axis
-      var pqComparator = function (a, b) { return points[b][axis] - points[a][axis]; }
+      var pqComparator = function (a, b) { return nodes[b].v[axis] - nodes[a].v[axis]; }
       var pq = new PriorityQueue({
         comparator: pqComparator
       });
@@ -187,94 +199,104 @@ SupportGenerator.prototype.generate = function(
       // intersection; we could just iterate over the pq.priv.data to do the same,
       // but that's a hack that breaks encapsulation
       for (var pi = 0; pi < points.length; pi++) {
+        nodes.push(new SupportTreeNode(points[pi]));
         activeIndices.add(pi);
         pq.queue(pi);
       }
 
+      var ct = 0;
       while (pq.length > 0) {
         var pi = pq.dequeue();
 
         if (!activeIndices.has(pi)) continue;
         activeIndices.delete(pi);
 
-        var p = points[pi];
+        var p = nodes[pi];
 
         // find the closest intersection between p's cone and another cone
         var intersection = null;
         var minDist = Infinity;
-        var qiTarget = -1;
+        var qiFinal = -1;
 
         for (var qi of activeIndices) {
-          var q = points[qi];
-          var ixn = coneConeIntersection(p, q, angle, axis);
+          var q = nodes[qi];
+          var ixn = coneConeIntersection(p.v, q.v, angle, axis);
+
           // if valid intersection and it's inside the mesh boundary
           if (ixn && ixn[axis] > minHeight) {
-            var dist = p.distanceTo(ixn);
+            var dist = p.v.distanceTo(ixn);
             if (dist < minDist) {
               minDist = dist;
               intersection = ixn;
-              qiTarget = qi;
+              qiFinal = qi;
             }
           }
         }
 
+        // build one or two struts
+
         // will need to check if connecting down is cheaper than connecting in
         // the direction of intersection
-        var rayDown = octree.castRayExternal(p, down);
+        var rayDown = octree.castRayExternal(p.v, down);
+        // ray may hit the bottom side of the octree, which may not coincide
+        // with mesh min
+        rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
+        rayDown.dist = Math.min(rayDown.dist, rayDown.point[axis] - min[axis]);
+
+        // one or two nodes will connect to the target point
+        var q = null;
+        var target = null;
 
         // if p-q intersection exists, either p and q connect or p's ray to q hits
         // the mesh first
         if (intersection) {
-          var qTarget = points[qiTarget];
-          var d = intersection.clone().sub(p);
-          var rayQ = octree.castRayExternal(p, d);
+          var d = intersection.clone().sub(p.v).normalize();
+          var rayQ = octree.castRayExternal(p.v, d);
 
           // if p's ray to the intersection hits the mesh first, join it to the
           // mesh and leave q to join to something else later
           if (rayQ.dist < minDist) {
             // hit along p's ray to intersection is closer, so join there
             if (rayQ.dist < rayDown.dist) {
-              writeCapsuleGeometry(supportGeometry, p, rayQ.point);
+              target = rayQ.point;
             }
             // downward connection is closer, so join downward
             else {
-              // ray hits the bottom side of the octree, which may not coincide
-              // with mesh min
-              rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
-              writeCapsuleGeometry(supportGeometry, p, rayDown.point);
+              target = rayDown.point;
             }
           }
           // p and q can be safely joined
           else {
-            activeIndices.delete(qiTarget);
-
-            var newidx = points.length;
-            points.push(intersection);
-            activeIndices.add(newidx);
-            pq.queue(newidx);
-
-            // write two capsules as struts, joined at intersection
-            writeCapsuleGeometry(supportGeometry, p, intersection);
-            writeCapsuleGeometry(supportGeometry, points[qiTarget], intersection);
-
-            // write a sphere as a "joint" between struts
-            writeSphereGeometry(supportGeometry, intersection);
+            q = nodes[qiFinal];
+            target = intersection;
           }
         }
         // if no intersection between p and q, cast a ray down and build a strut
         // where it intersects the mesh or the ground
         else {
-          // ray hits the bottom side of the octree, which may not coincide
-          // with mesh min
-          rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
-          writeCapsuleGeometry(supportGeometry, p, rayDown.point);
+          target = rayDown.point;
         }
+
+        nodes.push(new SupportTreeNode(target, p, q));
+
+        if (q !== null) {
+          activeIndices.delete(qiFinal);
+
+          var newidx = nodes.length - 1;
+          activeIndices.add(newidx);
+          pq.queue(newidx);
+        }
+      }
+
+      // store the root nodes
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].isRoot()) result.push(nodes[i]);
       }
     }
 
-    supportGeometry.computeFaceNormals();
+    //supportGeometry.computeFaceNormals();
 
-    return supportGeometry;
+    return result;
 
 
 
@@ -494,4 +516,216 @@ SupportGenerator.prototype.generate = function(
 
 SupportGenerator.prototype.cleanup = function() {
   debug.cleanup();
+}
+
+
+
+// a node in a tree of support nodes
+// params:
+//  v: vertex at which this node is placed
+//  b0, b1: this node's branches, if any
+function SupportTreeNode(v, b0, b1) {
+  this.v = v;
+
+  // every node is a root when created; when connected as a branch node to
+  // another node, it stops being root
+  this.source = null;
+
+  // branch nodes
+  this.b0 = b0 || null;
+  this.b1 = b1 || null;
+
+  // if connected a branch node, that node is no longer root
+  if (b0) b0.source = this;
+  if (b1) b1.source = this;
+}
+
+SupportTreeNode.prototype.isRoot = function() {
+  return this.source === null;
+}
+
+SupportTreeNode.prototype.isLeaf = function() {
+  return this.b0 === null && this.b1 === null;
+}
+
+SupportTreeNode.prototype.debug = function() {
+  if (this.b0) {
+    debug.line(this.v, this.b0.v);
+    this.b0.debug();
+  }
+  if (this.b1) {
+    debug.line(this.v, this.b1.v);
+    this.b1.debug();
+  }
+
+  if (false && this.b0 && this.b1) {
+    var a0 = this.v.clone().addScaledVector(sm, 0.2);
+    var a1 = this.v.clone().addScaledVector(sm, -0.1);
+    debug.line(this.v, a0);
+    debug.line(this.v, a1);
+
+    debug.ray(this.v, v0.clone().add(v1), 0.1);
+    debug.ray(this.v, v1.clone().add(vs), 0.1);
+    debug.ray(this.v, vs.clone().add(v0), 0.1);
+  }
+
+  if (this.isRoot()) debug.lines(12);
+}
+
+// build the profiles of vertices where the cylindrical struts will join or end;
+// cases for nodes:
+//  root: make a circular profile and recurse to branches
+//  leaf: make a circular profile
+//  internal: form three half-ellipse profiles joined at the two points where
+//    all three struts meet, then recurse to branches
+SupportTreeNode.prototype.makeProfiles = function(radius) {
+  if (this.isRoot()) {
+    if (this.b0) this.b0.makeProfiles(radius);
+    if (this.b1) this.b1.makeProfiles(radius);
+  }
+  else if (this.isLeaf()) {
+
+  }
+  else {
+    // outgoing vectors down the adjoining struts
+    var v0 = this.b0.v.clone().sub(this.v).normalize();
+    var v1 = this.b1.v.clone().sub(this.v).normalize();
+    var vs = this.source.v.clone().sub(this.v).normalize();
+
+    // bisectors between adjoining struts
+    var b01 = v0.clone().add(v1).normalize();
+    var b0s = v0.clone().add(vs).normalize();
+    var b1s = v1.clone().add(vs).normalize();
+
+    // angles between each strut and the halfplanes separating them from the
+    // adjoining struts
+    var a01 = Math.acos(v0.dot(v1)) / 2;
+    var a0s = Math.acos(v0.dot(vs)) / 2;
+    var a1s = Math.acos(v1.dot(vs)) / 2;
+
+    // distance from center to the farthest intersection of two struts
+    var m01 = radius / Math.sin(a01);
+    var m0s = radius / Math.sin(a0s);
+    var m1s = radius / Math.sin(a1s);
+
+    // farthest intersection points between pairs of struts
+    var i01 = b01.clone().multiplyScalar(m01);
+    var i0s = b0s.clone().multiplyScalar(m0s);
+    var i1s = b1s.clone().multiplyScalar(m1s);
+
+    if (b01.dot(vs) > 0) i01.negate();
+    if (b0s.dot(v1) > 0) i0s.negate();
+    if (b1s.dot(v0) > 0) i1s.negate();
+
+    debug.ray(this.v, i01, m01);
+    //debug.ray(this.v, i0s, m0s);
+    //debug.ray(this.v, i1s, m1s);
+
+    // compute the inward and outward intersection points of the struts
+    var cross = v0.clone().cross(v1);
+
+    // unit vectors to inward and outward vertices
+    var ihat, ohat;
+    // magnitude of inward/outward vectors
+    var mio;
+
+    // if vectors lie in the same plane, use the cross-product of any two
+    if (cross.dot(vs) === 0) {
+      ihat = cross;
+      mio = radius;
+    }
+    // else, calculate from normalized strut vectors and set length correctly
+    else {
+      // find the normal to the plane formed by the strut vectors
+      var v01 = v1.clone().sub(v0);
+      var v0s = vs.clone().sub(v0);
+      ihat = v01.cross(v0s).normalize();
+
+      // correct sign in case inward vector points outward
+      var dot = ihat.dot(v1);
+      if (dot < 0) ihat.negate();
+
+      // magnitude of in/out vector is r / sin(acos(dot)), where dot is the
+      // cosine of the angle between ihat and one of the strut vectors (this is
+      // mathematically equivalent to the square root thing)
+      mio = radius / Math.sqrt(1 - dot*dot);
+    }
+
+    // set inward and outward vectors
+    var inward = ihat.clone().setLength(mio);
+    // outward is just the opposite of inward
+    var outward = inward.clone().negate();
+
+    // dot products between inward unit vector and intersection vectors
+    var d01 = ihat.dot(b01);
+    var d0s = ihat.dot(b0s);
+    var d1s = ihat.dot(b1s);
+
+    // determine starting angles for each ellipse; the major axis is at 0, the
+    // intersection of the ellipse with the inward point is at the starting
+    // angle, starting angle - pi is the ending angle
+    var s01 = Math.acos(d01);
+    var s0s = Math.acos(d0s);
+    var s1s = Math.acos(d1s);
+
+    // ellipse major axis length is m01... with unit vectors b01...; now
+    // compute minor axes with length n01... and unit vectors c01...
+
+    // vectors orthogonal to major axes
+    var p01 = projectOut(inward, b01);
+    var p0s = projectOut(inward, b0s);
+    var p1s = projectOut(inward, b1s);
+
+    // minor axis magnitudes
+    var n01 = p01.length() / Math.sqrt(1 - d01*d01);
+    var n0s = p0s.length() / Math.sqrt(1 - d0s*d0s);
+    var n1s = p1s.length() / Math.sqrt(1 - d1s*d1s);
+
+    // unit vectors along minor axes
+    var c01 = p01.clone().normalize();
+    var c0s = p0s.clone().normalize();
+    var c1s = p1s.clone().normalize();
+
+    for (var ia=0; ia<17; ia++) {
+      var a = s01 - ia*Math.PI/18;
+      debug.point(
+        this.v.clone()
+        .addScaledVector(b01, m01*Math.cos(a))
+        .addScaledVector(c01, n01*Math.sin(a))
+      );
+    }
+
+    for (var ia=0; ia<17; ia++) {
+      var a = s0s - ia*Math.PI/18;
+      debug.point(
+        this.v.clone()
+        .addScaledVector(b0s, m0s*Math.cos(a))
+        .addScaledVector(c0s, n0s*Math.sin(a))
+      );
+    }
+
+    for (var ia=0; ia<17; ia++) {
+      var a = s1s - ia*Math.PI/18;
+      debug.point(
+        this.v.clone()
+        .addScaledVector(b1s, m1s*Math.cos(a))
+        .addScaledVector(c1s, n1s*Math.sin(a))
+      );
+    }
+
+    console.log(mio, n01);
+
+    debug.ray(this.v, c01, n01);
+    debug.ray(this.v, c01, -n01);
+    //debug.ray(this.v, c0s, n0s);
+    //debug.ray(this.v, c1s, n1s);
+
+    debug.line(this.v, this.v.clone().add(inward));
+    debug.line(this.v, this.v.clone().add(outward));
+
+    this.b0.makeProfiles(radius);
+    this.b1.makeProfiles(radius);
+  }
+
+  if (this.isRoot()) debug.lines(10);
 }

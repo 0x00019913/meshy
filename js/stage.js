@@ -79,7 +79,7 @@ Stage.prototype.generateUI = function() {
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
-  this.meshColor = "#ffffff";
+  this.meshColor = "#662828"; // todo: reset to 0xffffff
   this.meshColorController =
     displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
 
@@ -708,8 +708,8 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
+  this.generateSupports();
   //this.activateSliceMode();
-  //this.generateSupports();
 
   this.cameraToModel();
   this.filename = this.model.filename;

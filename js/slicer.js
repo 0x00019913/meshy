@@ -1,11 +1,5 @@
 /* slicer.js */
 
-// enum
-var SlicerModes = {
-  preview: 1,
-  layer: 2
-}
-
 function Slicer(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -347,7 +341,6 @@ Slicer.prototype.computeLayers = function() {
       layerBuilder.addSegment(segment[0], segment[1], segment[2]);
     }
 
-
     var layer = layerBuilder.getLayer();
     layerBuilder.clear();
 
@@ -556,6 +549,7 @@ LayerBuilder.prototype.clear = function() {
 LayerBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
   this.insertNeighbor(v1, v2, normal, idx1);
   this.insertNeighbor(v2, v1, normal, idx2);
+  //debug.line(v1, v2, 2);
 }
 
 LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
@@ -574,19 +568,15 @@ LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
 
 LayerBuilder.prototype.makeAdjMapNode = function(v1, idx1) {
   // don't store index if unavailable
-  if (idx1 === undefined) return {
+  var node = {
     v : v1,
     neighbors: [],
     normals: [],
     visited: false
   };
-  else return {
-    v : v1,
-    idx: idx1,
-    neighbors: [],
-    normals: [],
-    visited: false
-  };
+  if (idx1 !== undefined) node.idx = idx1;
+
+  return node;
 }
 
 LayerBuilder.prototype.makePolys = function() {
@@ -767,6 +757,7 @@ LayerBuilder.prototype.calculateHierarchy = function(edgeLoops) {
 }
 
 LayerBuilder.prototype.getLayer = function() {
+  //debug.lines();
   var polys = this.makePolys();
 
   return new Layer(polys);
