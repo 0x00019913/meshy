@@ -93,7 +93,7 @@ SupportGenerator.prototype.generate = function(
   for (var s=0; s<supportTrees.length; s++) {
     var tree = supportTrees[s];
     tree.debug();
-    tree.makeProfiles(0.1);
+    tree.toGeometry(0.05, 16, 2);
   }
 
   function getOverhangFaceSets(hds) {
@@ -532,8 +532,8 @@ function SupportTreeNode(v, b0, b1) {
   this.source = null;
 
   // branch nodes
-  this.b0 = b0 || null;
-  this.b1 = b1 || null;
+  this.b0 = (b0 ? b0 : b1) || null;
+  this.b1 = (b0 ? b1 : null) || null;
 
   // if connected a branch node, that node is no longer root
   if (b0) b0.source = this;
@@ -558,18 +558,20 @@ SupportTreeNode.prototype.debug = function() {
     this.b1.debug();
   }
 
-  if (false && this.b0 && this.b1) {
-    var a0 = this.v.clone().addScaledVector(sm, 0.2);
-    var a1 = this.v.clone().addScaledVector(sm, -0.1);
-    debug.line(this.v, a0);
-    debug.line(this.v, a1);
-
-    debug.ray(this.v, v0.clone().add(v1), 0.1);
-    debug.ray(this.v, v1.clone().add(vs), 0.1);
-    debug.ray(this.v, vs.clone().add(v0), 0.1);
-  }
-
   if (this.isRoot()) debug.lines(12);
+}
+
+SupportTreeNode.prototype.toGeometry = function(radius, subdivs, spikeFactor) {
+  if (!this.isRoot()) return null;
+
+  // subdivs must be at least 4 and even
+  if (subdivs === undefined || subdivs < 4) subidvs = 4;
+  subdivs -= subdivs%2;
+
+  var geo = new THREE.Geometry();
+  this.makeProfiles(geo, radius, subdivs, spikeFactor);
+
+  return geo;
 }
 
 // build the profiles of vertices where the cylindrical struts will join or end;
@@ -578,13 +580,60 @@ SupportTreeNode.prototype.debug = function() {
 //  leaf: make a circular profile
 //  internal: form three half-ellipse profiles joined at the two points where
 //    all three struts meet, then recurse to branches
-SupportTreeNode.prototype.makeProfiles = function(radius) {
-  if (this.isRoot()) {
-    if (this.b0) this.b0.makeProfiles(radius);
-    if (this.b1) this.b1.makeProfiles(radius);
-  }
-  else if (this.isLeaf()) {
+// params:
+//  geo: geometry object
+//  radius: strut radius
+//  subdivs: the number of sides on each strut; this is even and >= 4
+//  spikeFactor: factor that determines the length of the spike attaching the
+//    root/leaf nodes to the mesh; length is radius * spikeFactor
+SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFactor) {
+  var pi2 = Math.PI * 2;
 
+  var vertices = geo.vertices;
+  var spikeOffset = spikeFactor * radius / 2;
+
+  var isRoot = this.isRoot();
+  var isLeaf = this.isLeaf();
+
+  if (isRoot || isLeaf) {
+    // node's neighbor; if root, then this is the single branch node; if leaf,
+    // this is the source
+    var n = isRoot ? this.b0 : this.source;
+
+    if (!n) return;
+
+    // outgoing vector up to the child
+    var vn = n.v.clone().sub(this.v).normalize();
+
+    // point where the profile center will go
+    var p = this.v.clone().addScaledVector(vn, spikeOffset);
+
+    // two axes orthogonal to strut axis
+    var b = orthogonalVector(vn).normalize();
+    var c = vn.clone().cross(b);
+
+    // starting index for the profile
+    var sidx = vertices.length;
+
+    // profile - array of vertex indices
+    var ps = [];
+
+    // push verts and vertex indices to profile
+    for (var i=0; i<subdivs; i++) {
+      var a = i * pi2 / subdivs;
+      vertices.push(
+        p.clone()
+        .addScaledVector(b, radius * Math.cos(a))
+        .addScaledVector(c, radius * Math.sin(a))
+      );
+      ps.push(sidx + i);
+    }
+
+    this.ps = ps;
+
+    for (var i=0; i<ps.length-1; i++) {
+      debug.line(vertices[ps[i]], vertices[ps[i+1]], 5, true);
+    }
   }
   else {
     // outgoing vectors down the adjoining struts
@@ -617,115 +666,166 @@ SupportTreeNode.prototype.makeProfiles = function(radius) {
     if (b0s.dot(v1) > 0) i0s.negate();
     if (b1s.dot(v0) > 0) i1s.negate();
 
-    debug.ray(this.v, i01, m01);
-    //debug.ray(this.v, i0s, m0s);
-    //debug.ray(this.v, i1s, m1s);
+    // find the normal to the plane formed by the strut vectors
+    var v01 = v1.clone().sub(v0);
+    var v0s = vs.clone().sub(v0);
+    // unit vector to inward vertex; its inverse points to outward vertex
+    var ihat = v01.cross(v0s).normalize();
 
-    // compute the inward and outward intersection points of the struts
-    var cross = v0.clone().cross(v1);
+    // correct sign in case inward vector points outward
+    var dot = ihat.dot(v1);
+    if (dot < 0) ihat.negate();
 
-    // unit vectors to inward and outward vertices
-    var ihat, ohat;
-    // magnitude of inward/outward vectors
-    var mio;
+    // magnitude of in/out vector is r / sin(acos(dot)), where dot is the
+    // cosine of the angle between ihat and one of the strut vectors (this is
+    // mathematically equivalent to the square root thing)
+    var mio = radius / Math.sqrt(1 - dot*dot);
 
-    // if vectors lie in the same plane, use the cross-product of any two
-    if (cross.dot(vs) === 0) {
-      ihat = cross;
-      mio = radius;
-    }
-    // else, calculate from normalized strut vectors and set length correctly
-    else {
-      // find the normal to the plane formed by the strut vectors
-      var v01 = v1.clone().sub(v0);
-      var v0s = vs.clone().sub(v0);
-      ihat = v01.cross(v0s).normalize();
-
-      // correct sign in case inward vector points outward
-      var dot = ihat.dot(v1);
-      if (dot < 0) ihat.negate();
-
-      // magnitude of in/out vector is r / sin(acos(dot)), where dot is the
-      // cosine of the angle between ihat and one of the strut vectors (this is
-      // mathematically equivalent to the square root thing)
-      mio = radius / Math.sqrt(1 - dot*dot);
-    }
-
-    // set inward and outward vectors
-    var inward = ihat.clone().setLength(mio);
-    // outward is just the opposite of inward
-    var outward = inward.clone().negate();
+    // An ellipse is specified like so:
+    //  x = m cos t
+    //  y = n sin t
+    // where t is an angle CCW from the major axis. t here is not an actual
+    // angle between the (x,y) point and the major axis, but a parameter, so we
+    // can't get it straight from a dot product between a point and the axis.
+    // I'll call it an angle, though.
 
     // dot products between inward unit vector and intersection vectors
     var d01 = ihat.dot(b01);
     var d0s = ihat.dot(b0s);
     var d1s = ihat.dot(b1s);
 
-    // determine starting angles for each ellipse; the major axis is at 0, the
-    // intersection of the ellipse with the inward point is at the starting
-    // angle, starting angle - pi is the ending angle
-    var s01 = Math.acos(d01);
-    var s0s = Math.acos(d0s);
-    var s1s = Math.acos(d1s);
+    // determine starting angle params for each ellipse; the major axis is at
+    // 0, the intersection of the ellipse with the inward point is at the
+    // starting angle, starting angle - pi is the ending angle
+    var s01 = Math.acos(mio * d01 / m01);
+    var s0s = Math.acos(mio * d0s / m0s);
+    var s1s = Math.acos(mio * d1s / m1s);
 
     // ellipse major axis length is m01... with unit vectors b01...; now
     // compute minor axes with length n01... and unit vectors c01...
 
-    // vectors orthogonal to major axes
-    var p01 = projectOut(inward, b01);
-    var p0s = projectOut(inward, b0s);
-    var p1s = projectOut(inward, b1s);
+    // unit vectors along minor axes
+    var c01 = projectOut(ihat, b01).normalize();
+    var c0s = projectOut(ihat, b0s).normalize();
+    var c1s = projectOut(ihat, b1s).normalize();
 
     // minor axis magnitudes
-    var n01 = p01.length() / Math.sqrt(1 - d01*d01);
-    var n0s = p0s.length() / Math.sqrt(1 - d0s*d0s);
-    var n1s = p1s.length() / Math.sqrt(1 - d1s*d1s);
+    var n01 = mio * Math.sqrt(1 - d01*d01) / Math.sin(s01);
+    var n0s = mio * Math.sqrt(1 - d0s*d0s) / Math.sin(s0s);
+    var n1s = mio * Math.sqrt(1 - d1s*d1s) / Math.sin(s1s);
 
-    // unit vectors along minor axes
-    var c01 = p01.clone().normalize();
-    var c0s = p0s.clone().normalize();
-    var c1s = p1s.clone().normalize();
+    // put the calculated points into the geometry
 
-    for (var ia=0; ia<17; ia++) {
-      var a = s01 - ia*Math.PI/18;
-      debug.point(
+    // indices of inward and outward vertices
+    var inidx = vertices.length;
+    var outidx = inidx + 1;
+    // push inward and outward vertices
+    vertices.push(this.v.clone().addScaledVector(ihat, mio));
+    vertices.push(this.v.clone().addScaledVector(ihat, -mio));
+
+    // number of verts in each elliptical arc, excluding endpoints
+    var scount = (subdivs - 2) / 2;
+    var scount1 = scount + 1;
+
+    // start indices of each arc
+    var s01idx = vertices.length;
+    var s0sidx = s01idx + scount;
+    var s1sidx = s0sidx + scount;
+
+    // push the arc vertices, excluding inward and outward vertices (which are
+    // the endpoints of all three arcs)
+    for (var ia = 1; ia < scount1; ia++) {
+      var a = s01 - ia * Math.PI / scount1;
+      vertices.push(
         this.v.clone()
-        .addScaledVector(b01, m01*Math.cos(a))
-        .addScaledVector(c01, n01*Math.sin(a))
+        .addScaledVector(b01, m01 * Math.cos(a))
+        .addScaledVector(c01, n01 * Math.sin(a))
+      );
+    }
+    for (var ia = 1; ia < scount1; ia++) {
+      var a = s0s - ia * Math.PI / scount1;
+      vertices.push(
+        this.v.clone()
+        .addScaledVector(b0s, m0s * Math.cos(a))
+        .addScaledVector(c0s, n0s * Math.sin(a))
+      );
+    }
+    for (var ia = 1; ia < scount1; ia++) {
+      var a = s1s - ia * Math.PI / scount1;
+      vertices.push(
+        this.v.clone()
+        .addScaledVector(b1s, m1s * Math.cos(a))
+        .addScaledVector(c1s, n1s * Math.sin(a))
       );
     }
 
-    for (var ia=0; ia<17; ia++) {
-      var a = s0s - ia*Math.PI/18;
-      debug.point(
-        this.v.clone()
-        .addScaledVector(b0s, m0s*Math.cos(a))
-        .addScaledVector(c0s, n0s*Math.sin(a))
-      );
+    // build the profiles; each profile is an array of indices into the vertex
+    // array, denoting a vertex loop
+
+    // looking into (against) the strut vectors, profiles 0 and 1 are wound CCW,
+    // while profile s is wound CW
+    // determining orientation: looking down the inward vector with vs pointing
+    // down, there are two possibilities for 0/1 (0 on the left and 1 on the
+    // right or vice versa), and we can determine which with a cross product;
+    // given this, for every profile there will be a left and right arc (looking
+    // into the strut vector) and the right arc will wind in reverse order
+
+    // if this is > 0, 0 is on the left; else 1 is on the left
+    var dir = ihat.clone().cross(vs).dot(v0);
+
+    // s strut left and right indices
+    var idxsL = dir > 0 ? s0sidx : s1sidx;
+    var idxsR = dir > 0 ? s1sidx : s0sidx;
+    // 0 strut left and right indices
+    var idx0L = dir > 0 ? s0sidx : s01idx;
+    var idx0R = dir > 0 ? s01idx : s0sidx;
+    // 1 strut left and right indices
+    var idx1L = dir > 0 ? s01idx : s1sidx;
+    var idx1R = dir > 0 ? s1sidx : s01idx;
+
+    // profile arrays
+    var ps = [];
+    var p0 = [];
+    var p1 = [];
+
+    // write inward verts
+    ps.push(inidx);
+    p0.push(inidx);
+    p1.push(inidx);
+
+    // write left arcs
+    for (var ia = 0; ia < scount; ia++) {
+      ps.push(idxsL + ia);
+      p0.push(idx0L + ia);
+      p1.push(idx1L + ia);
     }
 
-    for (var ia=0; ia<17; ia++) {
-      var a = s1s - ia*Math.PI/18;
-      debug.point(
-        this.v.clone()
-        .addScaledVector(b1s, m1s*Math.cos(a))
-        .addScaledVector(c1s, n1s*Math.sin(a))
-      );
+    // write outward verts
+    ps.push(outidx);
+    p0.push(outidx);
+    p1.push(outidx);
+
+    // write right arcs
+    for (var ia = scount-1; ia >= 0; ia--) {
+      ps.push(idxsR + ia);
+      p0.push(idx0R + ia);
+      p1.push(idx1R + ia);
     }
 
-    console.log(mio, n01);
+    // store profiles
+    this.ps = ps;
+    this.p0 = p0;
+    this.p1 = p1;
 
-    debug.ray(this.v, c01, n01);
-    debug.ray(this.v, c01, -n01);
-    //debug.ray(this.v, c0s, n0s);
-    //debug.ray(this.v, c1s, n1s);
-
-    debug.line(this.v, this.v.clone().add(inward));
-    debug.line(this.v, this.v.clone().add(outward));
-
-    this.b0.makeProfiles(radius);
-    this.b1.makeProfiles(radius);
+    for (var i=0; i<ps.length-1; i++) {
+      debug.line(vertices[ps[i]], vertices[ps[i+1]]);
+      debug.line(vertices[p0[i]], vertices[p0[i+1]]);
+      debug.line(vertices[p1[i]], vertices[p1[i+1]]);
+    }
   }
+
+  if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, spikeFactor);
+  if (this.b1) this.b1.makeProfiles(geo, radius, subdivs, spikeFactor);
 
   if (this.isRoot()) debug.lines(10);
 }
