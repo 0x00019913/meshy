@@ -508,6 +508,14 @@ function projectOut(v, n) {
   return v.clone().sub(projection);
 }
 
+// returns an orthogonal vector to v
+// default is vector with 0 z-component, but, if v only has a z-component,
+// return vector along x
+function orthogonalVector(v) {
+  if (v.x === 0 && v.y === 0) return new THREE.Vector3(1, 0, 0);
+  else return new THREE.Vector3(v.y, -v.x, 0).normalize();
+}
+
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
