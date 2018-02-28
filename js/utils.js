@@ -581,6 +581,16 @@ function greater(i, j, epsilon) {
 }
 
 
+// clamps a to [-1, 1] range and returns its acos
+function acos(a) {
+  return Math.acos(clamp(a, -1, 1));
+}
+// clamps a to [-1, 1] range and returns its acos
+function asin(a) {
+  return Math.asin(clamp(a, -1, 1));
+}
+
+
 
 // for vertex hash maps
 
