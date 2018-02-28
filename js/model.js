@@ -957,8 +957,6 @@ Model.prototype.viewThickness = function(threshold) {
 
   function onDone() {
     this.basicMesh.geometry.colorsNeedUpdate = true;
-    debug.lines(1); // todo: remove
-    debug.points(0);
 
     this.printout.log("Mesh thickness below the threshold is displayed in red.");
   }
@@ -1947,8 +1945,6 @@ Model.prototype.generateSupports = function(
     this.min,
     this.max
   );
-
-  return;
 
   this.addGeometryComponent(
     "support",

@@ -201,7 +201,7 @@ Stage.prototype.generateUI = function() {
   supportSlicingFolder.add(this, "upAxis", ["x", "y", "z"]);
 
   this.supportAngle = 45;
-  this.supportSpacingFactor = 5;
+  this.supportSpacingFactor = 14;
   this.supportRadius = this.planarResolution;
   var supportFolder = supportSlicingFolder.addFolder("Supports");
   supportFolder.add(this, "supportAngle", 0, 90);

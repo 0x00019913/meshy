@@ -90,11 +90,17 @@ SupportGenerator.prototype.generate = function(
 
   var supportTrees = buildSupportTrees();
 
+  var supportTreeGeometry = new THREE.Geometry();
+
   for (var s=0; s<supportTrees.length; s++) {
     var tree = supportTrees[s];
     tree.debug();
-    tree.toGeometry(0.05, 16, 2);
+    tree.writeToGeometry(supportTreeGeometry, 0.05, 16, 2);
   }
+
+  supportTreeGeometry.computeFaceNormals();
+
+  return supportTreeGeometry;
 
   function getOverhangFaceSets(hds) {
     // return true if the given HDS face is an overhang and above the base plane
@@ -327,7 +333,7 @@ SupportGenerator.prototype.generate = function(
 
     var direction = end.clone().sub(start).normalize();
     var rotationAxis = up.clone().cross(direction).normalize();
-    var rotationAngle = Math.acos(direction.dot(up));
+    var rotationAngle = acos(direction.dot(up));
 
     // if start-to-end direction is vertical, don't rotate
     if (rotationAxis.length() == 0) {
@@ -561,17 +567,15 @@ SupportTreeNode.prototype.debug = function() {
   if (this.isRoot()) debug.lines(12);
 }
 
-SupportTreeNode.prototype.toGeometry = function(radius, subdivs, spikeFactor) {
+SupportTreeNode.prototype.writeToGeometry = function(geo, radius, subdivs, spikeFactor) {
   if (!this.isRoot()) return null;
 
   // subdivs must be at least 4 and even
   if (subdivs === undefined || subdivs < 4) subidvs = 4;
   subdivs -= subdivs%2;
 
-  var geo = new THREE.Geometry();
   this.makeProfiles(geo, radius, subdivs, spikeFactor);
-
-  return geo;
+  this.connectProfiles(geo, radius, subdivs, spikeFactor);
 }
 
 // build the profiles of vertices where the cylindrical struts will join or end;
@@ -618,9 +622,12 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     // profile - array of vertex indices
     var ps = [];
 
+    // angle increment
+    var aincr = (isRoot ? 1 : -1) * pi2 / subdivs;
+
     // push verts and vertex indices to profile
     for (var i=0; i<subdivs; i++) {
-      var a = i * pi2 / subdivs;
+      var a = i * aincr;
       vertices.push(
         p.clone()
         .addScaledVector(b, radius * Math.cos(a))
@@ -629,11 +636,8 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
       ps.push(sidx + i);
     }
 
-    this.ps = ps;
-
-    for (var i=0; i<ps.length-1; i++) {
-      debug.line(vertices[ps[i]], vertices[ps[i+1]], 5, true);
-    }
+    if (isRoot) this.p0 = ps;
+    else this.ps = ps;
   }
   else {
     // outgoing vectors down the adjoining struts
@@ -641,30 +645,32 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     var v1 = this.b1.v.clone().sub(this.v).normalize();
     var vs = this.source.v.clone().sub(this.v).normalize();
 
+    // sums of adjacent strut vectors
+    var sm01 = v0.clone().add(v1);
+    var sm0s = v0.clone().add(vs);
+    var sm1s = v1.clone().add(vs);
+
     // bisectors between adjoining struts
-    var b01 = v0.clone().add(v1).normalize();
-    var b0s = v0.clone().add(vs).normalize();
-    var b1s = v1.clone().add(vs).normalize();
+    // default method is to add the two strut vectors; if two strut vectors are
+    // antiparallel, use the third strut vector to get the correct bisector
+    var b01 = equal(sm01.length(), 0) ? projectOut(vs, v0).negate() : sm01;
+    var b0s = equal(sm0s.length(), 0) ? projectOut(v1, vs).negate() : sm0s;
+    var b1s = equal(sm1s.length(), 0) ? projectOut(v0, v1).negate() : sm1s;
+    // normalize bisectors
+    b01.normalize();
+    b0s.normalize();
+    b1s.normalize();
 
     // angles between each strut and the halfplanes separating them from the
     // adjoining struts
-    var a01 = Math.acos(v0.dot(v1)) / 2;
-    var a0s = Math.acos(v0.dot(vs)) / 2;
-    var a1s = Math.acos(v1.dot(vs)) / 2;
+    var a01 = acos(v0.dot(v1)) / 2;
+    var a0s = acos(v0.dot(vs)) / 2;
+    var a1s = acos(v1.dot(vs)) / 2;
 
     // distance from center to the farthest intersection of two struts
     var m01 = radius / Math.sin(a01);
     var m0s = radius / Math.sin(a0s);
     var m1s = radius / Math.sin(a1s);
-
-    // farthest intersection points between pairs of struts
-    var i01 = b01.clone().multiplyScalar(m01);
-    var i0s = b0s.clone().multiplyScalar(m0s);
-    var i1s = b1s.clone().multiplyScalar(m1s);
-
-    if (b01.dot(vs) > 0) i01.negate();
-    if (b0s.dot(v1) > 0) i0s.negate();
-    if (b1s.dot(v0) > 0) i1s.negate();
 
     // find the normal to the plane formed by the strut vectors
     var v01 = v1.clone().sub(v0);
@@ -697,9 +703,9 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     // determine starting angle params for each ellipse; the major axis is at
     // 0, the intersection of the ellipse with the inward point is at the
     // starting angle, starting angle - pi is the ending angle
-    var s01 = Math.acos(mio * d01 / m01);
-    var s0s = Math.acos(mio * d0s / m0s);
-    var s1s = Math.acos(mio * d1s / m1s);
+    var s01 = acos(mio * d01 / m01);
+    var s0s = acos(mio * d0s / m0s);
+    var s1s = acos(mio * d1s / m1s);
 
     // ellipse major axis length is m01... with unit vectors b01...; now
     // compute minor axes with length n01... and unit vectors c01...
@@ -772,6 +778,7 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
 
     // if this is > 0, 0 is on the left; else 1 is on the left
     var dir = ihat.clone().cross(vs).dot(v0);
+    if (equal(dir, 0)) dir = -ihat.clone().cross(vs).dot(v1);
 
     // s strut left and right indices
     var idxsL = dir > 0 ? s0sidx : s1sidx;
@@ -817,15 +824,122 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     this.p0 = p0;
     this.p1 = p1;
 
-    for (var i=0; i<ps.length-1; i++) {
-      debug.line(vertices[ps[i]], vertices[ps[i+1]]);
-      debug.line(vertices[p0[i]], vertices[p0[i+1]]);
-      debug.line(vertices[p1[i]], vertices[p1[i+1]]);
+    for (var ii = 0; ii < subdivs; ii++) {
+      break;
+      var pvs = vertices[ps[ii]], pv0 = vertices[p0[ii]], pv1 = vertices[p1[ii]];
+      debug.point(pvs);
+      debug.point(pv0);
+      debug.point(pv1);
     }
   }
 
   if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, spikeFactor);
   if (this.b1) this.b1.makeProfiles(geo, radius, subdivs, spikeFactor);
+}
 
-  if (this.isRoot()) debug.lines(10);
+// connect created profiles with geometry
+SupportTreeNode.prototype.connectProfiles = function(geo, radius, subdivs, spikeFactor) {
+  var vertices = geo.vertices;
+  var faces = geo.faces;
+
+  if (this.isRoot()) {
+    this.connectToBranch(this.b0, geo, subdivs);
+    this.makeSpike(geo, radius, subdivs, spikeFactor);
+  }
+  else if (this.isLeaf()) {
+    this.makeSpike(geo, radius, subdivs, spikeFactor);
+  }
+  else {
+    this.connectToBranch(this.b0, geo, subdivs);
+    this.connectToBranch(this.b1, geo, subdivs);
+  }
+
+  if (this.b0) this.b0.connectProfiles(geo, radius, subdivs, spikeFactor);
+  if (this.b1) this.b1.connectProfiles(geo, radius, subdivs, spikeFactor);
+
+  if (this.isRoot()) debug.lines(12);
+}
+
+// connect a node to one of its branch nodes
+SupportTreeNode.prototype.connectToBranch = function(n, geo, subdivs) {
+  if (!n) return;
+
+  var vertices = geo.vertices;
+  var faces = geo.faces;
+
+  // source and target profiles
+  var sp = (n === this.b0) ? this.p0 : this.p1;
+  var tp = n.ps;
+
+  // unit vector pointing up to other node
+  var vn = n.v.clone().sub(this.v).normalize();
+
+  // start index on target profile
+  var tidx = 0;
+  // maximal dot product between points from source to target
+  var maxdot = 0;
+
+  // arbitrary point on source profile
+  var spt = vertices[sp[0]];
+
+  // given this point on source profile, find the most closely matching point
+  // on target profile
+  for (var ii = 0; ii < subdivs; ii++) {
+    var vst, dot;
+
+    // unit vector from source point to target point
+    vst = vertices[tp[ii]].clone().sub(spt).normalize();
+
+    dot = vst.dot(vn);
+    if (dot > maxdot) {
+      maxdot = dot;
+      tidx = ii;
+    }
+  }
+
+  for (var ii = 0; ii < subdivs; ii++) {
+    var a = tp[(tidx + ii) % subdivs];
+    var b = tp[(tidx + ii + 1) % subdivs];
+    var c = sp[ii];
+    var d = sp[(ii + 1) % subdivs];
+
+    //debug.line(vertices[a], vertices[c]);
+
+    faces.push(new THREE.Face3(a, c, d));
+    faces.push(new THREE.Face3(a, d, b));
+  }
+}
+
+SupportTreeNode.prototype.makeSpike = function (geo, radius, subdivs, spikeFactor) {
+  var vertices = geo.vertices;
+  var faces = geo.faces;
+
+  var spikeLength = radius * spikeFactor;
+
+  // get the profile and the inverse strut vector
+  var p, vn;
+  if (this.isRoot()) {
+    p = this.p0;
+    vn = this.v.clone().sub(this.b0.v).normalize();
+  }
+  else if (this.isLeaf()) {
+    p = this.ps;
+    vn = this.v.clone().sub(this.source.v).normalize();
+  }
+  else return;
+
+  // spike vertex
+  var vs = this.v.clone().addScaledVector(vn, spikeLength / 2);
+
+  // record spike vertex
+  var sidx = vertices.length;
+  vertices.push(vs);
+
+  // index increment (accounts for opposite winding)
+  var iincr = this.isRoot() ? subdivs - 1 : 1
+
+  // write faces
+  for (var ii = 0; ii < subdivs; ii++) {
+    faces.push(new THREE.Face3(sidx, p[ii], p[(ii + iincr) % subdivs]));
+  }
 }
