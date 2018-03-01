@@ -317,7 +317,6 @@ Slicer.prototype.makeLayerGeometry = function() {
 
   for (var l=0; l<layers.length; l++) {
     var layer = layers[l];
-
     layer.computeContours(this.lineWidth, this.numWalls);
     layer.writeContoursToVerts(layerVertices);
   }
@@ -343,8 +342,6 @@ Slicer.prototype.computeLayers = function() {
 
     var layer = layerBuilder.getLayer();
     layerBuilder.clear();
-
-    //if (i!=4) continue;
 
     layers.push(layer);
   }
@@ -585,7 +582,7 @@ LayerBuilder.prototype.makePolys = function() {
   var axis = this.axis;
   var p = this.p;
 
-  var edgeLoops = {
+  var polys = {
     polys: [],
     holes: []
   };
@@ -651,16 +648,18 @@ LayerBuilder.prototype.makePolys = function() {
 
     } while (current != start);
 
-    var edgeLoop = new Polygon(axis, vertices, indices);
+    var poly = new Polygon(axis, vertices, indices);
 
-    if (edgeLoop.hole) edgeLoops.holes.push(edgeLoop);
-    else edgeLoops.polys.push(edgeLoop);
+    if (!poly.valid) continue;
+
+    if (poly.hole) polys.holes.push(poly);
+    else polys.polys.push(poly);
   }
 
   // assign holes to the polys containing them
-  this.calculateHierarchy(edgeLoops);
+  this.calculateHierarchy(polys);
 
-  return edgeLoops.polys;
+  return polys.polys;
 }
 
 LayerBuilder.prototype.calculateHierarchy = function(edgeLoops) {

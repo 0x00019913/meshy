@@ -6,6 +6,8 @@ function Polygon(axis, vertices, indices) {
   this.up = new THREE.Vector3();
   this.up[axis] = 1;
 
+  this.valid = true;
+
   this.epsilon = 0.0000001;
 
   this.count = 0;
@@ -22,7 +24,11 @@ function Polygon(axis, vertices, indices) {
 
   this.holes = [];
 
-  if (!vertices || vertices.length < 1) return;
+  // no vertices or an insufficient number of vertices
+  if (!vertices || vertices.length < 3) {
+    this.valid = false;
+    return;
+  }
 
   var start = null;
 
@@ -68,6 +74,13 @@ function Polygon(axis, vertices, indices) {
     else {
       if (!start) start = current;
       this.updateBounds(current);
+    }
+
+    // it's possible that the entire polygon is collinear, so just return when
+    // all nodes have been removed
+    if (this.count < 3) {
+      this.valid = false;
+      return;
     }
 
     current = current.next;

@@ -932,7 +932,7 @@ StraightSkeleton.prototype.buildInterior = function() {
   }
 
   //debugSkeleton();
-  //debugFaces(this.hefactory.halfe/dges);
+  //debugFaces(this.hefactory.halfedges);
 
   //debugRoof(this.hefactory.halfedges);
 
@@ -951,9 +951,6 @@ StraightSkeleton.prototype.buildInterior = function() {
       }
     }
   }
-  //console.log(offset);
-
-  debug.points();
 
   function debugSkeleton() {
     var offset = skeletonShiftDistance;

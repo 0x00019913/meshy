@@ -94,8 +94,8 @@ SupportGenerator.prototype.generate = function(
 
   for (var s=0; s<supportTrees.length; s++) {
     var tree = supportTrees[s];
-    tree.debug();
-    tree.writeToGeometry(supportTreeGeometry, 0.05, 16, 2);
+    //tree.debug();
+    tree.writeToGeometry(supportTreeGeometry, supportRadius, 16, 2);
   }
 
   supportTreeGeometry.computeFaceNormals();
@@ -823,14 +823,6 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     this.ps = ps;
     this.p0 = p0;
     this.p1 = p1;
-
-    for (var ii = 0; ii < subdivs; ii++) {
-      break;
-      var pvs = vertices[ps[ii]], pv0 = vertices[p0[ii]], pv1 = vertices[p1[ii]];
-      debug.point(pvs);
-      debug.point(pv0);
-      debug.point(pv1);
-    }
   }
 
   if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, spikeFactor);
@@ -902,8 +894,6 @@ SupportTreeNode.prototype.connectToBranch = function(n, geo, subdivs) {
     var b = tp[(tidx + ii + 1) % subdivs];
     var c = sp[ii];
     var d = sp[(ii + 1) % subdivs];
-
-    //debug.line(vertices[a], vertices[c]);
 
     faces.push(new THREE.Face3(a, c, d));
     faces.push(new THREE.Face3(a, d, b));

@@ -192,7 +192,7 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
-  this.verticalResolution = 0.05;
+  this.verticalResolution = 0.1;
   this.planarResolution = 0.05;
   this.upAxis = "z";
   var supportSlicingFolder = this.gui.addFolder("Supports & Slicing (beta)");
@@ -201,7 +201,7 @@ Stage.prototype.generateUI = function() {
   supportSlicingFolder.add(this, "upAxis", ["x", "y", "z"]);
 
   this.supportAngle = 45;
-  this.supportSpacingFactor = 14;
+  this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution;
   var supportFolder = supportSlicingFolder.addFolder("Supports");
   supportFolder.add(this, "supportAngle", 0, 90);
