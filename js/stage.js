@@ -14,7 +14,7 @@ Stage = function() {
   // toggles
   this.importEnabled = true;
   this.importingMeshName = "";
-  this.floorVisible = true;
+  this.floorVisible = false;
 
   // geometry
   this.model = null;
@@ -708,8 +708,8 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  this.generateSupports();
-  //this.activateSliceMode();
+  //this.generateSupports();
+  this.activateSliceMode();
 
   this.cameraToModel();
   this.filename = this.model.filename;

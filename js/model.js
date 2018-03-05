@@ -730,6 +730,7 @@ Model.prototype.addGeometryComponent = function(name, vstart, vcount, fstart, fc
     fstart: fstart,
     fcount: fcount
   };
+  this.count = this.faces.length;
 }
 
 Model.prototype.removeGeometryComponent = function(name) {
@@ -744,6 +745,8 @@ Model.prototype.removeGeometryComponent = function(name) {
   this.basicMesh.geometry.elementsNeedUpdate = true;
 
   delete this.geometryComponents[name];
+
+  this.count = this.faces.length;
 }
 
 // Create the basic mesh (as opposed to another display mode).
@@ -1946,6 +1949,12 @@ Model.prototype.generateSupports = function(
     this.max
   );
 
+  var geometry = this.basicMesh.geometry;
+
+  geometry.merge(supportGeometry);
+  geometry.verticesNeedUpdate = true;
+  geometry.elementsNeedUpdate = true;
+
   this.addGeometryComponent(
     "support",
     this.vertices.length,
@@ -1953,12 +1962,6 @@ Model.prototype.generateSupports = function(
     this.faces.length,
     supportGeometry.faces.length
   );
-
-  var geometry = this.basicMesh.geometry;
-
-  geometry.merge(supportGeometry);
-  geometry.verticesNeedUpdate = true;
-  geometry.elementsNeedUpdate = true;
 }
 
 Model.prototype.removeSupports = function() {
@@ -2046,7 +2049,6 @@ Model.prototype.export = function(format, name) {
   var fname;
 
   if (format=="stl") {
-    // this isn't set if we imported a non-STL format
     var stlSize = 84 + 50 * this.count;
     var array = new ArrayBuffer(stlSize);
     var offset = 0;

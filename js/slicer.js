@@ -317,6 +317,7 @@ Slicer.prototype.makeLayerGeometry = function() {
 
   for (var l=0; l<layers.length; l++) {
     var layer = layers[l];
+    console.log(l, layers.length);
     layer.computeContours(this.lineWidth, this.numWalls);
     layer.writeContoursToVerts(layerVertices);
   }
@@ -338,6 +339,11 @@ Slicer.prototype.computeLayers = function() {
       var segment = segmentList[s];
 
       layerBuilder.addSegment(segment[0], segment[1], segment[2]);
+    }
+
+    if (false && i!=2) {
+      layerBuilder.clear();
+      continue;
     }
 
     var layer = layerBuilder.getLayer();
@@ -487,6 +493,7 @@ Layer.prototype.makeSkeletons = function() {
   var polys = this.basePolygons;
 
   for (var i=0; i<polys.length; i++) {
+    //if (i!=1) continue;
     skeletons.push(new StraightSkeleton(polys[i]));
   }
 

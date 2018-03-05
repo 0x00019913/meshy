@@ -42,7 +42,7 @@ SupportGenerator.prototype.generate = function(
 
   // angle in radians
   var angle = (90 - angleDegrees) * Math.PI / 180;
-  var minHeight = min[axis] + layerHeight/2;
+  var minHeight = min[axis];
   var resolution = resolution;
 
   var vs = this.vertices;
@@ -82,11 +82,6 @@ SupportGenerator.prototype.generate = function(
   }
 
   var octree = this.octree;
-
-  // construct a Geometry object with the support verts and faces
-  //var supportGeometry = buildGeometry();
-
-  //return supportGeometry;
 
   var supportTrees = buildSupportTrees();
 
@@ -594,7 +589,6 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
   var pi2 = Math.PI * 2;
 
   var vertices = geo.vertices;
-  var spikeOffset = spikeFactor * radius / 2;
 
   var isRoot = this.isRoot();
   var isLeaf = this.isLeaf();
@@ -608,6 +602,15 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
 
     // outgoing vector up to the child
     var vn = n.v.clone().sub(this.v).normalize();
+
+    // we can't offset farther than this from the end, else the profile would
+    // interfere with any struts connecting to this node
+    // (to avoid coincident vertices, add small epsilon * radius to the limit)
+    var offsetLimit = this.offsetLimit(radius) - 0.01 * radius;
+    // offset spike such that spike length is spikeFactor*radius (or less, if
+    // the whole spike can't fit) and it protrudes by at most 0.5 radius from
+    // the end of the strut
+    var spikeOffset = Math.min(offsetLimit, (spikeFactor - 1) * radius);
 
     // point where the profile center will go
     var p = this.v.clone().addScaledVector(vn, spikeOffset);
@@ -900,7 +903,7 @@ SupportTreeNode.prototype.connectToBranch = function(n, geo, subdivs) {
   }
 }
 
-SupportTreeNode.prototype.makeSpike = function (geo, radius, subdivs, spikeFactor) {
+SupportTreeNode.prototype.makeSpike = function(geo, radius, subdivs, spikeFactor) {
   var vertices = geo.vertices;
   var faces = geo.faces;
 
@@ -908,6 +911,7 @@ SupportTreeNode.prototype.makeSpike = function (geo, radius, subdivs, spikeFacto
 
   // get the profile and the inverse strut vector
   var p, vn;
+
   if (this.isRoot()) {
     p = this.p0;
     vn = this.v.clone().sub(this.b0.v).normalize();
@@ -932,4 +936,68 @@ SupportTreeNode.prototype.makeSpike = function (geo, radius, subdivs, spikeFacto
   for (var ii = 0; ii < subdivs; ii++) {
     faces.push(new THREE.Face3(sidx, p[ii], p[(ii + iincr) % subdivs]));
   }
+}
+
+// for root/leaf nodes, returns how far we can offset a circular profile from
+// the node such that it doesn't interfere with the other struts incident on
+// this node
+SupportTreeNode.prototype.offsetLimit = function(radius) {
+  var isRoot = this.isRoot();
+  var isLeaf = this.isLeaf();
+
+  // if internal node, return no limit
+  if (!(isRoot || isLeaf)) return Infinity;
+
+  // other node connected to this node, and the two nodes connected to that
+  var n, a, b;
+
+  // branch node 0 if root; source if leaf
+  n = isRoot ? this.b0 : this.s;
+
+  // if node is isolated (shouldn't happen), return 0
+  if (!n) return 0;
+
+  // length of the strut
+  var l = this.v.distanceTo(n.v);
+
+  // root connects to leaf - can offset by <= half the length of the strut
+  if (n.isLeaf()) return l / 2;
+
+  // if root, a and b are the two branch nodes from n
+  if (isRoot) {
+    a = n.b0;
+    b = n.b1;
+  }
+  // if leaf, a and b are n's other branch and its source
+  else {
+    a = (this === n.b0) ? b1 : b0;
+    b = n.source;
+  }
+
+  // unit vectors along the struts
+  var vn = this.v.clone().sub(n.v).normalize();
+  var va = a.v.clone().sub(n.v).normalize();
+  var vb = b.v.clone().sub(n.v).normalize();
+
+  // bisectors between n and its adjoining struts
+  var bna = vn.clone().add(va).normalize();
+  var bnb = vn.clone().add(vb).normalize();
+
+  // dot products between vn and the bisectors
+  var dna = vn.dot(bna);
+  var dnb = vn.dot(bnb);
+
+  // failsafe in case either strut is parallel to n strut
+  if (equal(dna, 0) || equal(dnb, 0)) return 0;
+
+  // how far each strut's intersection point extends along n strut (from n);
+  // equal to radius / tan (acos (vn dot bna)) with
+  // tan (acos x) = sqrt (1 - x*x) / x
+  var ea = radius * dna / Math.sqrt(1 - dna * dna);
+  var eb = radius * dnb / Math.sqrt(1 - dnb * dnb);
+
+  // limit is strut length minus the largest of these two extents
+  var limit = l - Math.max(ea, eb);
+
+  return limit;
 }

@@ -126,6 +126,13 @@ function shallowCopy(obj) {
   return Object.assign({}, obj);
 }
 
+// push b's terms onto a without using concat
+function arrayAppend(target, source) {
+  var sourceLength = source.length;
+
+  for (var i = 0; i < sourceLength; i++) target.push(source[i]);
+}
+
 // THREE.Face3- and THREE.Vector3-related functions
 // get THREE.Face3 vertices
 function faceGetVerts(face, vertices) {
