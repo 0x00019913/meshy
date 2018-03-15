@@ -54,6 +54,16 @@ function cycleAxis(axis) {
 function getZeroVector() { return new THREE.Vector3(0,0,0); }
 function getOneVector() { return new THREE.Vector3(1,1,1); }
 
+// generate unit vector along given axis
+function makeAxisUnitVector(axis) {
+  if (axis === undefined) axis = 'z';
+
+  var v = new THREE.Vector3();
+  v[axis] = 1;
+
+  return v;
+}
+
 // element max/min
 function vector3MaxElement(v) {
   return Math.max(v.x, v.y, v.z);
@@ -307,7 +317,7 @@ function segmentPlaneIntersection(axis, plane, va, vb) {
   // denominator will be positive
   var t = (plane - va[axis]) / (vb[axis] - va[axis]);
   // interpolate
-  return va.clone().multiplyScalar(1-t).add(vb.clone().multiplyScalar(t));
+  return va.clone().multiplyScalar(1-t).addScaledVector(vb, t);
 }
 
 // s1, s2: endpoints of segment
