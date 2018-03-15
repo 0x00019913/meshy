@@ -172,9 +172,8 @@ Slicer.prototype.setPreviewSlice = function() {
   // max of 2 times that many faces and 4 times that many verts
   var newVertices = new Array(4 * slicedFaces.length);
   var newFaces = new Array(2 * slicedFaces.length);
-  // current face/vertex in the new arrays
-  var vidx = 0;
-  var fidx = 0;
+  // current vertex
+  var vidx = vertexCount;
 
   var layerBuilder = new LayerBuilder(axis);
 
@@ -197,12 +196,13 @@ Slicer.prototype.setPreviewSlice = function() {
       var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
 
       // get indices of these verts in the final vert array before pushing them there
-      var idxA = vertexCount + vidx;
+      var idxA = vidx;
       var idxAB = idxA + 1;
       var idxAC = idxA + 2;
-      newVertices[vidx++] = A;
-      newVertices[vidx++] = AB;
-      newVertices[vidx++] = AC;
+      vertices.push(A);
+      vertices.push(AB);
+      vertices.push(AC);
+      vidx += 3;
 
       // create the new face and push it into the faces array
       var newFace;
@@ -217,7 +217,7 @@ Slicer.prototype.setPreviewSlice = function() {
       // explicitly visible
       newFace.materialIndex = 0;
 
-      newFaces[fidx++] = newFace;
+      faces.push(newFace);
 
       layerBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
     }
@@ -227,14 +227,15 @@ Slicer.prototype.setPreviewSlice = function() {
       var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
       var BC = segmentPlaneIntersection(axis, sliceLevel, B, C);
       // get indices of these verts in the vert array before pushing them there
-      var idxA = vertexCount + vidx;
+      var idxA = vidx;
       var idxB = idxA + 1;
       var idxAC = idxA + 2;
       var idxBC = idxA + 3;
-      newVertices[vidx++] = A;
-      newVertices[vidx++] = B;
-      newVertices[vidx++] = AC;
-      newVertices[vidx++] = BC;
+      vertices.push(A);
+      vertices.push(B);
+      vertices.push(AC);
+      vertices.push(BC);
+      vidx += 4;
 
       // create the new faces and push it into the faces array
       var newFace1, newFace2;
@@ -254,34 +255,15 @@ Slicer.prototype.setPreviewSlice = function() {
       newFace1.materialIndex = 0;
       newFace2.materialIndex = 0;
 
-      newFaces[fidx++] = newFace1;
-      newFaces[fidx++] = newFace2;
+      faces.push(newFace1);
+      faces.push(newFace2);
 
       layerBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
     }
   }
 
-  // put the new verts and faces on the end of the existing array
-  this.previewVertices = vertices.concat(newVertices);
-  this.previewFaces = faces.concat(newFaces);
-
-  // erase whatever we allocated and didn't need
-  this.previewVertices.length = vertexCount + vidx;
-  this.previewFaces.length = faceCount + fidx;
-
   var layer = layerBuilder.getLayer();
-  var triIndices = layer.triangulate();
-
-  var triFaces = [];
-
-  for (var i=0; i<triIndices.length; i += 3) {
-    var face = new THREE.Face3(triIndices[i], triIndices[i+1], triIndices[i+2]);
-    faceComputeNormal(face, this.previewVertices);
-    face.materialIndex = 2;
-    triFaces.push(face);
-  }
-
-  this.previewFaces = this.previewFaces.concat(triFaces);
+  layer.triangulate(vertices, faces);
 }
 
 Slicer.prototype.setLayerSlice = function() {
@@ -317,7 +299,7 @@ Slicer.prototype.makeLayerGeometry = function() {
 
   for (var l=0; l<layers.length; l++) {
     var layer = layers[l];
-    console.log(l, layers.length);
+    //console.log(l, layers.length);
     layer.computeContours(this.lineWidth, this.numWalls);
     layer.writeContoursToVerts(layerVertices);
   }
@@ -329,6 +311,7 @@ Slicer.prototype.makeLayerGeometry = function() {
 Slicer.prototype.computeLayers = function() {
   var layers = [];
 
+  // arrays of segments, each array signifying all segments in one layer
   var segmentLists = this.buildLayerSegmentLists();
 
   var layerBuilder = new LayerBuilder(this.axis);
@@ -362,7 +345,8 @@ Slicer.prototype.computeLayers = function() {
 // uses an implementation of "An Optimal Algorithm for 3D Triangle Mesh Slicing"
 // http://www.dainf.ct.utfpr.edu.br/~murilo/public/CAD-slicing.pdf
 
-Slicer.prototype.buildLayerLists = function() {
+// build arrays of faces crossing each slicing plane
+Slicer.prototype.buildLayerFaceLists = function() {
   var sliceHeight = this.sliceHeight;
   var min = this.min, max = this.max;
   var faceBounds = this.faceBounds;
@@ -392,13 +376,15 @@ Slicer.prototype.buildLayerLists = function() {
   return layerLists;
 }
 
+// build arrays of segments in each slicing plane
 Slicer.prototype.buildLayerSegmentLists = function() {
-  var layerLists = this.buildLayerLists();
+  var layerLists = this.buildLayerFaceLists();
 
   // various local vars
   var numLayers = layerLists.length;
   var faceBounds = this.faceBounds;
-  var min = this.min, axis = this.axis;
+  var min = this.min;
+  var axis = this.axis;
   var sliceHeight = this.sliceHeight;
   var vertices = this.sourceVertices;
   var faces = this.sourceFaces;
@@ -432,9 +418,9 @@ Slicer.prototype.buildLayerSegmentLists = function() {
         var a2 = verts[2][axis];
 
         // face is flat or intersects slicing plane at a point
-        if (a0 == a2) continue;
-        if (a0 == sliceLevel && a0 < a1) continue;
-        if (a2 == sliceLevel && a1 < a2) continue;
+        if (a0 === a2) continue;
+        if (a0 === sliceLevel && a0 < a1) continue;
+        if (a2 === sliceLevel && a1 < a2) continue;
 
         // if B is above slicing plane, calculate AB and AC intersection
         if (a1 > sliceLevel) {
@@ -473,18 +459,39 @@ function Layer(polys) {
   this.infill = null;
 }
 
-Layer.prototype.triangulate = function() {
+// triangulate every polygon in the layer
+Layer.prototype.triangulate = function(vertices, faces) {
   // polys is an array of edgeloops signifying every polygon in the slice
   var polys = this.basePolygons;
-  var indices = [];
 
-  for (var i=0; i<polys.length; i++) {
-    var poly = polys[i];
+  for (var p = 0; p < polys.length; p++) {
+    var poly = polys[p];
+
+    // nfirst merge polygon's holes so that we don't triangulate over them
     poly.mergeHolesIntoPoly();
-    indices = indices.concat(poly.triangulate());
-  }
+    // get vertices
+    var pvertices = poly.getVertexArray();
+    // get triangulation indices; this destroys the polygon
+    var pindices  = poly.triangulate();
 
-  return indices;
+    var offset = vertices.length;
+
+    // append poly vertices
+    arrayAppend(vertices, pvertices);
+
+    // make new faces and append them to the faces array
+    for (var i = 0; i < pindices.length; i += 3) {
+      var face = new THREE.Face3(
+        pindices[i] + offset,
+        pindices[i+1] + offset,
+        pindices[i+2] + offset
+      );
+      faceComputeNormal(face, vertices);
+      face.materialIndex = 2;
+
+      faces.push(face);
+    }
+  }
 }
 
 Layer.prototype.makeSkeletons = function() {
@@ -538,10 +545,11 @@ Layer.prototype.writeContoursToVerts = function(vertices) {
 // add pairs of verts with .addSegment, then get the layer with .getLayer
 // and .clear if reusing
 function LayerBuilder(axis) {
-  this.p = Math.pow(10, 9);
+  this.p = 1e9;
   this.axis = axis;
-  this.up = new THREE.Vector3();
-  this.up[axis] = 1;
+  this.ah = cycleAxis(this.axis);
+  this.av = cycleAxis(this.ah);
+  this.up = makeAxisUnitVector(axis);
 
   this.adjacencyMap = {};
 }
@@ -553,7 +561,6 @@ LayerBuilder.prototype.clear = function() {
 LayerBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
   this.insertNeighbor(v1, v2, normal, idx1);
   this.insertNeighbor(v2, v1, normal, idx2);
-  //debug.line(v1, v2, 2);
 }
 
 LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
@@ -575,8 +582,7 @@ LayerBuilder.prototype.makeAdjMapNode = function(v1, idx1) {
   var node = {
     v : v1,
     neighbors: [],
-    normals: [],
-    visited: false
+    normals: []
   };
   if (idx1 !== undefined) node.idx = idx1;
 
@@ -763,7 +769,6 @@ LayerBuilder.prototype.calculateHierarchy = function(edgeLoops) {
 }
 
 LayerBuilder.prototype.getLayer = function() {
-  //debug.lines();
   var polys = this.makePolys();
 
   return new Layer(polys);

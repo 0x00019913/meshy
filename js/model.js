@@ -1976,7 +1976,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to "preview".
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = "layer"; // todo: switch back to preview
+  this.sliceMode = "preview"; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
@@ -2226,12 +2226,18 @@ Model.prototype.import = function(file, callback) {
     function isBinary(result) {
       var dv = new DataView(result, 0);
       // an ascii STL file will begin with these characters
-      var solid = "solid ".split("");
+      var solid = "solid ";
       var isBinary = false;
+
+      // number of triangles if binary
+      var n = dv.getUint32(80, _this.isLittleEndian);
+
+      // file must be 84 + n*50 bytes long if binary
+      if (dv.byteLength === 84 + n*50) return true;
 
       // check that the file begins with the string "solid "
       for (var i=0; i<solid.length; i++) {
-        if (String.fromCharCode(dv.getUint8(i))!=solid[i]) {
+        if (String.fromCharCode(dv.getUint8(i)) != solid[i]) {
           isBinary = true;
           break;
         }
@@ -2241,7 +2247,9 @@ Model.prototype.import = function(file, callback) {
     }
   }
   // if OBJ, read as ascii characters
-  else if (this.format=="obj") fr.readAsText(file);
+  else if (this.format=="obj") {
+    fr.readAsText(file);
+  }
   // else, we don't support this format
   else {
     var error = "Format '"+this.format+"' is not supported.";

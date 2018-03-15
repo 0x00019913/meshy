@@ -1,10 +1,9 @@
-// circular double-linked list symbolizing an edge loop
-function Polygon(axis, vertices, indices) {
+// circular double-linked list representing an edge loop
+function Polygon(axis, vertices) {
   this.axis = axis;
   this.ah = cycleAxis(axis);
   this.av = cycleAxis(this.ah);
-  this.up = new THREE.Vector3();
-  this.up[axis] = 1;
+  this.up = makeAxisUnitVector(axis);
 
   this.valid = true;
 
@@ -38,7 +37,7 @@ function Polygon(axis, vertices, indices) {
     // create the node for this vertex
     var node = {
       v: v,
-      idx: indices[i],
+      idx: -1,
       prev: null,
       next: null,
       reflex: false,
@@ -99,6 +98,22 @@ function Polygon(axis, vertices, indices) {
 
     current = current.next;
   } while (current != this.vertex);
+
+  this.setIndices();
+}
+
+Polygon.prototype.getVertexArray = function() {
+  var vertices = [];
+
+  var start = this.vertex;
+  var current = start;
+  do {
+    vertices.push(current.v);
+
+    current = current.next;
+  } while (current != start);
+
+  return vertices;
 }
 
 Polygon.prototype.updateBounds = function(n) {
@@ -117,6 +132,18 @@ Polygon.prototype.updateBounds = function(n) {
     this.minv = this.minv.v[av] < n.v[av] ? this.minv : n;
     this.maxv = this.maxv.v[av] > n.v[av] ? this.maxv : n;
   }
+}
+
+Polygon.prototype.setIndices = function() {
+  var idx = 0;
+
+  var start = this.vertex;
+  var current = start;
+  do {
+    current.idx = idx++;
+
+    current = current.next;
+  } while (current != start);
 }
 
 Polygon.prototype.collinear = function(node) {
@@ -193,6 +220,8 @@ Polygon.prototype.containsPoint = function(pt) {
 // see David Eberly's writeup - we cast a ray to the right, see where it
 // intersects the closest segment, then check inside a triangle
 Polygon.prototype.mergeHolesIntoPoly = function() {
+  if (this.holes.length === 0) return;
+
   var axis = this.axis;
   var ah = this.ah;
   var av = this.av;
@@ -219,7 +248,8 @@ Polygon.prototype.mergeHolesIntoPoly = function() {
     this.mergeHoleIntoPoly(P, hole, hole.maxh);
   }
 
-  return;
+  this.setIndices();
+  this.holes.length = 0;
 }
 
 // join vertex node in polygon to given vertex node in hole
@@ -422,6 +452,10 @@ Polygon.prototype.nonintersection = function(a, b) {
   } while (c != this.vertex);
 
   return true;
+}
+
+Polygon.prototype.hasHoles = function() {
+  return this.holes.length > 0;
 }
 
 Polygon.prototype.nodeCalculateReflex = function(node) {

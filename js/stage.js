@@ -1,6 +1,8 @@
 /* stage.js
+
    classes:
-    Stage
+
+   - Stage
    description:
     Main class representing the Meshy viewport. Encompasses UI, creating and
     handling the model, and controlling the viewport.
@@ -14,7 +16,7 @@ Stage = function() {
   // toggles
   this.importEnabled = true;
   this.importingMeshName = "";
-  this.floorVisible = false;
+  this.floorVisible = true;
 
   // geometry
   this.model = null;
