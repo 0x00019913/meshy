@@ -459,14 +459,6 @@ StraightSkeleton.prototype.makePQ = function() {
 
   this.pq = new PriorityQueue({
     comparator: pqComparator,
-    // Using BHeap instead of the default because the default exhibits strange
-    // behavior I can't reproduce in a controlled environment - an occasional
-    // event would come off the PQ out of order.
-    // I'd assumed this was because I originally used LAV nodes to store events,
-    // so I could end up recalculating an event on the same object and pushing
-    // it to the PQ twice, but apparently this still happens even if I wrap the
-    // LAV nodes in event objects that are created for every recalculation.
-    // So I dunno.
     strategy: PriorityQueue.BHeapStrategy
   });
 }
@@ -545,7 +537,7 @@ StraightSkeleton.prototype.buildInterior = function() {
 
   this.computeInitialEvents(slav);
 
-  var iterationLimit = this.count * this.count;
+  var iterationLimit = this.count * this.count * 2;
 
   var ct = 0;
   var lim = 81300000;
