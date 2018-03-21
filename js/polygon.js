@@ -357,6 +357,16 @@ Polygon.prototype.findVisiblePointFromHole = function(hole) {
 Polygon.prototype.triangulate = function() {
   this.calculateEars();
 
+  // todo: remove
+  var start = this.vertex;
+  var current = start;
+  do {
+    debug.line(current.v, current.next.v, 10, true);
+
+    current = current.next;
+  } while (current != start);
+  debug.lines();
+
   var count = this.count;
 
   var indices = [];
@@ -445,7 +455,7 @@ Polygon.prototype.nonintersection = function(a, b) {
 
     // only segments not sharing a/b as endpoints can intersect ab segment
     if (c!=a && c!=b && d!=a && d!=b) {
-      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis, epsilon)) return false;
+      if (segmentIntersectsSegment(a.v, b.v, c.v, d.v, axis, epsilon)) return false;
     }
 
     c = c.next;

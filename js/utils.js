@@ -334,6 +334,7 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
 }
 
+/*
 // finds the intersection of ray s with line t (both given as rays)
 // basically this math:
 // https://stackoverflow.com/a/2931703/7416552
@@ -343,7 +344,7 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
 //
 // NB: returns null if intersection is "behind" s's origin, but not necessarily
 // if intersection is "behind" t's origin
-function rayLineIntersection(s, t, sd, td, axis, epsilon) {
+function rayLineIntersection(s, sd, t, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
@@ -358,14 +359,14 @@ function rayLineIntersection(s, t, sd, td, axis, epsilon) {
   var dv = t[av] - s[av];
 
   var u = (td[av]*dh - td[ah]*dv) / det;
-  // rays diverge, so intersection is "behind" ray a's origin
+  // intersection is "behind" ray s's origin
   if (less(u, 0, epsilon)) return null;
 
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
 // same as rayLineIntersection, but doesn't check bounds on either ray
-function lineLineIntersection(s, t, sd, td, axis, epsilon) {
+function lineLineIntersection(s, sd, t, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
@@ -386,7 +387,7 @@ function lineLineIntersection(s, t, sd, td, axis, epsilon) {
 
 // same as rayLineIntersection, but also checks that the intersection is between
 // t and t+td
-function raySegmentIntersection(s, t, sd, td, axis, epsilon) {
+function raySegmentIntersection(s, sd, t, td, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
@@ -412,8 +413,144 @@ function raySegmentIntersection(s, t, sd, td, axis, epsilon) {
   return s.clone().add(sd.clone().multiplyScalar(u));
 }
 
+// returns intersection point of s-se segment and t-te segment
+// params (note the different format from other intersection functions):
+//  s, se: first and last point of s segment
+//  t, te: first and last point of t segment
+function segmentSegmentIntersection(s, se, t, te, axis, epsilon) {
+  if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
+
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var sd = se.clone().sub(s);
+  var td = te.clone().sub(t);
+
+  var det = sd[ah]*td[av] - sd[av]*td[ah];
+  // lines are exactly parallel, so no intersection
+  if (equal(det, 0, epsilon)) return null;
+
+  var dh = t[ah] - s[ah];
+  var dv = t[av] - s[av];
+
+  var u = (td[av]*dh - td[ah]*dv) / det;
+  if (less(u, 0, epsilon) || greater(u, 1, epsilon)) return null;
+
+  var v = (sd[av]*dh - sd[ah]*dv) / det;
+  if (less(v, 0, epsilon) || greater(v, 1, epsilon)) return null;
+
+  return s.clone().add(sd.clone().multiplyScalar(u));
+}*/
+
+// flags signifying which bounds to check for intersection testing
+var boundCheckFlags = {
+  None: 0,                // line-line
+  Sstart: 1,              // ray-line
+  Send: 2,
+  Tstart: 4,              // line-ray
+  Tend: 8,
+  STstart: 1 & 4,         // ray-ray
+  STend: 2 & 8,
+  Sall: 1 & 2,            // segment-line
+  Tall: 4 & 8,            // line-segment
+  SallTstart: 1 & 2 & 4,  // segment-ray
+  SstartTall: 1 & 4 & 8,  // ray-segment
+  All: 1 & 2 & 3 & 4      // segment-segment
+}
+
+// returns the intersection (or null) of ray s with line t (both given as rays)
+// basically this math:
+// https://stackoverflow.com/a/2931703/7416552
+// s, t: ray origins
+// sd, td: ray directions (not normalized)
+// checks: flags signifying which bounds to check
+// point of intersection is s + sd * u = t + td * v
+function intersection(s, sd, t, td, checks, axis, epsilon) {
+  if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
+
+  var p = calculateIntersectionParams(s, t, sd, td, axis, epsilon);
+
+  if (!validateIntersectionParams(p, checks, epsilon)) return null;
+
+  return s.clone().add(sd.clone().multiplyScalar(p.u));
+}
+
+// shorthand functions for certain frequently used intersection types
+function lineLineIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, boundCheckFlags.None, axis, epsilon);
+}
+function rayLineIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, boundCheckFlags.Sstart, axis, epsilon);
+}
+function raySegmentIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, boundCheckFlags.SstartTall, axis, epsilon);
+}
+function segmentSegmentIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, boundCheckFlags.All, axis, epsilon);
+}
+function segmentSegmentIntersectionE(s, se, t, te, axis, epsilon) {
+  return intersectionE(s, se, t, te, boundCheckFlags.All, axis, epsilon);
+}
+
+
+// returns intersection point of s-se segment and t-te segment (or null)
+// E stands for 'endpoints', as opposed to origin+direction
+// params:
+//  s, se: first and last point of s segment
+//  t, te: first and last point of t segment
+function intersectionE(s, se, t, te, checks, axis, epsilon) {
+  var sd = se.clone().sub(s);
+  var td = te.clone().sub(t);
+
+  return intersection(s, sd, t, td, checks, axis, epsilon);
+}
+
+// calculate both intersection params for two rays instead of inlining the
+// same code multiple times
+function calculateIntersectionParams(s, t, sd, td, axis, epsilon) {
+  var ah = cycleAxis(axis);
+  var av = cycleAxis(ah);
+
+  var det = sd[ah]*td[av] - sd[av]*td[ah];
+  // lines are exactly parallel, so no intersection
+  if (equal(det, 0, epsilon)) return null;
+
+  var dh = t[ah] - s[ah];
+  var dv = t[av] - s[av];
+
+  return {
+    u: (td[av]*dh - td[ah]*dv) / det,
+    v: (sd[av]*dh - sd[ah]*dv) / det
+  };
+}
+
+// validate intersection params within the [0, 1] range
+// arguments:
+//  p: object containing u and v params
+//  checks: some combination of boundCheckFlags enum values
+function validateIntersectionParams(p, checks, epsilon) {
+  if (p === null) return false;
+
+  var u = p.u;
+  var v = p.v;
+
+  var ulb = checks & boundCheckFlags.Sstart;
+  var uub = checks & boundCheckFlags.Send;
+  var vlb = checks & boundCheckFlags.Tstart;
+  var vub = checks & boundCheckFlags.Tend;
+
+  if (ulb && less(u, 0, epsilon)) return false;
+  if (uub && greater(u, 1, epsilon)) return false;
+  if (vlb && less(v, 0, epsilon)) return false;
+  if (vub && greater(v, 1, epsilon)) return false;
+
+  return true;
+}
+
 // bool check if segment ab intersects segment cd
-function segmentSegmentIntersection(a, b, c, d, axis, epsilon) {
+function segmentIntersectsSegment(checks, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 

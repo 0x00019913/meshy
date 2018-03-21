@@ -1309,7 +1309,7 @@ StraightSkeleton.prototype.handlePeak = function(lnode, vI, L) {
   // degenerate situations in which the verticess are very close together,
   // computing a new intersection may fail, so fall back to the old vertex
   // if necessary
-  var vInew = rayLineIntersection(vX, vY, bX, bY, this.axis, this.epsilon);
+  var vInew = rayLineIntersection(vX, bX, vY, bY, this.axis, this.epsilon);
   var nI = this.nfactory.create(vInew === null ? vI : vInew, L);
 
   // create a new LAV node for uniformity in API usage
@@ -1435,8 +1435,8 @@ StraightSkeleton.prototype.computeEdgeEvent = function(lnodeV) {
   var vnext = lnext.v;
   var bnext = lnext.bisector;
 
-  var iprev = rayLineIntersection(v, vprev, b, bprev, axis, epsilon);
-  var inext = rayLineIntersection(v, vnext, b, bnext, axis, epsilon);
+  var iprev = rayLineIntersection(v, b, vprev, bprev, axis, epsilon);
+  var inext = rayLineIntersection(v, b, vnext, bnext, axis, epsilon);
 
   // 0 if no intersection; 1 if prev closer; 2 if next closer; 1|2==3 if equal
   var intersectionResult = 0;
@@ -1550,7 +1550,7 @@ StraightSkeleton.prototype.computeSplitEvent = function(lnodeV, lav) {
     var enV = (fndotAB < bndotAB) ? efnV : ebnV;
 
     // R is intersection point between the edge from V and the AB line
-    var vR = lineLineIntersection(v, vA, enV, eAB, axis, epsilon);
+    var vR = lineLineIntersection(v, enV, vA, eAB, axis, epsilon);
 
     if (vR === null) continue;
 
@@ -1564,7 +1564,7 @@ StraightSkeleton.prototype.computeSplitEvent = function(lnodeV, lav) {
     var bRAB = eRV.add(eAB);
 
     // potential split event happens here
-    var vSplit = rayLineIntersection(v, vR, b, bRAB, axis, epsilon);
+    var vSplit = rayLineIntersection(v, b, vR, bRAB, axis, epsilon);
 
     if (vSplit === null) continue;
 

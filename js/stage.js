@@ -197,24 +197,12 @@ Stage.prototype.generateUI = function() {
   this.verticalResolution = 0.1;
   this.planarResolution = 0.05;
   this.upAxis = "z";
-  var supportSlicingFolder = this.gui.addFolder("Supports & Slicing (beta)");
-  supportSlicingFolder.add(this, "verticalResolution", .0001, 1);
-  supportSlicingFolder.add(this, "planarResolution", .0001, 1);
-  supportSlicingFolder.add(this, "upAxis", ["x", "y", "z"]);
-
+  this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
   this.supportAngle = 45;
   this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution;
-  var supportFolder = supportSlicingFolder.addFolder("Supports");
-  supportFolder.add(this, "supportAngle", 0, 90);
-  supportFolder.add(this, "supportSpacingFactor", 1, 20);
-  supportFolder.add(this, "supportRadius", 0.0001, 1);
-  supportFolder.add(this, "generateSupports");
-  supportFolder.add(this, "removeSupports");
-
   this.sliceNumWalls = 2;
-  this.sliceFolder = supportSlicingFolder.addFolder("Slice");
-  this.buildSliceFolderInactive();
+  this.buildSupportSliceFolderInactive();
 
   this.gui.add(this, "undo");
   this.gui.add(this, "redo");
@@ -369,6 +357,24 @@ Stage.prototype.generateSupports = function() {
 Stage.prototype.removeSupports = function() {
   if (this.model) this.model.removeSupports();
 }
+// build support & slicing folder when slice mode is off
+Stage.prototype.buildSupportSliceFolderInactive = function() {
+  this.clearFolder(this.supportSliceFolder);
+  this.supportSliceFolder.add(this, "verticalResolution", .0001, 1);
+  this.supportSliceFolder.add(this, "planarResolution", .0001, 1);
+  this.supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]);
+  this.supportFolder = this.supportSliceFolder.addFolder("Supports");
+  this.buildSupportFolder();
+  this.sliceFolder = this.supportSliceFolder.addFolder("Slice");
+  this.buildSliceFolderInactive();
+}
+Stage.prototype.buildSupportFolder = function() {
+  this.supportFolder.add(this, "supportAngle", 0, 90);
+  this.supportFolder.add(this, "supportSpacingFactor", 1, 20);
+  this.supportFolder.add(this, "supportRadius", 0.0001, 1);
+  this.supportFolder.add(this, "generateSupports");
+  this.supportFolder.add(this, "removeSupports");
+}
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
@@ -380,26 +386,27 @@ Stage.prototype.buildSliceFolderActive = function() {
 
   var numSlices = this.model.getNumSlices();
   if (numSlices !== 0) {
-    this.clearFolder(this.sliceFolder);
+    var folder = this.supportSliceFolder;
+    this.clearFolder(this.supportSliceFolder);
     this.currentSlice = this.model.getCurrentSlice();
-    this.sliceController = this.sliceFolder.add(
+    this.sliceController = folder.add(
       this,
       "currentSlice",
       0, numSlices
     ).step(1).onChange(this.setSlice.bind(this));
     this.sliceMode = this.model.getSliceMode();
-    this.sliceFolder.add(
+    folder.add(
       this,
       "sliceMode",
       ["preview", "layer"]
     ).onChange(this.setSliceMode.bind(this));
 
-    this.sliceSettingsFolder = this.sliceFolder.addFolder("Layer Settings");
+    this.sliceSettingsFolder = folder.addFolder("Layer Settings");
     this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).step(1);
     this.sliceSettingsFolder.add(this, "recalculateLayers");
   }
 
-  this.sliceFolder.add(this, "deactivateSliceMode");
+  this.supportSliceFolder.add(this, "deactivateSliceMode");
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
@@ -417,7 +424,7 @@ Stage.prototype.activateSliceMode = function() {
 }
 Stage.prototype.deactivateSliceMode = function() {
   if (this.model) {
-    this.buildSliceFolderInactive();
+    this.buildSupportSliceFolderInactive();
     this.model.deactivateSliceMode();
   }
 }
@@ -711,7 +718,7 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.generateSupports();
-  this.activateSliceMode();
+  //this.activateSliceMode();
 
   this.cameraToModel();
   this.filename = this.model.filename;

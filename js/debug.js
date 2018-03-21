@@ -32,14 +32,21 @@ Debug.prototype.line = function(v, w, n, lastonly, offset) {
 Debug.prototype.ray = function(v, r, l) {
   this.line(v, v.clone().add(r.clone().setLength(l)));
 }
-Debug.prototype.point = function(v) {
-  this.debugPointGeo.vertices.push(v);
+Debug.prototype.point = function(v, o, axis) {
+  if (o===undefined) o = 0;
+  if (axis===undefined) axis = "z";
+  var vv = v;
+  if (o!==0) {
+    vv = v.clone();
+    vv[axis] += o;
+  }
+
+  this.debugPointGeo.vertices.push(vv);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
 Debug.prototype.face = function(f, vs) {
   var [a, b, c] = faceGetVerts(f, vs);
   this.point(a.clone().add(b).add(c).divideScalar(3));
-  //this.debugPoints();
 }
 Debug.prototype.points = function(idx, incr) {
   var color = 0xff6666;

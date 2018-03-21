@@ -176,6 +176,7 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = vertexCount;
 
   var layerBuilder = new LayerBuilder(axis);
+  var segmentSet = new SegmentSet(axis);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
@@ -219,7 +220,8 @@ Slicer.prototype.setPreviewSlice = function() {
 
       faces.push(newFace);
 
-      layerBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
+      layerBuilder.addSegment(AB, AC, newFace.normal);
+      segmentSet.addSegment(AB, AC, newFace.normal);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -258,12 +260,16 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace1);
       faces.push(newFace2);
 
-      layerBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
+      layerBuilder.addSegment(AC, BC, newFace2.normal);
+      segmentSet.addSegment(AC, BC, newFace2.normal);
     }
   }
 
-  var layer = layerBuilder.getLayer();
-  layer.triangulate(vertices, faces);
+  //var layer = layerBuilder.getLayer();
+  //layer.triangulate(vertices, faces);
+
+  debug.cleanup();
+  segmentSet.unify();
 }
 
 Slicer.prototype.setLayerSlice = function() {
@@ -558,17 +564,17 @@ LayerBuilder.prototype.clear = function() {
   this.adjacencyMap = {};
 }
 
-LayerBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
-  this.insertNeighbor(v1, v2, normal, idx1);
-  this.insertNeighbor(v2, v1, normal, idx2);
+LayerBuilder.prototype.addSegment = function(v1, v2, normal) {
+  this.insertNeighbor(v1, v2, normal);
+  this.insertNeighbor(v2, v1, normal);
 }
 
-LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
+LayerBuilder.prototype.insertNeighbor = function(v1, v2, n) {
   var v1hash = vertexHash(v1, this.p);
 
   var a = this.adjacencyMap;
 
-  if (!a.hasOwnProperty(v1hash)) a[v1hash] = this.makeAdjMapNode(v1, idx1);
+  if (!a.hasOwnProperty(v1hash)) a[v1hash] = this.makeAdjMapNode(v1);
 
   var v2hash = vertexHash(v2, this.p);
   if (v1hash == v2hash) return;
@@ -577,14 +583,12 @@ LayerBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
   a[v1hash].normals.push(n);
 }
 
-LayerBuilder.prototype.makeAdjMapNode = function(v1, idx1) {
-  // don't store index if unavailable
+LayerBuilder.prototype.makeAdjMapNode = function(v1) {
   var node = {
     v : v1,
     neighbors: [],
     normals: []
   };
-  if (idx1 !== undefined) node.idx = idx1;
 
   return node;
 }
@@ -617,7 +621,6 @@ LayerBuilder.prototype.makePolys = function() {
     if (start == null) break;
 
     var vertices = [];
-    var indices = [];
 
     var neighbors, normals;
 
@@ -628,7 +631,6 @@ LayerBuilder.prototype.makePolys = function() {
       if (!a.hasOwnProperty(current)) break;
 
       vertices.push(a[current].v);
-      indices.push(a[current].idx);
 
       v = a[current].v;
       neighbors = a[current].neighbors;
@@ -661,7 +663,7 @@ LayerBuilder.prototype.makePolys = function() {
 
     } while (current != start);
 
-    var poly = new Polygon(axis, vertices, indices);
+    var poly = new Polygon(axis, vertices);
 
     if (!poly.valid) continue;
 
@@ -671,6 +673,8 @@ LayerBuilder.prototype.makePolys = function() {
 
   // assign holes to the polys containing them
   this.calculateHierarchy(polys);
+
+  console.log(polys);
 
   return polys.polys;
 }

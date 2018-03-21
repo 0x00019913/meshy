@@ -724,7 +724,10 @@ Model.prototype.setMode = function(mode, params) {
 }
 
 Model.prototype.addGeometryComponent = function(name, vstart, vcount, fstart, fcount) {
-  this.geometryComponents[name] = {
+  var components = this.geometryComponents;
+  if (components.hasOwnProperty(name)) this.removeGeometryComponent(name);
+
+  components[name] = {
     vstart: vstart,
     vcount: vcount,
     fstart: fstart,
@@ -1949,11 +1952,7 @@ Model.prototype.generateSupports = function(
     this.max
   );
 
-  var geometry = this.basicMesh.geometry;
-
-  geometry.merge(supportGeometry);
-  geometry.verticesNeedUpdate = true;
-  geometry.elementsNeedUpdate = true;
+  var geometry = this.basicMesh.geometry
 
   this.addGeometryComponent(
     "support",
@@ -1962,6 +1961,10 @@ Model.prototype.generateSupports = function(
     this.faces.length,
     supportGeometry.faces.length
   );
+
+  geometry.merge(supportGeometry);
+  geometry.verticesNeedUpdate = true;
+  geometry.elementsNeedUpdate = true;
 }
 
 Model.prototype.removeSupports = function() {
