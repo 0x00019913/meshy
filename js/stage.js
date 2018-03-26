@@ -381,6 +381,8 @@ Stage.prototype.buildSliceFolderInactive = function() {
   this.sliceFolder.add(this, "activateSliceMode");
 }
 // build the Slice folder for when slice mode is on
+// NB: the resulting elements go under the Supports & Slicing folder b/c
+// supports can't be generated nor removed while slice mode is on
 Stage.prototype.buildSliceFolderActive = function() {
   if (!this.model) return;
 
@@ -696,6 +698,8 @@ Stage.prototype.handleFile = function(file) {
 
 // Callback passed to model.import; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success, model) {
+  this.importEnabled = true;
+
   if (!success) {
     // it's necessary to clear file input box because it blocks importing
     // a model with the same name twice in a row
@@ -708,8 +712,6 @@ Stage.prototype.displayMesh = function(success, model) {
   // set model
   this.model = model;
 
-  this.importEnabled = true;
-
   // failsafe
   if (!this.model) {
     removeMeshByName(this.scene, "model");
@@ -718,9 +720,14 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.generateSupports();
-  //this.activateSliceMode();
+  this.activateSliceMode();
 
   this.cameraToModel();
+
+  // todo: remove
+  this.currentSlice = 36;
+  this.setSlice();
+
   this.filename = this.model.filename;
   this.setMeshColor();
   this.updateUI();

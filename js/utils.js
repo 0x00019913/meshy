@@ -79,8 +79,8 @@ function vector3ArgMin(v) {
   return v.x<v.y ? (v.x<v.z ? 'x' : 'z') : (v.y<v.z ? 'y' : 'z');
 }
 function clamp(x, minVal, maxVal) {
-  if (x<minVal) x = minVal;
-  else if (x>maxVal) x = maxVal;
+  if (x < minVal) x = minVal;
+  else if (x > maxVal) x = maxVal;
   return x;
 }
 function vector3Abs(v) {
@@ -444,20 +444,25 @@ function segmentSegmentIntersection(s, se, t, te, axis, epsilon) {
 }*/
 
 // flags signifying which bounds to check for intersection testing
-var boundCheckFlags = {
-  None: 0,                // line-line
-  Sstart: 1,              // ray-line
-  Send: 2,
-  Tstart: 4,              // line-ray
-  Tend: 8,
-  STstart: 1 & 4,         // ray-ray
-  STend: 2 & 8,
-  Sall: 1 & 2,            // segment-line
-  Tall: 4 & 8,            // line-segment
-  SallTstart: 1 & 2 & 4,  // segment-ray
-  SstartTall: 1 & 4 & 8,  // ray-segment
-  All: 1 & 2 & 3 & 4      // segment-segment
-}
+var BoundCheckFlags = (function() {
+  var s0 = 1, s1 = 2;
+  var t0 = 4, t1 = 8;
+
+  return {
+    none: 0,                // line-line
+    s0: s0,                 // ray-line
+    s1: s1,
+    t0: t0,                 // line-ray
+    t1: t1,
+    s0t0: s0 | t0,          // ray-ray
+    s1t1: s1 | t1,
+    s01: s0 | s1,           // segment-line
+    t01: t0 | t1,           // line-segment
+    s01t0: s0 | s1 | t0,    // segment-ray
+    s0t01: s0 | t0 | t1,    // ray-segment
+    all: s0 | s1 | t0 | t1  // segment-segment
+  }
+})();
 
 // returns the intersection (or null) of ray s with line t (both given as rays)
 // basically this math:
@@ -470,32 +475,13 @@ function intersection(s, sd, t, td, checks, axis, epsilon) {
   if (axis === undefined) axis = 'z';
   if (epsilon === undefined) epsilon = 0.0000001;
 
-  var p = calculateIntersectionParams(s, t, sd, td, axis, epsilon);
+  var p = calculateIntersectionParams(s, t, sd, td, checks, axis, epsilon);
 
-  if (!validateIntersectionParams(p, checks, epsilon)) return null;
+  if (!p) return null;
 
-  return s.clone().add(sd.clone().multiplyScalar(p.u));
+  return s.clone().addScaledVector(sd, p.u);
 }
-
-// shorthand functions for certain frequently used intersection types
-function lineLineIntersection(s, sd, t, td, axis, epsilon) {
-  return intersection(s, sd, t, td, boundCheckFlags.None, axis, epsilon);
-}
-function rayLineIntersection(s, sd, t, td, axis, epsilon) {
-  return intersection(s, sd, t, td, boundCheckFlags.Sstart, axis, epsilon);
-}
-function raySegmentIntersection(s, sd, t, td, axis, epsilon) {
-  return intersection(s, sd, t, td, boundCheckFlags.SstartTall, axis, epsilon);
-}
-function segmentSegmentIntersection(s, sd, t, td, axis, epsilon) {
-  return intersection(s, sd, t, td, boundCheckFlags.All, axis, epsilon);
-}
-function segmentSegmentIntersectionE(s, se, t, te, axis, epsilon) {
-  return intersectionE(s, se, t, te, boundCheckFlags.All, axis, epsilon);
-}
-
-
-// returns intersection point of s-se segment and t-te segment (or null)
+// returns intersection point (or null) of s-se segment and t-te segment
 // E stands for 'endpoints', as opposed to origin+direction
 // params:
 //  s, se: first and last point of s segment
@@ -507,9 +493,27 @@ function intersectionE(s, se, t, te, checks, axis, epsilon) {
   return intersection(s, sd, t, td, checks, axis, epsilon);
 }
 
+// shorthand functions for frequently used intersection types
+function lineLineIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, BoundCheckFlags.none, axis, epsilon);
+}
+function rayLineIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, BoundCheckFlags.s0, axis, epsilon);
+}
+function raySegmentIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, BoundCheckFlags.s0t01, axis, epsilon);
+}
+function segmentSegmentIntersection(s, sd, t, td, axis, epsilon) {
+  return intersection(s, sd, t, td, BoundCheckFlags.all, axis, epsilon);
+}
+function segmentSegmentIntersectionE(s, se, t, te, axis, epsilon) {
+  return intersectionE(s, se, t, te, BoundCheckFlags.all, axis, epsilon);
+}
+
 // calculate both intersection params for two rays instead of inlining the
-// same code multiple times
-function calculateIntersectionParams(s, t, sd, td, axis, epsilon) {
+// same code multiple times; only return the first param (u, corresponding to s
+// ray) if the second doesn't need checking
+function calculateIntersectionParams(s, t, sd, td, checks, axis, epsilon) {
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
 
@@ -520,26 +524,51 @@ function calculateIntersectionParams(s, t, sd, td, axis, epsilon) {
   var dh = t[ah] - s[ah];
   var dv = t[av] - s[av];
 
+  // calculate and check u (s param)
+  var u = (td[av]*dh - td[ah]*dv) / det;
+
+  var u0 = checks & BoundCheckFlags.s0;
+  var u1 = checks & BoundCheckFlags.s1;
+
+  if (u0 && less(u, 0, epsilon)) return null;
+  if (u1 && greater(u, 1, epsilon)) return null;
+
+  // if don't need to check v, just return u
+  if (checks & BoundCheckFlags.v01 === 0) return {
+    u: u
+  };
+
+  // calculate and check v (t param)
+  var v = (sd[av]*dh - sd[ah]*dv) / det;
+
+  var v0 = checks & BoundCheckFlags.t0;
+  var v1 = checks & BoundCheckFlags.t1;
+
+  if (v0 && less(v, 0, epsilon)) return null;
+  if (v1 && greater(v, 1, epsilon)) return null;
+
+  // if all successful, return params
   return {
-    u: (td[av]*dh - td[ah]*dv) / det,
-    v: (sd[av]*dh - sd[ah]*dv) / det
+    u: u,
+    v: v
   };
 }
 
-// validate intersection params within the [0, 1] range
+/*/
+/ validate intersection params within the [0, 1] range
 // arguments:
 //  p: object containing u and v params
-//  checks: some combination of boundCheckFlags enum values
+//  checks: some combination of BoundCheckFlags enum values
 function validateIntersectionParams(p, checks, epsilon) {
   if (p === null) return false;
 
   var u = p.u;
   var v = p.v;
 
-  var ulb = checks & boundCheckFlags.Sstart;
-  var uub = checks & boundCheckFlags.Send;
-  var vlb = checks & boundCheckFlags.Tstart;
-  var vub = checks & boundCheckFlags.Tend;
+  var ulb = checks & BoundCheckFlags.Sstart;
+  var uub = checks & BoundCheckFlags.Send;
+  var vlb = checks & BoundCheckFlags.Tstart;
+  var vub = checks & BoundCheckFlags.Tend;
 
   if (ulb && less(u, 0, epsilon)) return false;
   if (uub && greater(u, 1, epsilon)) return false;
@@ -548,6 +577,7 @@ function validateIntersectionParams(p, checks, epsilon) {
 
   return true;
 }
+*/
 
 // bool check if segment ab intersects segment cd
 function segmentIntersectsSegment(checks, axis, epsilon) {
@@ -703,7 +733,9 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
 function coincident(a, b, epsilon) {
   if (epsilon === undefined) epsilon = 0.0000001;
 
-  return a.clone().sub(b).length() < epsilon;
+  return equal(a.x - b.x, 0, epsilon) &&
+         equal(a.y - b.y, 0, epsilon) &&
+         equal(a.z - b.z, 0, epsilon);
 }
 
 // approximate collinearity testing for three vectors
@@ -732,6 +764,17 @@ function less(i, j, epsilon) {
 function greater(i, j, epsilon) {
   if (epsilon === undefined) epsilon = 0.0000001;
   return i > j && !equal(i, j, epsilon);
+}
+
+// standard sorting-type comparator; useful when building more complicated
+// comparators because calling less() and greater() together results in two
+// equal() checks
+function compare(i, j, epsilon) {
+  if (epsilon === undefined) epsilon = 0.0000001;
+
+  if (equal(i, j, epsilon)) return 0;
+  else if (i < j) return -1;
+  else return 1;
 }
 
 

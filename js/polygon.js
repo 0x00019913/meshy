@@ -1,13 +1,14 @@
 // circular double-linked list representing an edge loop
-function Polygon(axis, vertices) {
+function Polygon(vertices, axis, epsilon) {
+  if (axis === undefined) axis = 'z';
+  if (epsilon === undefined) epsilon = 0.0000001;
+
   this.axis = axis;
   this.ah = cycleAxis(axis);
   this.av = cycleAxis(this.ah);
   this.up = makeAxisUnitVector(axis);
 
   this.valid = true;
-
-  this.epsilon = 0.0000001;
 
   this.count = 0;
   this.area = 0;
@@ -357,7 +358,6 @@ Polygon.prototype.findVisiblePointFromHole = function(hole) {
 Polygon.prototype.triangulate = function() {
   this.calculateEars();
 
-  // todo: remove
   var start = this.vertex;
   var current = start;
   do {
@@ -455,7 +455,7 @@ Polygon.prototype.nonintersection = function(a, b) {
 
     // only segments not sharing a/b as endpoints can intersect ab segment
     if (c!=a && c!=b && d!=a && d!=b) {
-      if (segmentIntersectsSegment(a.v, b.v, c.v, d.v, axis, epsilon)) return false;
+      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis, epsilon)) return false;
     }
 
     c = c.next;

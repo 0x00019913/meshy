@@ -11,26 +11,32 @@ Debug.prototype.loop = function(loop, fn) {
     curr = curr.next;
   } while (curr != loop.vertex);
 }
-Debug.prototype.line = function(v, w, n, lastonly, offset) {
+Debug.prototype.line = function(v, w, n, lastonly, o, axis) {
   if (n === undefined) n = 1;
-  if (offset === undefined) offset = 0;
+  if (o === undefined) o = 0;
+  if (axis===undefined) axis = "z";
 
   for (var i=0; i<=n; i++) {
     if (lastonly && (n==0 || i<n-1)) continue;
     var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
-    vert.z += 0.1*offset;
+    vert.z += 0.1*o;
     this.debugPointGeo.vertices.push(vert);
   }
   var vv = v.clone();
-  vv.z += 0.1*offset;
+  vv.z += 0.1*o;
   var ww = w.clone();
-  ww.z += 0.1*offset;
+  ww.z += 0.1*o;
   this.debugLineGeo.vertices.push(vv);
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
 Debug.prototype.ray = function(v, r, l) {
   this.line(v, v.clone().add(r.clone().setLength(l)));
+}
+Debug.prototype.segmentPair = function(s, se, t, te) {
+  var ms = s.clone().add(se).divideScalar(2);
+  var mt = t.clone().add(te).divideScalar(2);
+  this.line(ms, mt);
 }
 Debug.prototype.point = function(v, o, axis) {
   if (o===undefined) o = 0;

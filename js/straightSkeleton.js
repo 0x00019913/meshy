@@ -244,7 +244,7 @@ SSEdgeFactory.prototype.create = function(he) {
 //  node: the skeleton node to which this LAV node is attached
 //  isolated: normally, a LAV is contained inside a CCW loop of halfedges,
 //    such that the loop is closed and some/all of its nodes lie on the skeleton
-//    vertex nodes; however, in the case of a normal split event (see Felkel),
+//    vertex nodes; however, in the case of a typical split event (see Felkel),
 //    the LAV node formed to the "left" of the intersection doesn't have a CCW
 //    halfedge that starts on its corresponding skeleton node and whose
 //    following skeleton nodes are also in the "left" LAV - we still have a
