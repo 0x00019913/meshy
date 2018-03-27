@@ -576,6 +576,7 @@ Stage.prototype.initViewport = function() {
         if (e.key=="Z") _this.redo();
       }
       else {
+        if (e.key=="i") _this.import();
         if (e.key=="z") _this.undo();
         if (e.key=="y") _this.redo();
       }
