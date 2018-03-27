@@ -34,12 +34,8 @@ SegmentSet.prototype.unify = function() {
   // priority queue storing events from left to right
   var sweepEvents = new PriorityQueue({ comparator: pqComparator });
   for (var s = 0; s < ns; s++) {
-    addSegmentEvents(sweepEvents, segments[s]);
-    //debug.line(segments[s].v1, segments[s].v2);
+    addSegmentEvents(segments[s]);
   }
-
-  // reinitialize array of segments because we'll rebuild this
-  segments = [];
 
   // structure storing the sweep line status
   var status = new RBTree(rbtComparator);
@@ -51,36 +47,35 @@ SegmentSet.prototype.unify = function() {
     debug.point(event.v, o, this.axis);
 
     if (event.isLeft) {
-      var iter = status.iterator(), ev;
-      while ((ev = iter.next()) !== null) {
-        debug.line(event.v, ev.v.clone().add(ev.twin.v).divideScalar(2));
-      }
-
       status.insert(event);
-      var it = status.findIter(event);
-      var up = it.next();
-      var down = it.prev();
 
-      if (down) {
-        var id = segmentSegmentIntersectionE(event.v, event.twin.v, down.v, down.twin.v, axis);
-        if (id) {
-          debug.line(event.v, down.v);
-          debug.line(event.v, id);
-          debug.line(down.v, id);
-        }
+      // get iterator to event and then get adjacent events
+      var it = status.findIter(event);
+      console.log(status, it);
+      var down = it.prev();
+      it.next(); // wind iterator back to its original position
+      var up = it.next();
+
+      event.setDepth(down);
+
+      var idown = eventIntersection(event, down);
+      var iup = eventIntersection(event, up);
+
+      if (idown) {
+        eventSplit(event, idown);
+        eventSplit(down, idown);
       }
 
-      if (up) {
-        var iu = segmentSegmentIntersectionE(event.v, event.twin.v, up.v, up.twin.v, axis);
-        if (iu) {
-          debug.line(event.v, up.v);
-          debug.line(event.v, iu);
-          debug.line(up.v, iu);
-        }
+      if (iup) {
+        eventSplit(event, iup);
+        eventSplit(up, iup);
       }
     }
     else {
-      status.remove(event.twin);
+      var te = event.twin;
+      status.remove(te);
+
+      if (eventValid(te)) debug.line(event.v, te.v);
     }
     o += 0.1;
   }
@@ -88,32 +83,31 @@ SegmentSet.prototype.unify = function() {
   debug.lines();
 
   // primary sorting on horizontal coordinate (x if up axis is z)
-  // secondary sorting on left/right (right goes first so that, given two
+  // secondary sorting on vertical coordinate (y if up axis is z)
+  // tertiary sorting on left/right (right goes first so that, given two
   //    segments sharing an endpoint but with no vertical overlap, the left
   //    segment leaves the sweep status structure before the next goes in)
-  // tertiary sorting on vertical coordinate (y if up axis is z)
-  // quaternary sorting on slope
+  // quaternary sorting on slope (increasing)
   function pqComparator(a, b) {
     if (a === b) return 0;
 
     var va = a.v, vb = b.v;
+
     var vah = va[ah], vbh = vb[ah];
-    var comp0 = compare(vah, vbh, epsilon);
+    var hcomp = compare(vah, vbh, epsilon);
 
-    if (comp0 !== 0) return comp0;
+    if (hcomp !== 0) return hcomp;
     else {
-      if (!a.isLeft && b.isLeft) return -1;
-      else if (a.isLeft && !b.isLeft) return 1;
-      else {
-        var vav = va[av], vbv = vb[av];
-        var comp2 = compare(vav, vbv, epsilon);
+      var vav = va[av], vbv = vb[av];
+      var vcomp = compare(vav, vbv, epsilon);
 
-        if (comp2 !== 0) return comp2;
+      if (vcomp !== 0) return vcomp;
+      else {
+        if (!a.isLeft && b.isLeft) return -1;
+        else if (a.isLeft && !b.isLeft) return 1;
         else {
           var as = a.slope, bs = b.slope;
-          var comp3 = compare(as, bs, epsilon);
-
-          return comp3;
+          return compare(as, bs, epsilon);
         }
       }
     }
@@ -125,26 +119,36 @@ SegmentSet.prototype.unify = function() {
   function rbtComparator(a, b) {
     if (a === b) return 0;
 
-    var va = a.v, vb = b.v;
-    var vav = va[av], vbv = vb[av];
-    var comp0 = compare(vav, vbv, epsilon);
+    //var va = a.v, vb = b.v;
+    //var vav = va[av], vbv = vb[av];
+    //var vcomp = compare(vav, vbv, epsilon);
 
-    if (comp0 !== 0) return comp0;
+    var vcomp = vcompare(a, b);
+
+    if (vcomp !== 0) return vcomp;
     else {
       var as = a.slope, bs = b.slope;
-      var comp1 = compare(as, bs, epsilon);
+      var scomp = compare(as, bs, epsilon);
 
-      if (comp1 !== 0) return comp1;
+      if (scomp !== 0) return scomp;
       else {
         var vatv = a.twin.v[av], vbtv = b.twin.v[av];
-        var comp2 = compare(vatv, vbtv, epsilon);
-
-        return comp2;
+        return compare(vatv, vbtv, epsilon);
       }
     }
   }
 
-  function addSegmentEvents(sweepEvents, segment) {
+  // return vertical axis comparison for two left events
+  function vcompare(a, b) {
+    // sorting by initial vertical coordinates doesn't work because the segments
+    // will not generally have vertical overlap there, so find the first
+    // horizontal coordinate at which they will overlap
+    var p = Math.max(a.v[ah], b.v[ah]);
+
+    return compare(a.vath(p, ah, av), b.vath(p, ah, av), epsilon);
+  }
+
+  function addSegmentEvents(segment) {
     var v1 = segment.v1, v2 = segment.v2;
 
     // make events
@@ -157,6 +161,8 @@ SegmentSet.prototype.unify = function() {
 
     var vertical = v1[ah] === v2[ah];
     var dir = vertical ? v1[av] < v2[av] : v1[ah] < v2[ah];
+
+    event1.vertical = event2.vertical = vertical;
 
     // assign flags
     // (v1 and v2 assigned s.t. poly interior is on left of v1 -> v2 edge; inOut
@@ -175,13 +181,47 @@ SegmentSet.prototype.unify = function() {
     // set slopes (infinite for vertical); invert if segment points left
     var slope;
     if (vertical) slope = dir ? Infinity : -Infinity;
-    else slope = (dir ? 1 : -1) * (v2[av] - v1[av]) / (v2[ah] - v1[ah]);
+    else slope = (v2[av] - v1[av]) / (v2[ah] - v1[ah]);
 
     event1.slope = slope;
     event2.slope = slope;
 
     sweepEvents.queue(event1);
     sweepEvents.queue(event2);
+  }
+
+  function eventIntersection(a, b) {
+    if (a === null || b === null || a.endpointsCoincident(b, epsilon)) return null;
+
+    return segmentSegmentIntersectionE(a.v, a.twin.v, b.v, b.twin.v, axis, epsilon);
+  }
+
+  // given the left endpoint e of an event pair, split it at vertex vi
+  function eventSplit(e, vi) {
+    var te = e.twin;
+
+    // don't split if intersection point is on the end of the segment
+    if (coincident(te.v, vi, epsilon)) return;
+
+    // events left and right of intersection point
+    var ei = new SweepEvent(vi);
+    var ite = new SweepEvent(vi);
+
+    ei.copyAttributes(te);
+    ite.copyAttributes(e);
+
+    e.twin = ei;
+    te.twin = ite;
+
+    sweepEvents.queue(ei);
+    sweepEvents.queue(ite);
+  }
+
+  function eventValid(e) {
+    if (e.depthBelow === 0 && e.depthAbove === 1) return true;
+    if (e.depthBelow === 1 && e.depthAbove === 0) return true;
+
+    return false;
   }
 }
 
@@ -192,10 +232,31 @@ function Segment(v1, v2) {
 
 function SweepEvent(v) {
   this.v = v;
-  this.isLeft = false;
+
+  this.depthBelow = 0;
+  this.depthAbove = 0;
+
   this.twin = null;
+  this.vertical = false;
+  this.isLeft = false;
   this.inOut = false;
   this.slope = 0;
+}
+
+// for a segment's left event, given position h on the horizontal axis,
+// calculate its vertical axis position at h
+SweepEvent.prototype.vath = function(h, ah, av) {
+  var v = this.v;
+
+  if (this.vertical) return v[av];
+  else return v[av] + this.slope * (h - v[ah]);
+}
+
+SweepEvent.prototype.setDepth = function(eventBelow) {
+  var depthBelow = eventBelow !== null ? eventBelow.depthAbove : 0;
+
+  this.depthBelow = depthBelow;
+  this.depthAbove = this.inOut ? depthBelow - 1 : depthBelow + 1;
 }
 
 SweepEvent.prototype.endpointsCoincident = function(other, epsilon) {
@@ -203,4 +264,15 @@ SweepEvent.prototype.endpointsCoincident = function(other, epsilon) {
   if (coincident(this.twin.v, other.twin.v, epsilon)) return true;
 
   return false;
+}
+
+SweepEvent.prototype.copyAttributes = function(source) {
+  this.depthBelow = source.depthBelow;
+  this.depthAbove = source.depthAbove;
+
+  this.twin = source.twin;
+  this.vertical = source.vertical;
+  this.isLeft = source.isLeft;
+  this.inOut = source.inOut;
+  this.slope = source.slope;
 }
