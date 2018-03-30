@@ -571,20 +571,22 @@ Stage.prototype.initViewport = function() {
 
   // keyboard controls
   function onKeyDown(e) {
+    var k = e.key.toLowerCase();
+
     if (e.ctrlKey) {
       if (e.shiftKey) {
-        if (e.key=="Z") _this.redo();
+        if (k=="z") _this.redo();
       }
       else {
-        if (e.key=="i") _this.import();
-        if (e.key=="z") _this.undo();
-        if (e.key=="y") _this.redo();
+        if (k=="i") _this.import();
+        if (k=="z") _this.undo();
+        if (k=="y") _this.redo();
       }
     }
     else {
-      if (e.key=="f") _this.cameraToModel();
-      else if (e.key=="c") _this.toggleCOM();
-      else if (e.key=="w") _this.toggleWireframe();
+      if (k=="f") _this.cameraToModel();
+      else if (k=="c") _this.toggleCOM();
+      else if (k=="w") _this.toggleWireframe();
     }
   }
 
