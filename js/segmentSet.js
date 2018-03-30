@@ -33,49 +33,51 @@ SegmentSet.prototype.unify = function() {
 
   // priority queue storing events from left to right
   var sweepEvents = new PriorityQueue({ comparator: pqComparator });
+  var so = 1;
   for (var s = 0; s < ns; s++) {
     addSegmentEvents(segments[s]);
+    //debug.line(segments[s].v1, segments[s].v2, 1, false, so += 0.5, axis);
   }
 
   // structure storing the sweep line status
   var status = new RBTree(rbtComparator);
 
-  var o = 0;
+  var o = 0.2;
   while (sweepEvents.length > 0) {
     var event = sweepEvents.dequeue();
 
-    debug.point(event.v, o, this.axis);
+    //debug.point(event.v, o, this.axis);
+
+    var vo = event.v.clone();
+    vo[axis] += o;
+    //debug.line(vo, event.v.clone().add(event.twin.v.clone().sub(event.v).setLength(0.5)));
+    //console.log(event.slope);
 
     if (event.isLeft) {
+      if (!event.contributing) continue;
+
       status.insert(event);
 
       // get iterator to event and then get adjacent events
       var it = status.findIter(event);
-      console.log(status, it);
       var down = it.prev();
       it.next(); // wind iterator back to its original position
       var up = it.next();
 
+      if (equal(event.v.x, 4, epsilon)) {
+
+      }
+
       event.setDepth(down);
 
-      var idown = eventIntersection(event, down);
-      var iup = eventIntersection(event, up);
-
-      if (idown) {
-        eventSplit(event, idown);
-        eventSplit(down, idown);
-      }
-
-      if (iup) {
-        eventSplit(event, iup);
-        eventSplit(up, iup);
-      }
+      handleEventIntersection(event, down);
+      handleEventIntersection(event, up);
     }
     else {
       var te = event.twin;
       status.remove(te);
 
-      if (eventValid(te)) debug.line(event.v, te.v);
+      if (eventValid(te)) debug.line(event.v, te.v, 1, false, 0.1, axis);
     }
     o += 0.1;
   }
@@ -115,13 +117,9 @@ SegmentSet.prototype.unify = function() {
 
   // primary sorting on vertical coordinate (y if up axis is z)
   // secondary sorting on slope
-  // tertiary sorting on twin event's vertical coordinate
+  // tertiary sorting on horizontal coordinate (x if up axis is z)
   function rbtComparator(a, b) {
     if (a === b) return 0;
-
-    //var va = a.v, vb = b.v;
-    //var vav = va[av], vbv = vb[av];
-    //var vcomp = compare(vav, vbv, epsilon);
 
     var vcomp = vcompare(a, b);
 
@@ -132,8 +130,9 @@ SegmentSet.prototype.unify = function() {
 
       if (scomp !== 0) return scomp;
       else {
-        var vatv = a.twin.v[av], vbtv = b.twin.v[av];
-        return compare(vatv, vbtv, epsilon);
+        return compare(a.v[ah], b.v[ah], epsilon);
+        //var vatv = a.twin.v[av], vbtv = b.twin.v[av];
+        //return compare(vatv, vbtv, epsilon);
       }
     }
   }
@@ -148,6 +147,10 @@ SegmentSet.prototype.unify = function() {
     return compare(a.vath(p, ah, av), b.vath(p, ah, av), epsilon);
   }
 
+  function eventsCollinear(a, b) {
+    return equal(a.slope, b.slope, epsilon) && collinear(a.v, a.twin.v, b.v, axis, epsilon);
+  }
+
   function addSegmentEvents(segment) {
     var v1 = segment.v1, v2 = segment.v2;
 
@@ -160,28 +163,24 @@ SegmentSet.prototype.unify = function() {
     event2.twin = event1;
 
     var vertical = v1[ah] === v2[ah];
-    var dir = vertical ? v1[av] < v2[av] : v1[ah] < v2[ah];
-
-    event1.vertical = event2.vertical = vertical;
+    var dir = vertical ? (v1[av] < v2[av]) : (v1[ah] < v2[ah]);
 
     // assign flags
-    // (v1 and v2 assigned s.t. poly interior is on left of v1 -> v2 edge; inOut
-    // flag is true if vertical line going up through v1 -> v2 edge transitions
-    // from inside polygon to outside)
+    // (v1 and v2 assigned s.t. poly interior is on left of v1 -> v2 edge;
+    // weight is +1 if vertical line going up through v1 -> v2 edge transitions
+    // from outside polygon to inside, else -1)
     // if vertical:
     //  if points up, poly interior is on left, v1 is first (left) point
     //  else, poly interior is on right, v2 is first (left) point
     // else:
     //  if points right, poly interior is up, v1 is first (left) point
     //  else, poly interior is down, v2 is first (left) point
-    event1.inOut = event2.inOut = !dir;
+    event1.weight = event2.weight = dir ? 1 : -1;
     event1.isLeft = dir;
     event2.isLeft = !event1.isLeft;
 
-    // set slopes (infinite for vertical); invert if segment points left
-    var slope;
-    if (vertical) slope = dir ? Infinity : -Infinity;
-    else slope = (v2[av] - v1[av]) / (v2[ah] - v1[ah]);
+    // set slopes (infinite for vertical)
+    var slope = vertical ? Infinity : (v2[av] - v1[av]) / (v2[ah] - v1[ah]);
 
     event1.slope = slope;
     event2.slope = slope;
@@ -190,36 +189,149 @@ SegmentSet.prototype.unify = function() {
     sweepEvents.queue(event2);
   }
 
-  function eventIntersection(a, b) {
-    if (a === null || b === null || a.endpointsCoincident(b, epsilon)) return null;
+  // handle possible intersection between two left events
+  function handleEventIntersection(a, b) {
+    if (a === null || b === null) return;
+
+    // if events are collinear, intersection is some range of points
+    if (eventsCollinear(a, b)) {
+      console.log(a.depthAbove, a.depthBelow);
+      console.log(b.depthAbove, b.depthBelow);
+      //debug.point(a.v, 0.5, axis);
+      //debug.point(b.v, 1.0, axis);
+
+      var va = a.v, vb = b.v;
+      var ta = a.twin, tb = b.twin;
+      var vta = ta.v, vtb = tb.v;
+
+      // (if a is vertical, both are vertical)
+      var vertical = a.vertical();
+
+      // axis on which we'll compare bounds (vertical if segment is vertical,
+      // else horizontal)
+      var caxis = vertical ? av : ah;
+
+      var lcomp = compare(va[caxis], vb[caxis], epsilon);
+      var rcomp = compare(vta[caxis], vtb[caxis], epsilon);
+
+      // there will be up to two split points, one on the left, another on the
+      // right
+
+      // leftmost left event and vertex at which it will be split
+      var el = null, vl = null;
+      if (lcomp !== 0) {
+        el = lcomp < 0 ? a : b;
+        vl = lcomp < 0 ? vb : va;
+      }
+
+      // rightmost right event and vertex at which it will be split
+      var er = null, vr = null;
+      if (rcomp !== 0) {
+        er = rcomp < 0 ? tb : ta;
+        vr = rcomp < 0 ? vta : vtb;
+      }
+
+      var els = null;
+      if (lcomp !== 0) els = eventSplit(el, vl);
+
+      var ers = null;
+      if (rcomp !== 0) ers = eventSplit(er.twin, vr);
+
+      var l0, l1;
+      if (lcomp === 0) {
+        l0 = a;
+        l1 = b;
+      }
+      else {
+        l0 = el === b ? a : b;
+        l1 = els;
+      }
+
+      l1.invalidate();
+      l0.weight = l0.weight + l1.weight;
+      if (l0.weight === 0) l0.invalidate();
+      console.log(l0);
+
+      //console.log(l0, l1);
+
+      /*// establish the order of the four endpoints (left first/second, etc.)
+      var lf = lcomp > 0 ? b : a;
+      var ls = lcomp > 0 ? a : b;
+      var rf = rcomp > 0 ? tb : ta;
+      var rs = rcomp > 0 ? ta : tb;
+
+      // left events created by splitting the starting left event
+      var l = null, r = null;
+
+      // if endpoints not coincident, do a split
+      if (lcomp !== 0) l = eventSplit(lf, ls.v);
+      if (rcomp !== 0) r = eventSplit(rs.twin, rf.v);
+
+      // between ls and rf is a pair of duplicate events: invalidate one and
+      // give the other their combined weights
+
+      // duplicate left events
+      var l0, l1;
+
+      // if coincident, no split and both left events are a and b
+      if (lcomp === 0) {
+        l0 = a;
+        l1 = b;
+      }
+      // if not coincident, so one is a starting event and the other was formed
+      // in the split
+      else {
+        l0 = (ls === a) ? a : l;
+        l1 = (ls === b) ? b : l;
+      }
+
+      l0.invalidate();
+      l1.weight = l0.weight + l1.weight;
+      if (l1.weight === 0) l1.invalidate();*/
+    }
+    // else, events may intersect at one point
+    else {
+      var vi = computeEventIntersection(a, b);
+
+      if (vi !== null) {
+        eventSplit(a, vi);
+        eventSplit(b, vi);
+      }
+    }
+  }
+
+  function computeEventIntersection(a, b) {
+    if (a.endpointsCoincident(b, epsilon)) return null;
 
     return segmentSegmentIntersectionE(a.v, a.twin.v, b.v, b.twin.v, axis, epsilon);
   }
 
   // given the left endpoint e of an event pair, split it at vertex vi
+  // returns newly created left event
   function eventSplit(e, vi) {
     var te = e.twin;
 
     // don't split if intersection point is on the end of the segment
-    if (coincident(te.v, vi, epsilon)) return;
+    if (coincident(te.v, vi, epsilon)) return null;
 
     // events left and right of intersection point
-    var ei = new SweepEvent(vi);
-    var ite = new SweepEvent(vi);
-
-    ei.copyAttributes(te);
-    ite.copyAttributes(e);
+    var ei = te.clone(vi);
+    var ite = e.clone(vi);
 
     e.twin = ei;
     te.twin = ite;
 
     sweepEvents.queue(ei);
     sweepEvents.queue(ite);
+
+    return ite;
   }
 
   function eventValid(e) {
-    if (e.depthBelow === 0 && e.depthAbove === 1) return true;
-    if (e.depthBelow === 1 && e.depthAbove === 0) return true;
+    if (!e.contributing) return false;
+
+    if (e.depthBelow === 0 && e.depthAbove > 0) return true;
+    if (e.depthBelow > 0 && e.depthAbove === 0) return true;
 
     return false;
   }
@@ -237,10 +349,15 @@ function SweepEvent(v) {
   this.depthAbove = 0;
 
   this.twin = null;
-  this.vertical = false;
   this.isLeft = false;
-  this.inOut = false;
   this.slope = 0;
+  this.weight = 0;
+
+  this.contributing = true;
+}
+
+SweepEvent.prototype.vertical = function() {
+  return Math.abs(this.slope) === Infinity;
 }
 
 // for a segment's left event, given position h on the horizontal axis,
@@ -248,7 +365,7 @@ function SweepEvent(v) {
 SweepEvent.prototype.vath = function(h, ah, av) {
   var v = this.v;
 
-  if (this.vertical) return v[av];
+  if (this.vertical()) return v[av];
   else return v[av] + this.slope * (h - v[ah]);
 }
 
@@ -256,7 +373,7 @@ SweepEvent.prototype.setDepth = function(eventBelow) {
   var depthBelow = eventBelow !== null ? eventBelow.depthAbove : 0;
 
   this.depthBelow = depthBelow;
-  this.depthAbove = this.inOut ? depthBelow - 1 : depthBelow + 1;
+  this.depthAbove = depthBelow + this.weight;
 }
 
 SweepEvent.prototype.endpointsCoincident = function(other, epsilon) {
@@ -266,13 +383,19 @@ SweepEvent.prototype.endpointsCoincident = function(other, epsilon) {
   return false;
 }
 
-SweepEvent.prototype.copyAttributes = function(source) {
-  this.depthBelow = source.depthBelow;
-  this.depthAbove = source.depthAbove;
+SweepEvent.prototype.clone = function(v) {
+  var e = new this.constructor();
 
-  this.twin = source.twin;
-  this.vertical = source.vertical;
-  this.isLeft = source.isLeft;
-  this.inOut = source.inOut;
-  this.slope = source.slope;
+  // copy properties and set v
+  Object.assign(e, this);
+  e.v = v;
+
+  e.contributing = this.contributing;
+
+  return e;
+}
+
+SweepEvent.prototype.invalidate = function() {
+  this.contributing = false;
+  this.twin.contributing = false;
 }
