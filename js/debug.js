@@ -19,13 +19,13 @@ Debug.prototype.line = function(v, w, n, lastonly, o, axis) {
   for (var i=0; i<=n; i++) {
     if (lastonly && (n==0 || i<n-1)) continue;
     var vert = w.clone().multiplyScalar(i/n).add(v.clone().multiplyScalar((n-i)/n));
-    vert.z += 0.1*o;
+    vert.z += o;
     this.debugPointGeo.vertices.push(vert);
   }
   var vv = v.clone();
-  vv.z += 0.1*o;
+  vv.z += o;
   var ww = w.clone();
-  ww.z += 0.1*o;
+  ww.z += o;
   this.debugLineGeo.vertices.push(vv);
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
