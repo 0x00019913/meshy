@@ -299,6 +299,8 @@ function crossProductComponent(v, w, axis) {
   return 0;
 }
 
+// intersection stuff
+
 // intersection between line segment and plane normal to axis
 function segmentPlaneIntersection(axis, plane, va, vb) {
   if (axis === undefined) axis = 'z';
@@ -333,115 +335,6 @@ function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
   var av = cycleAxis(ah);
   return s1[ah] + (s2[ah] - s1[ah]) * (pt[av] - s1[av]) / (s2[av] - s1[av]);
 }
-
-/*
-// finds the intersection of ray s with line t (both given as rays)
-// basically this math:
-// https://stackoverflow.com/a/2931703/7416552
-// s, t: ray origins
-// sd, td: ray directions (not necessarily normalized)
-// point of intersection is s + sd * u = t + td * v
-//
-// NB: returns null if intersection is "behind" s's origin, but not necessarily
-// if intersection is "behind" t's origin
-function rayLineIntersection(s, sd, t, td, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
-
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
-  var det = sd[ah]*td[av] - sd[av]*td[ah];
-  // lines are exactly parallel, so no intersection
-  if (equal(det, 0, epsilon)) return null;
-
-  var dh = t[ah] - s[ah];
-  var dv = t[av] - s[av];
-
-  var u = (td[av]*dh - td[ah]*dv) / det;
-  // intersection is "behind" ray s's origin
-  if (less(u, 0, epsilon)) return null;
-
-  return s.clone().add(sd.clone().multiplyScalar(u));
-}
-
-// same as rayLineIntersection, but doesn't check bounds on either ray
-function lineLineIntersection(s, sd, t, td, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
-
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
-  var det = sd[ah]*td[av] - sd[av]*td[ah];
-  // lines are exactly parallel, so no intersection
-  if (equal(det, 0, epsilon)) return null;
-
-  var dh = t[ah] - s[ah];
-  var dv = t[av] - s[av];
-
-  var u = (td[av]*dh - td[ah]*dv) / det;
-
-  return s.clone().add(sd.clone().multiplyScalar(u));
-}
-
-// same as rayLineIntersection, but also checks that the intersection is between
-// t and t+td
-function raySegmentIntersection(s, sd, t, td, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
-
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
-  var det = sd[ah]*td[av] - sd[av]*td[ah];
-  // lines are exactly parallel, so no intersection
-  if (equal(det, 0, epsilon)) return null;
-
-  var dh = t[ah] - s[ah];
-  var dv = t[av] - s[av];
-
-  var u = (td[av]*dh - td[ah]*dv) / det;
-  // rays diverge, so intersection is "behind" ray a's origin
-  if (less(u, 0, epsilon)) return null;
-
-  var v = (sd[av]*dh - sd[ah]*dv) / det;
-
-  // v is outside the segment bounds
-  if (less(v, 0, epsilon) || greater(v, 1, epsilon)) return null;
-
-  return s.clone().add(sd.clone().multiplyScalar(u));
-}
-
-// returns intersection point of s-se segment and t-te segment
-// params (note the different format from other intersection functions):
-//  s, se: first and last point of s segment
-//  t, te: first and last point of t segment
-function segmentSegmentIntersection(s, se, t, te, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
-
-  var ah = cycleAxis(axis);
-  var av = cycleAxis(ah);
-
-  var sd = se.clone().sub(s);
-  var td = te.clone().sub(t);
-
-  var det = sd[ah]*td[av] - sd[av]*td[ah];
-  // lines are exactly parallel, so no intersection
-  if (equal(det, 0, epsilon)) return null;
-
-  var dh = t[ah] - s[ah];
-  var dv = t[av] - s[av];
-
-  var u = (td[av]*dh - td[ah]*dv) / det;
-  if (less(u, 0, epsilon) || greater(u, 1, epsilon)) return null;
-
-  var v = (sd[av]*dh - sd[ah]*dv) / det;
-  if (less(v, 0, epsilon) || greater(v, 1, epsilon)) return null;
-
-  return s.clone().add(sd.clone().multiplyScalar(u));
-}*/
 
 // flags signifying which bounds to check for intersection testing
 var BoundCheckFlags = (function() {
