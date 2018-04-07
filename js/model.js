@@ -2285,7 +2285,7 @@ Model.prototype.import = function(file, callback) {
             // if the line doesn't begin with "vertex ", break
             if (!vline.startsWith("vertex ")) break;
 
-            var vertex = getVector3(vline.substring(7).trim());
+            var vertex = getVector3(vline.substring(7));
             var idx = vertexMapIdx(vertexMap, vertex, _this.vertices, p);
 
             face[faceGetSubscript(vert)] = idx;
@@ -2313,9 +2313,14 @@ Model.prototype.import = function(file, callback) {
       }
       function getVector3(s) {
         var vector = new THREE.Vector3();
-        var split = s.split(' ');
+        //split on whitespace
+        var split = s.split(/\s+/);
         // read off three numbers
-        for (var j=0; j<3; j++) vector.setComponent(j, parseFloat(split[j]));
+        var j = 0;
+        for (var k=0; k<split.length; k++) {
+          var sk = split[k];
+          if (sk.length > 0) vector.setComponent(j++, parseFloat(sk));
+        }
         return vector;
       }
     }
