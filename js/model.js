@@ -2179,12 +2179,18 @@ Model.prototype.import = function(file, callback) {
     function isBinary(result) {
       var dv = new DataView(result, 0);
       // an ascii STL file will begin with these characters
-      var solid = "solid ".split("");
+      var solid = "solid ";
       var isBinary = false;
+
+      // number of triangles if binary
+      var n = dv.getUint32(80, _this.isLittleEndian);
+
+      // file must be 84 + n*50 bytes long if binary
+      if (dv.byteLength === 84 + n*50) return true;
 
       // check that the file begins with the string "solid "
       for (var i=0; i<solid.length; i++) {
-        if (String.fromCharCode(dv.getUint8(i))!=solid[i]) {
+        if (String.fromCharCode(dv.getUint8(i)) != solid[i]) {
           isBinary = true;
           break;
         }
