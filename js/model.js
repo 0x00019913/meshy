@@ -2285,7 +2285,7 @@ Model.prototype.import = function(file, callback) {
             // if the line doesn't begin with "vertex ", break
             if (!vline.startsWith("vertex ")) break;
 
-            var vertex = getVector3(vline.substring(7));
+            var vertex = getVector3(vline.substring(7).trim());
             var idx = vertexMapIdx(vertexMap, vertex, _this.vertices, p);
 
             face[faceGetSubscript(vert)] = idx;
