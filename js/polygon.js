@@ -1,7 +1,7 @@
 // circular double-linked list representing an edge loop
 function Polygon(vertices, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   this.axis = axis;
   this.ah = cycleAxis(axis);
