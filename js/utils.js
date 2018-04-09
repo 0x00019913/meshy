@@ -302,24 +302,19 @@ function crossProductComponent(v, w, axis) {
 // intersection stuff
 
 // intersection between line segment and plane normal to axis
-function segmentPlaneIntersection(axis, plane, va, vb) {
+function segmentPlaneIntersection(axis, level, va, vb) {
   if (axis === undefined) axis = 'z';
 
-  // va assumed lower on axis than vb; if not, make it so
-  if (va[axis] > vb[axis]) {
-    var tmp = va;
-    va = vb;
-    vb = tmp;
-  }
-
   // if equal, just return va
-  if (va[axis] == vb[axis]) return va;
+  if (va[axis] === vb[axis]) return va;
 
   // calculate linear interpolation factor; note that, as checked above, the
   // denominator will be positive
-  var t = (plane - va[axis]) / (vb[axis] - va[axis]);
+  var t = (level - va[axis]) / (vb[axis] - va[axis]);
+  // difference vector
+  var d = vb.clone().sub(va);
   // interpolate
-  return va.clone().multiplyScalar(1-t).addScaledVector(vb, t);
+  return va.clone().addScaledVector(d, t);
 }
 
 // s1, s2: endpoints of segment
@@ -366,7 +361,7 @@ var BoundCheckFlags = (function() {
 // point of intersection is s + sd * u = t + td * v
 function intersection(s, sd, t, td, checks, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   var p = calculateIntersectionParams(s, t, sd, td, checks, axis, epsilon);
 
@@ -475,7 +470,7 @@ function validateIntersectionParams(p, checks, epsilon) {
 // bool check if segment ab intersects segment cd
 function segmentIntersectsSegment(checks, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
           (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
@@ -596,7 +591,7 @@ function orthogonalVector(v) {
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -606,7 +601,7 @@ function left(a, b, c, axis, epsilon) {
 // true if c is left of or on a-b segment
 function leftOn(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -615,7 +610,7 @@ function leftOn(a, b, c, axis, epsilon) {
 
 function pointInsideTriangle(p, a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   return left(a, b, p, axis, epsilon) &&
          left(b, c, p, axis, epsilon) &&
@@ -624,7 +619,7 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
 
 // approximate coincidence testing for vectors
 function coincident(a, b, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   return equal(a.x - b.x, 0, epsilon) &&
          equal(a.y - b.y, 0, epsilon) &&
@@ -634,7 +629,7 @@ function coincident(a, b, epsilon) {
 // approximate collinearity testing for three vectors
 function collinear(a, b, c, axis, epsilon) {
   if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -643,19 +638,31 @@ function collinear(a, b, c, axis, epsilon) {
 
 // approximate equality for real numbers
 function equal(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
+
+  var test = false;
+  if (test) {
+    if (j===0) return Math.abs(i) < epsilon;
+    else return Math.abs(i/j - 1) < epsilon;
+  }
+  else {
+    return equalSimple(i, j, epsilon);
+  }
+}
+
+function equalSimple(i, j, epsilon) {
   return Math.abs(i-j) < epsilon;
 }
 
 // approximate less-than testing for real numbers
 function less(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
   return i < j && !equal(i, j, epsilon);
 }
 
 // approximate greater-than testing for real numbers
 function greater(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
   return i > j && !equal(i, j, epsilon);
 }
 
@@ -663,7 +670,7 @@ function greater(i, j, epsilon) {
 // comparators because calling less() and greater() together results in two
 // equal() checks
 function compare(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 0.0000001;
+  if (epsilon === undefined) epsilon = 1e-7;
 
   if (equal(i, j, epsilon)) return 0;
   else if (i < j) return -1;
