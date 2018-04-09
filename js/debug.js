@@ -13,8 +13,9 @@ Debug.prototype.loop = function(loop, fn) {
 }
 Debug.prototype.line = function(v, w, n, lastonly, o, axis) {
   if (n === undefined) n = 1;
+  if (lastonly === undefined) lastonly = false;
   if (o === undefined) o = 0;
-  if (axis===undefined) axis = "z";
+  if (axis === undefined) axis = "z";
 
   for (var i=0; i<=n; i++) {
     if (lastonly && (n==0 || i<n-1)) continue;
@@ -29,6 +30,27 @@ Debug.prototype.line = function(v, w, n, lastonly, o, axis) {
   this.debugLineGeo.vertices.push(vv);
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
+}
+Debug.prototype.oneline = function(v, w, o, axis, c) {
+  if (o === undefined) o = 0;
+  if (axis === undefined) axis = "z";
+  if (c === undefined) c = 0xff6666;
+
+  var vv = v.clone();
+  vv[axis] += o;
+  var ww = w.clone();
+  ww[axis] += o;
+
+  var geo = new THREE.Geometry();
+  geo.vertices.push(vv);
+  geo.vertices.push(ww);
+  var mat = new THREE.LineBasicMaterial({color: c, linewidth: 1 });
+  var mesh = new THREE.LineSegments(geo, mat);
+  mesh.name = "debugLine";
+  this.scene.add(mesh);
+
+  this.point(vv);
+  this.point(ww);
 }
 Debug.prototype.ray = function(v, r, l) {
   this.line(v, v.clone().add(r.clone().setLength(l)));
