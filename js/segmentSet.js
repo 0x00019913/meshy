@@ -33,6 +33,9 @@ SegmentSet.prototype.unify = function() {
 
   var efactory = new SweepEventFactory();
 
+  var drawEvents = false;
+  var printEvents = false;
+
   // priority queue storing events from left to right
   var sweepEvents = new PriorityQueue({
     comparator: pqComparator
@@ -40,10 +43,9 @@ SegmentSet.prototype.unify = function() {
   var so = 1;
   for (var s = 0; s < ns; s++) {
     addSegmentEvents(segments[s]);
-    //debug.line(segments[s].v1, segments[s].v2, 1, false, so += 0.5, axis);
+    var ss = segments[s];
+    //debug.oneline(ss.v1, ss.v2, so+=0.1, axis);
   }
-
-  //if (efactory.id > 0) console.log(efactory.id);
 
   // structure storing the sweep line status
   var status = new RBTree(rbtComparator);
@@ -52,47 +54,66 @@ SegmentSet.prototype.unify = function() {
   while (sweepEvents.length > 0) {
     var event = sweepEvents.dequeue();
 
-    var vo = event.v.clone();
-    vo[axis] += o;
-    var vto = event.twin.v.clone();
-    vto[axis] += o;
-    //debug.line(vo, event.v.clone().add(event.twin.v.clone().sub(event.v).setLength(0.5)));
-
     if (event.isLeft) {
       status.insert(event);
 
-      // get iterator to event and then get adjacent events
-      var it = status.findIter(event);
-      var down = it.prev();
-      it.next(); // wind iterator back to its original position
+      var it = null;
+
+      it = status.findIter(event);
+      var dn = it.prev();
+      it = status.findIter(event);
       var up = it.next();
 
-      event.setDepth(down);
-      //eventPrint(event);
+      event.setDepthFromBelow(dn);
 
-      if (!verifyEvent(up, event, down)) {
-        while (sweepEvents.length > 0) eventPrint(sweepEvents.dequeue());
-        break;
+      eventPrint(event);
+      //eventPrint(up, "UP");
+      //eventPrint(dn, "DN");
+      eventDraw(event, 0, 0x999999);
+
+      if (dn !== null) {
+        if (eventsCollinear(event, dn)) {
+          handleEventOverlap(event, dn);
+        }
+        else {
+          handleEventIntersection(event, dn);
+        }
       }
 
-      event.setSeen();
+      if (up !== null) {
+        if (eventsCollinear(event, up)) {
+          handleEventOverlap(event, up);
+        }
+        else {
+          handleEventIntersection(event, up);
+        }
+      }
 
-      handleEventIntersection(event, down);
-      handleEventIntersection(up, event);
-
-      //debug.line(event.v, event.twin.v, 1, false, 0.1, axis);
+      if (true) {
+        var iter = status.iterator();
+        var ev = null;
+        while ((ev = iter.next()) !== null) {
+          if (!ev.contributing) console.log("noncontributing event in pq:", ev);
+        }
+      }
     }
     else {
       var te = event.twin;
-      status.remove(te);
 
-      if (!event.contributing) continue;
+      if (te.contributing) {
+        status.remove(te);
 
-      //if (eventValid(te)) eventPrint(te);
+        if (eventValid(te)) {
+          debug.line(event.v, te.v, 1, false, 0.1 + (!drawEvents ? o/7 : 0), axis);
+        }
+      }
 
-      if (eventValid(te)) debug.line(event.v, te.v, 1, false, 0.1, axis);
+      eventPrint(event);
+      eventDraw(event, 0);
     }
-    o += 0.1;
+
+    pqDraw(0.6);
+    o += 1;
   }
 
   debug.lines();
@@ -105,7 +126,7 @@ SegmentSet.prototype.unify = function() {
   // quaternary sorting on slope (increasing)
   // quinary sorting on id
   function pqComparator(a, b) {
-    if (a === b) return 0;
+    if (a.id === b.id) return 0;
 
     var va = a.v, vb = b.v;
 
@@ -133,11 +154,12 @@ SegmentSet.prototype.unify = function() {
 
   // primary sorting on vertical coordinate (y if up axis is z)
   // secondary sorting on slope
-  // tertiary sorting on seen/not seen (not seen is considered above seen)
+  // tertiary sorting on contributing (if events collinear, contributing events
+  //   go on top)
   // quaternary sorting on id: there is no meaningful ordering for collinear
   //   segments, so at least pick a unique ordering to be consistent
   function rbtComparator(a, b) {
-    if (a === b) return 0;
+    if (a.id === b.id) return 0;
 
     var vcomp = vcompare(a, b);
 
@@ -147,27 +169,45 @@ SegmentSet.prototype.unify = function() {
 
       if (scomp !== 0) return scomp;
       else {
-        if (a.seen && !b.seen) return -1;
-        else if (!a.seen && b.seen) return 1;
-        else {
-          return Math.sign(a.id - b.id);
-        }
+        return Math.sign(a.id - b.id);
       }
     }
   }
 
   // return vertical axis comparison for two left events
   function vcompare(a, b) {
+    var avh = a.v[ah], bvh = b.v[ah];
+
     // sorting by initial vertical coordinates doesn't work because the segments
     // will not generally have vertical overlap there, so find the first
     // horizontal coordinate at which they will overlap
-    var p = Math.max(a.v[ah], b.v[ah]);
+    var avv, bvv;
+    if (avh > bvh) {
+      avv = a.v[av];
+      bvv = vinterpolate(b, avh);
+    }
+    else {
+      avv = vinterpolate(a, bvh);
+      bvv = b.v[av];
+    }
 
-    return compare(a.vath(p, ah, av), b.vath(p, ah, av), epsilon);
+    return compare(avv, bvv, epsilon);
+  }
+
+  // interpolate left event e's value at horizontal coordinate h
+  function vinterpolate(e, h) {
+    var v = e.v;
+
+    if (e.vertical()) return v[av];
+    else {
+      var vt = e.twin.v;
+      var p = (h - v[ah]) / (vt[ah] - v[ah]);
+      return v[av] + p * (vt[av] - v[av]);
+    }
   }
 
   function eventsCollinear(a, b) {
-    return equal(a.slope, b.slope, epsilon) && vcompare(a, b) === 0;//collinear(a.v, a.twin.v, b.v, axis, epsilon);
+    return equal(a.slope, b.slope, epsilon) && vcompare(a, b) === 0;
   }
 
   function addSegmentEvents(segment) {
@@ -213,132 +253,163 @@ SegmentSet.prototype.unify = function() {
     sweepEvents.queue(e);
   }
 
-  // handle possible intersection between two left events
-  // event a is above event b
+  // handle collinear overlap between a pair of events
+  function handleEventOverlap(a, b) {
+    if (a === null || b === null) return;
+
+    if (!a.contributing || !b.contributing) {
+      console.log("FOOOOO");
+      return;
+    }
+
+    // Intersection may look like this (or one may be entirely contained in
+    // the other or one or both endpoints may be coincident):
+    //
+    // p |----x----------| pt
+    // q      |----------y----| qt
+    //
+    // In this case:
+    // 1. split at x and y (creates 2 new left and 2 new right events:
+    //    xl, xr, yl, yr),
+    // 2. queue right event at x (xr) and left event at y (yl),
+    // 3. invalidate left event at x and its twin,
+    // 4. adjust right event at y and its twin to represent the combined
+    //    weights and depths of it and its redundant segment (xl and xl.twin)
+    // NB: though a and b are collinear, a is considered above b, and a is
+    // the remaining valid segment while b is invalidated
+    if (printEvents) console.log("COLLINEAR");
+
+    eventPrint(a, "a ");
+    eventPrint(b, "b ");
+
+    eventDraw(a, 0.1);//, 0x666666);
+    eventDraw(b, 0.2);//, 0x666666);
+
+    //debug.line(a.v, a.twin.v, 1, false, o+4.1, axis);
+    //debug.line(b.v, b.twin.v, 1, false, o+4.2, axis);
+
+    var va = a.v, vb = b.v;
+    var ta = a.twin, tb = b.twin;
+    var vta = ta.v, vtb = tb.v;
+
+    // (if a is vertical, both are vertical)
+    var vertical = a.vertical();
+
+    // axis on which we'll compare bounds (vertical if segment is vertical,
+    // else horizontal)
+    var caxis = vertical ? av : ah;
+
+    var lcomp = compare(va[caxis], vb[caxis], epsilon);
+    var rcomp = compare(vta[caxis], vtb[caxis], epsilon);
+
+    // there will be up to two split points, one on the left, another on the
+    // right
+
+    // first and second left events
+    var lf = lcomp > 0 ? b : a;
+    var ls = lcomp > 0 ? a : b;
+    // vertex at which lf will be split
+    var vl = lcomp > 0 ? va : vb;
+
+    // first and second right events
+    var rf = rcomp > 0 ? tb : ta;
+    var rs = rcomp > 0 ? ta : tb;
+    // vertex at which rs's twin will be split
+    var vr = rcomp > 0 ? vtb : vta;
+
+    // left split left event
+    var lsplit = null;
+    if (lcomp !== 0) {
+      lsplit = eventSplit(lf, vl);
+      eventPrint(lf, "lf");
+      eventPrint(lf, "ls");
+      queue(lf.twin);
+      queue(lsplit);
+      eventPrint(lf.twin, "lr");
+      eventPrint(lsplit, "ll");
+    }
+
+    if (lcomp !== 0) eventDraw(lf, 0.3);
+
+    // right split left event
+    var rsplit = null;
+    if (rcomp !== 0) {
+      eventPrint(rf, "rf");
+      eventPrint(rs, "rs");
+      var rst = rs.twin;
+      rsplit = eventSplit(rst, vr);
+      queue(rsplit);
+      queue(rst.twin);
+      eventPrint(rst.twin, "rr");
+      eventPrint(rsplit, "rl");
+    }
+
+    if (rcomp !== 0) eventDraw(rs.twin, 0.3);
+
+    // redundant left events; invalidate one and set the other to represent
+    // the depths and weights of both
+
+    var lval, linv;
+    if (lsplit) {
+      lval = lsplit;
+      linv = ls;
+    }
+    else {
+      lval = a;
+      linv = b;
+    }
+
+    eventInvalidate(linv);
+
+    lval.depthBelow = linv.depthBelow;
+    lval.weight += linv.weight;
+
+    if (lval.weight === 0) eventInvalidate(lval);
+
+    eventPrint(lval, "lv");
+    eventPrint(linv, "li");
+
+    eventDraw(linv, 0.4);
+    eventDraw(lval, 0.5);
+  }
+
+  // handle a possible intersection between a pair of events
   function handleEventIntersection(a, b) {
     if (a === null || b === null) return;
-    if (!a.contributing || !b.contributing) return;
 
-    // if events are collinear, intersection is some range of points
-    if (eventsCollinear(a, b)) {
-      // Intersection may look like this (or one may be entirely contained in
-      // the other or one or both endpoints may be coincident):
-      //
-      // p |----x----------| pt
-      // q      |----------y----| qt
-      //
-      // In this case:
-      // 1. split at x and y (creates 2 new left and 2 new right events:
-      //    xl, xr, yl, yr),
-      // 2. queue right event at x (xr) and left event at y (yl),
-      // 3. invalidate left event at x and its twin,
-      // 4. adjust right event at y and its twin to represent the combined
-      //    weights and depths of it and its redundant segment (xl and xl.twin)
-      // NB: though a and b are collinear, a is considered above b, and a is
-      // the remaining valid segment while b is invalidated
-      //console.log("COLLINEAR");
+    var vi = computeEventIntersection(a, b);
 
-      //eventPrint(a, "a ");
-      //eventPrint(b, "b ");
+    if (vi !== null) {
+      if (printEvents) console.log("INTERSECTION");
 
-      //debug.line(a.v, a.twin.v, 1, false, o+4.1, axis);
-      //debug.line(b.v, b.twin.v, 1, false, o+4.2, axis);
-
-      var va = a.v, vb = b.v;
-      var ta = a.twin, tb = b.twin;
-      var vta = ta.v, vtb = tb.v;
-
-      // (if a is vertical, both are vertical)
-      var vertical = a.vertical();
-
-      // axis on which we'll compare bounds (vertical if segment is vertical,
-      // else horizontal)
-      var caxis = vertical ? av : ah;
-
-      var lcomp = compare(va[caxis], vb[caxis], epsilon);
-      var rcomp = compare(vta[caxis], vtb[caxis], epsilon);
-
-      // there will be up to two split points, one on the left, another on the
-      // right
-
-      // first and second left events
-      var lf = lcomp > 0 ? b : a;
-      var ls = lcomp > 0 ? a : b;
-      // vertex at which lf will be split
-      var vl = lcomp > 0 ? va : vb;
-
-      // first and second right events
-      var rf = rcomp > 0 ? tb : ta;
-      var rs = rcomp > 0 ? ta : tb;
-      // vertex at which rs's twin will be split
-      var vr = rcomp > 0 ? vtb : vta;
-
-      // left split left event
-      var lsplit = null;
-      if (lcomp !== 0) {
-        lsplit = eventSplit(lf, vl);
-        //eventPrint(lf, "lf");
-        //eventPrint(lf, "ls");
-        queue(lf.twin);
-        queue(lsplit);
-        //eventPrint(lf.twin, "lr");
-        //eventPrint(lsplit, "ll");
+      eventDraw(a, 0.1);//, 0x666666);
+      eventDraw(b, 0.1);//, 0x666666);
+      // don't split if the intersection point is on the end of a segment
+      var ita = eventSplit(a, vi);
+      if (ita !== null) {
+        queue(a.twin);
+        queue(ita);
       }
 
-      // right split left event
-      var rsplit = null;
-      if (rcomp !== 0) {
-        //eventPrint(rf, "rf");
-        //eventPrint(rs, "rs");
-        var rst = rs.twin;
-        rsplit = eventSplit(rst, vr);
-        queue(rsplit);
-        queue(rst.twin);
-        //eventPrint(rst.twin, "rr");
-        //eventPrint(rsplit, "rl");
+      var itb = eventSplit(b, vi);
+      if (itb !== null) {
+        queue(b.twin);
+        queue(itb);
       }
 
-      // redundant left events; invalidate one and set the other to represent
-      // the depths and weights of both
-
-      var lval = lcomp < 0 ? lsplit : a;
-      var linv = lcomp <= 0 ? b : lsplit;
-
-      //eventPrint(linv, "LI");
-      //eventPrint(lval, "LV");
-
-      linv.invalidate();
-
-      lval.depthBelow = linv.depthBelow;
-      lval.weight += linv.weight;
-
-      if (lval.weight === 0) lval.invalidate();
-
-      //eventPrint(linv, "LI");
-      //eventPrint(lval, "LV");
+      eventPrint(ita, "ia");
+      eventPrint(itb, "ib");
+      eventDraw(a, 0.2, 0x999999);
+      eventDraw(b, 0.2, 0x999999);
+      eventDraw(ita, 0.3);
+      eventDraw(itb, 0.3);
     }
-    // else, events may intersect at one point
-    else {
-      var vi = computeEventIntersection(a, b);
+  }
 
-      if (vi !== null) {
-        // don't split if the intersection point is on the end of a segment
-        var ita = eventSplit(a, vi);
-        if (ita !== null) {
-          queue(a.twin);
-          queue(ita);
-        }
+  function eventInvalidate(e) {
+    e.setNoncontributing();
 
-        var itb = eventSplit(b, vi);
-        if (itb !== null) {
-          queue(b.twin);
-          queue(itb);
-        }
-
-        //eventPrint(ita, "ia");
-        //eventPrint(itb, "ib");
-      }
-    }
+    status.remove(e);
   }
 
   function computeEventIntersection(a, b) {
@@ -364,11 +435,17 @@ SegmentSet.prototype.unify = function() {
     return ite;
   }
 
+  // left event is valid if
+  // 1. it is contributing,
+  // 2. one side has depth 0 and the other has positive depth
+  // (right events are not guaranteed to carry the correct depth information)
   function eventValid(e) {
-    if (e.depthBelow === 0 && e.depthAbove > 0) return true;
-    if (e.depthBelow > 0 && e.depthAbove === 0) return true;
+    if (!e.contributing) return false;
 
-    return false;
+    var da = e.depthAbove;
+    var db = e.depthBelow;
+
+    return (da === 0 && db > 0) || (da > 0 && db === 0);
   }
 
   function verifyEvent(u, e, d) {
@@ -428,7 +505,8 @@ SegmentSet.prototype.unify = function() {
         e.twin.v[av].toFixed(2), ')',
         "s", src.slope.toFixed(7),
         "w", src.weight,
-        "d", src.depthBelow, src.depthAbove];
+        "d", src.depthBelow, src.depthAbove,
+        e.contributing ? "t" : "f"];
     var p =
       [1, 2, 2,
         2, 5,
@@ -437,11 +515,12 @@ SegmentSet.prototype.unify = function() {
         5, 1,
         2, 11,
         2, 2,
-        2, 2, 2]
+        2, 2, 2,
+        1]
     var r = "";
     for (var d=0; d<data.length; d++) r += lpad(data[d], p[d]);
 
-    if (!e.contributing) r += " INV";
+    if (!eventValid(e.isLeft ? e : e.twin)) r += " i";
 
     return r;
 
@@ -453,9 +532,38 @@ SegmentSet.prototype.unify = function() {
     }
   }
 
-  function eventPrint(e, pref) {
+  function eventPrint(e, pref, force) {
+    if (!force && !printEvents) return;
+
     pref = (pref || "--");
     console.log(pref, eventString(e));
+  }
+
+  function eventDraw(e, incr, color) {
+    if (!e || !drawEvents) return;
+
+    incr = incr || 0;
+    color = color || eventColor(e);
+    debug.oneline(e.v, e.twin.v, o+incr, axis, color);
+  }
+
+  function eventColor(e) {
+    if (!e.isLeft) {
+      if (eventValid(e.twin)) return 0x66ff66;
+      else return 0xff0000;
+    }
+    else if (e.contributing) return 0xff6666;
+    else return 0x6666ff;
+  }
+
+  function pqDraw(incr) {
+    incr = incr || 0;
+    var it = status.iterator();
+    var e;
+    while ((e = it.next()) !== null) {
+      if (e.contributing) eventDraw(e, incr, 0x444444);
+      //else eventDraw(e, incr, 0x2f2f2f);
+    }
   }
 }
 
@@ -476,7 +584,6 @@ function SweepEvent(v) {
   this.slope = 0;
   this.weight = 0;
 
-  this.seen = false;
   this.contributing = true;
 }
 
@@ -493,7 +600,7 @@ SweepEvent.prototype.vath = function(h, ah, av) {
   else return v[av] + this.slope * (h - v[ah]);
 }
 
-SweepEvent.prototype.setDepth = function(eventBelow) {
+SweepEvent.prototype.setDepthFromBelow = function(eventBelow) {
   var depthBelow = eventBelow !== null ? eventBelow.depthAbove : 0;
 
   this.depthBelow = depthBelow;
@@ -501,10 +608,6 @@ SweepEvent.prototype.setDepth = function(eventBelow) {
 
   this.twin.depthBelow = this.depthBelow;
   this.twin.depthAbove = this.depthAbove;
-}
-
-SweepEvent.prototype.setSeen = function() {
-  this.seen = true;
 }
 
 SweepEvent.prototype.endpointsCoincident = function(other, epsilon) {
@@ -524,7 +627,7 @@ SweepEvent.prototype.clone = function(v) {
   return e;
 }
 
-SweepEvent.prototype.invalidate = function() {
+SweepEvent.prototype.setNoncontributing = function() {
   this.contributing = false;
   this.twin.contributing = false;
 }

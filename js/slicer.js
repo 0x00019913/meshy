@@ -176,7 +176,7 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = vertexCount;
 
   var layerBuilder = new LayerBuilder(axis);
-  var segmentSet = new SegmentSet(axis);
+  var segmentSet = new SegmentSet(axis, 1e-7);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
