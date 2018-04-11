@@ -140,7 +140,7 @@ Slicer.prototype.setPreviewSlice = function() {
   for (var i = this.sourceFaceCount-1; i >= 0; i--) {
     var bounds = faceBounds[i];
     // if min above slice level, need to hide the face
-    if (bounds.min > sliceLevel) bounds.face.materialIndex = 1;
+    if (bounds.min >= sliceLevel) bounds.face.materialIndex = 1;
     // else min <= slice level
     else {
       // if max below slice level, need to show the face
@@ -168,10 +168,6 @@ Slicer.prototype.setPreviewSlice = function() {
 
   var axis = this.axis;
 
-  // newly created verts and faces will go here; then append them to the mesh;
-  // max of 2 times that many faces and 4 times that many verts
-  var newVertices = new Array(4 * slicedFaces.length);
-  var newFaces = new Array(2 * slicedFaces.length);
   // current vertex
   var vidx = vertexCount;
 
@@ -189,6 +185,21 @@ Slicer.prototype.setPreviewSlice = function() {
     var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
     var [A, B, C] = vertsSorted.verts;
     var ccw = vertsSorted.ccw;
+
+    /*var aA = A[axis];
+    var aB = B[axis];
+    var aC = C[axis];
+
+    if (aA === aC) continue;
+    if (aA === sliceLevel && aA < aB) continue;
+    if (aC === sliceLevel && aB < aC) continue;
+
+    if (new THREE.Vector3(2.1, 2.1, A.z).sub(A).length() < 1.6) {
+      console.log(A, B, C, sliceLevel);
+      debug.line(A, B);
+      debug.line(B, C);
+      debug.line(C, A);
+    }*/
 
     // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
     if (B[axis] > sliceLevel) {
@@ -209,12 +220,12 @@ Slicer.prototype.setPreviewSlice = function() {
       var newFace;
       if (ccw) {
         newFace = new THREE.Face3(idxA, idxAB, idxAC);
-        newFace.normal.copy(vertsComputeNormal(A, AB, AC));
       }
       else {
         newFace = new THREE.Face3(idxA, idxAC, idxAB);
-        newFace.normal.copy(vertsComputeNormal(A, AC, AB));
       }
+      newFace.normal.copy(slicedFace.normal);
+
       // explicitly visible
       newFace.materialIndex = 0;
 
@@ -244,15 +255,14 @@ Slicer.prototype.setPreviewSlice = function() {
       if (ccw) {
         newFace1 = new THREE.Face3(idxA, idxB, idxAC);
         newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
-        newFace1.normal.copy(vertsComputeNormal(A, B, AC));
-        newFace2.normal.copy(vertsComputeNormal(B, BC, AC));
       }
       else {
         newFace1 = new THREE.Face3(idxA, idxAC, idxB);
         newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
-        newFace1.normal.copy(vertsComputeNormal(A, AC, B));
-        newFace2.normal.copy(vertsComputeNormal(B, AC, BC));
       }
+      newFace1.normal.copy(slicedFace.normal);
+      newFace2.normal.copy(slicedFace.normal);
+
       // explicitly visible
       newFace1.materialIndex = 0;
       newFace2.materialIndex = 0;

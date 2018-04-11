@@ -2,6 +2,9 @@
   Some utilities, static data, etc.
 */
 
+var epsilonDefault = 1e-5;
+var axisDefault = 'z';
+
 function splitFilename(fullName) {
   var idx = fullName.lastIndexOf('.');
   if (idx==-1) {
@@ -56,7 +59,7 @@ function getOneVector() { return new THREE.Vector3(1,1,1); }
 
 // generate unit vector along given axis
 function makeAxisUnitVector(axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var v = new THREE.Vector3();
   v[axis] = 1;
@@ -176,7 +179,7 @@ function faceGetBounds(face, vertices) {
   };
 }
 function faceGetBoundsAxis(face, vertices, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var verts = faceGetVerts(face, vertices);
   return {
@@ -186,7 +189,7 @@ function faceGetBoundsAxis(face, vertices, axis) {
 }
 // get THREE.Face3 vertices and sort them in ascending order on axis
 function faceGetVertsSorted(face, vertices, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var verts = faceGetVerts(face, vertices);
   var ccw = true;
@@ -276,13 +279,13 @@ function removeMeshByName(scene, name) {
 // )
 // calculate triangle area
 function triangleArea(a, b, c, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   return cornerCrossProduct(a, b, c, axis)/2;
 }
 // calculates cross product of b-a and c-a
 function cornerCrossProduct(a, b, c, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   if (axis == "x") return (b.y-a.y)*(c.z-a.z) - (b.z-a.z)*(c.y-a.y);
   if (axis == "y") return (b.z-a.z)*(c.x-a.x) - (b.x-a.x)*(c.z-a.z);
@@ -291,7 +294,7 @@ function cornerCrossProduct(a, b, c, axis) {
 }
 // cross product component of two vectors
 function crossProductComponent(v, w, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   if (axis == "x") return v.y*w.z - v.z*w.y;
   if (axis == "y") return v.z*w.x - v.x*w.z;
@@ -303,7 +306,7 @@ function crossProductComponent(v, w, axis) {
 
 // intersection between line segment and plane normal to axis
 function segmentPlaneIntersection(axis, level, va, vb) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   // if equal, just return va
   if (va[axis] === vb[axis]) return va;
@@ -324,7 +327,7 @@ function segmentPlaneIntersection(axis, level, va, vb) {
 //  av: orthogonal to ah
 // returns: intersection along a1 axis
 function raySegmentIntersectionOnHAxis(s1, s2, pt, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -360,8 +363,8 @@ var BoundCheckFlags = (function() {
 // checks: flags signifying which bounds to check
 // point of intersection is s + sd * u = t + td * v
 function intersection(s, sd, t, td, checks, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   var p = calculateIntersectionParams(s, t, sd, td, checks, axis, epsilon);
 
@@ -469,8 +472,8 @@ function validateIntersectionParams(p, checks, epsilon) {
 
 // bool check if segment ab intersects segment cd
 function segmentIntersectsSegment(checks, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   return ((left(a, b, c, axis, epsilon) ^ left(a, b, d, axis, epsilon)) &&
           (left(c, d, a, axis, epsilon) ^ left(c, d, b, axis, epsilon)));
@@ -534,7 +537,7 @@ function distanceToLine(v, a, b) {
 
 // find the point on the a-b line that's closest to v
 function projectToLine(v, a, b, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -556,7 +559,7 @@ function projectToLine(v, a, b, axis) {
 // if axis is z, rz = (d dot n - rx*nx - ry*ny) / nz
 // if nz == 0, then we can't project, so just return p
 function projectToPlaneOnAxis(p, d, n, axis) {
-  if (axis === undefined) axis = 'z';
+  if (axis === undefined) axis = axisDefault;
 
   var ah = cycleAxis(axis);
   var av = cycleAxis(ah);
@@ -590,8 +593,8 @@ function orthogonalVector(v) {
 
 // true if c is strictly left of a-b segment
 function left(a, b, c, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -600,8 +603,8 @@ function left(a, b, c, axis, epsilon) {
 
 // true if c is left of or on a-b segment
 function leftOn(a, b, c, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -609,8 +612,8 @@ function leftOn(a, b, c, axis, epsilon) {
 }
 
 function pointInsideTriangle(p, a, b, c, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   return left(a, b, p, axis, epsilon) &&
          left(b, c, p, axis, epsilon) &&
@@ -619,7 +622,7 @@ function pointInsideTriangle(p, a, b, c, axis, epsilon) {
 
 // approximate coincidence testing for vectors
 function coincident(a, b, epsilon) {
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   return equal(a.x - b.x, 0, epsilon) &&
          equal(a.y - b.y, 0, epsilon) &&
@@ -628,8 +631,8 @@ function coincident(a, b, epsilon) {
 
 // approximate collinearity testing for three vectors
 function collinear(a, b, c, axis, epsilon) {
-  if (axis === undefined) axis = 'z';
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (axis === undefined) axis = axisDefault;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   var area = triangleArea(a, b, c, axis);
 
@@ -638,7 +641,7 @@ function collinear(a, b, c, axis, epsilon) {
 
 // approximate equality for real numbers
 function equal(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   var test = false;
   if (test) {
@@ -651,18 +654,20 @@ function equal(i, j, epsilon) {
 }
 
 function equalSimple(i, j, epsilon) {
-  return Math.abs(i-j) < epsilon;
+  if (i === Infinity || j === Infinity) return i === j;
+
+  return Math.abs(i - j) < epsilon;
 }
 
 // approximate less-than testing for real numbers
 function less(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (epsilon === undefined) epsilon = epsilonDefault;
   return i < j && !equal(i, j, epsilon);
 }
 
 // approximate greater-than testing for real numbers
 function greater(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (epsilon === undefined) epsilon = epsilonDefault;
   return i > j && !equal(i, j, epsilon);
 }
 
@@ -670,7 +675,7 @@ function greater(i, j, epsilon) {
 // comparators because calling less() and greater() together results in two
 // equal() checks
 function compare(i, j, epsilon) {
-  if (epsilon === undefined) epsilon = 1e-7;
+  if (epsilon === undefined) epsilon = epsilonDefault;
 
   if (equal(i, j, epsilon)) return 0;
   else if (i < j) return -1;

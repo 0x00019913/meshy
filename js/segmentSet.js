@@ -3,13 +3,13 @@ function SegmentSet(axis, epsilon) {
   this.ah = cycleAxis(axis);
   this.av = cycleAxis(this.ah);
   this.up = makeAxisUnitVector(axis);
-  this.epsilon = epsilon;
+  this.epsilon = 1e-5;
 
   this.segments = [];
 }
 
 SegmentSet.prototype.addSegment = function(v1, v2, normal) {
-  //if (coincident(v1, v2, this.epsilon)) return;
+  if (coincident(v1, v2, this.epsilon)) return;
 
   var segment;
   var dot = this.up.clone().cross(normal).dot(v2.clone().sub(v1));
@@ -17,6 +17,8 @@ SegmentSet.prototype.addSegment = function(v1, v2, normal) {
   // make segment s.t. polygon is on the left when traversing from v1 to v2
   if (dot > 0) segment = new Segment(v1, v2);
   else segment = new Segment(v2, v1);
+
+  //debug.ray(segment.v1.clone().add(segment.v2).divideScalar(2), normal, 0.1);
 
   this.segments.push(segment);
 }
@@ -34,28 +36,45 @@ SegmentSet.prototype.unify = function() {
   var efactory = new SweepEventFactory();
 
   var drawEvents = false;
-  var printEvents = false;
+  var printEvents = true;
+  var drawSourceSegments = false;
+  var incrHeight = false;
 
   // priority queue storing events from left to right
   var sweepEvents = new PriorityQueue({
-    comparator: pqComparator
+    comparator: pqComparator,
+    strategy: PriorityQueue.BHeapStrategy
   });
-  var so = 1;
+  var so = 0;
   for (var s = 0; s < ns; s++) {
     addSegmentEvents(segments[s]);
     var ss = segments[s];
-    //debug.oneline(ss.v1, ss.v2, so+=0.1, axis);
+    if (drawSourceSegments) debug.oneline(ss.v1, ss.v2, so, axis);
   }
 
   // structure storing the sweep line status
   var status = new RBTree(rbtComparator);
 
   var o = 1.0;
+  var prev = null;
   while (sweepEvents.length > 0) {
     var event = sweepEvents.dequeue();
 
+    if (false && event.v[ah] >= 0 && event.v[ah]<=2.5) {
+      if (prev !== null) {
+        console.log(
+          compare(prev.v[ah], event.v[ah], epsilon),
+          compare(prev.v[av], event.v[av], epsilon),
+          pqComparator(prev, event)
+        );
+      }
+      prev = event;
+    }
+
     if (event.isLeft) {
       status.insert(event);
+
+      if (event.outOfOrder) queue(event.twin);
 
       var it = null;
 
@@ -66,10 +85,25 @@ SegmentSet.prototype.unify = function() {
 
       event.setDepthFromBelow(dn);
 
+      if (false && event.v[ah] >= 0 && event.v[ah]<=2.5) {
+
+        if (event.depthBelow<0 || event.depthAbove<0) {
+          eventPrint(dn, "DN", true);
+          eventPrint(up, "UP", true);
+          eventDraw(event, 0.5, undefined, true);
+          var it = status.iterator();
+          var e;
+          while ((e = it.next()) !== null) {
+            eventPrint(e, "ST", true);
+          }
+          statusDraw(0.4, true);
+        }
+        printEvents = true;
+      }
+      else printEvents = false;
+
       eventPrint(event);
-      //eventPrint(up, "UP");
-      //eventPrint(dn, "DN");
-      eventDraw(event, 0, 0x999999);
+      eventDraw(event, o, 0x999999);
 
       if (dn !== null) {
         if (eventsCollinear(event, dn)) {
@@ -88,31 +122,29 @@ SegmentSet.prototype.unify = function() {
           handleEventIntersection(event, up);
         }
       }
-
-      if (true) {
-        var iter = status.iterator();
-        var ev = null;
-        while ((ev = iter.next()) !== null) {
-          if (!ev.contributing) console.log("noncontributing event in pq:", ev);
-        }
-      }
     }
     else {
       var te = event.twin;
 
       if (te.contributing) {
-        status.remove(te);
+        var res = status.remove(te);
+        if (!res) {
+          te.outOfOrder = true;
 
-        if (eventValid(te)) {
-          debug.line(event.v, te.v, 1, false, 0.1 + (!drawEvents ? o/7 : 0), axis);
+          var r = event, l = event.twin;
+          console.log(r.id, l.id);
         }
       }
 
+      if (eventValid(te)) {
+        debug.line(event.v, te.v, 1, false, 0.1 + (incrHeight&&!drawEvents ? o/7 : 0), axis);
+      }
+
       eventPrint(event);
-      eventDraw(event, 0);
+      eventDraw(event, o);
     }
 
-    pqDraw(0.6);
+    statusDraw(o+0.6);
     o += 1;
   }
 
@@ -221,7 +253,7 @@ SegmentSet.prototype.unify = function() {
     event1.twin = event2;
     event2.twin = event1;
 
-    var vertical = v1[ah] === v2[ah];
+    var vertical = equal(v1[ah], v2[ah], epsilon);
     var dir = vertical ? (v1[av] < v2[av]) : (v1[ah] < v2[ah]);
 
     // assign flags
@@ -275,18 +307,13 @@ SegmentSet.prototype.unify = function() {
     // 3. invalidate left event at x and its twin,
     // 4. adjust right event at y and its twin to represent the combined
     //    weights and depths of it and its redundant segment (xl and xl.twin)
-    // NB: though a and b are collinear, a is considered above b, and a is
-    // the remaining valid segment while b is invalidated
     if (printEvents) console.log("COLLINEAR");
 
     eventPrint(a, "a ");
     eventPrint(b, "b ");
 
-    eventDraw(a, 0.1);//, 0x666666);
-    eventDraw(b, 0.2);//, 0x666666);
-
-    //debug.line(a.v, a.twin.v, 1, false, o+4.1, axis);
-    //debug.line(b.v, b.twin.v, 1, false, o+4.2, axis);
+    eventDraw(a, o+0.1);
+    eventDraw(b, o+0.2);
 
     var va = a.v, vb = b.v;
     var ta = a.twin, tb = b.twin;
@@ -329,7 +356,7 @@ SegmentSet.prototype.unify = function() {
       eventPrint(lsplit, "ll");
     }
 
-    if (lcomp !== 0) eventDraw(lf, 0.3);
+    if (lcomp !== 0) eventDraw(lf, o+0.3);
 
     // right split left event
     var rsplit = null;
@@ -344,7 +371,7 @@ SegmentSet.prototype.unify = function() {
       eventPrint(rsplit, "rl");
     }
 
-    if (rcomp !== 0) eventDraw(rs.twin, 0.3);
+    if (rcomp !== 0) eventDraw(rs.twin, o+0.3);
 
     // redundant left events; invalidate one and set the other to represent
     // the depths and weights of both
@@ -369,8 +396,8 @@ SegmentSet.prototype.unify = function() {
     eventPrint(lval, "lv");
     eventPrint(linv, "li");
 
-    eventDraw(linv, 0.4);
-    eventDraw(lval, 0.5);
+    eventDraw(linv, o+0.4);
+    eventDraw(lval, o+0.5);
   }
 
   // handle a possible intersection between a pair of events
@@ -382,27 +409,29 @@ SegmentSet.prototype.unify = function() {
     if (vi !== null) {
       if (printEvents) console.log("INTERSECTION");
 
-      eventDraw(a, 0.1);//, 0x666666);
-      eventDraw(b, 0.1);//, 0x666666);
+      eventDraw(a, o+0.1);
+      eventDraw(b, o+0.1);
       // don't split if the intersection point is on the end of a segment
       var ita = eventSplit(a, vi);
       if (ita !== null) {
         queue(a.twin);
         queue(ita);
+        queue(b);
       }
 
       var itb = eventSplit(b, vi);
       if (itb !== null) {
         queue(b.twin);
         queue(itb);
+        queue(a);
       }
 
       eventPrint(ita, "ia");
       eventPrint(itb, "ib");
-      eventDraw(a, 0.2, 0x999999);
-      eventDraw(b, 0.2, 0x999999);
-      eventDraw(ita, 0.3);
-      eventDraw(itb, 0.3);
+      eventDraw(a, o+0.2, 0x999999);
+      eventDraw(b, o+0.2, 0x999999);
+      eventDraw(ita, o+0.3);
+      eventDraw(itb, o+0.3);
     }
   }
 
@@ -496,23 +525,26 @@ SegmentSet.prototype.unify = function() {
     if (!e) return "null";
 
     var src = e.isLeft ? e : e.twin;
+    var d = 7;
 
     var data =
       [e.isLeft ? "L " : "R ", e.id, e.twin.id,
-        '(', e.v[ah].toFixed(2),
-        e.v[av].toFixed(2), ')',
-        '(', e.twin.v[ah].toFixed(2),
-        e.twin.v[av].toFixed(2), ')',
+        '(', e.v[ah].toFixed(d),
+        e.v[av].toFixed(d), ')',
+        '(', e.twin.v[ah].toFixed(d),
+        e.twin.v[av].toFixed(d), ')',
+        e.v.distanceTo(e.twin.v).toFixed(2),
         "s", src.slope.toFixed(7),
         "w", src.weight,
         "d", src.depthBelow, src.depthAbove,
         e.contributing ? "t" : "f"];
     var p =
-      [1, 2, 2,
-        2, 5,
-        5, 1,
-        2, 5,
-        5, 1,
+      [1, 3, 3,
+        2, d+3,
+        d+3, 1,
+        2, d+3,
+        d+3, 1,
+        5,
         2, 11,
         2, 2,
         2, 2, 2,
@@ -528,7 +560,7 @@ SegmentSet.prototype.unify = function() {
       n++;
       var ss = ""+s;
       var l = ss.length;
-      return " ".repeat(n-l) + ss;
+      return " ".repeat(Math.max(n-l, 0)) + ss;
     }
   }
 
@@ -539,12 +571,12 @@ SegmentSet.prototype.unify = function() {
     console.log(pref, eventString(e));
   }
 
-  function eventDraw(e, incr, color) {
-    if (!e || !drawEvents) return;
+  function eventDraw(e, incr, color, force) {
+    if (!e || (!force && !drawEvents)) return;
 
     incr = incr || 0;
     color = color || eventColor(e);
-    debug.oneline(e.v, e.twin.v, o+incr, axis, color);
+    debug.oneline(e.v, e.twin.v, incr, axis, color);
   }
 
   function eventColor(e) {
@@ -556,13 +588,12 @@ SegmentSet.prototype.unify = function() {
     else return 0x6666ff;
   }
 
-  function pqDraw(incr) {
+  function statusDraw(incr, force) {
     incr = incr || 0;
     var it = status.iterator();
     var e;
     while ((e = it.next()) !== null) {
-      if (e.contributing) eventDraw(e, incr, 0x444444);
-      //else eventDraw(e, incr, 0x2f2f2f);
+      if (e.contributing) eventDraw(e, incr, 0x444444, force);
     }
   }
 }
@@ -585,6 +616,7 @@ function SweepEvent(v) {
   this.weight = 0;
 
   this.contributing = true;
+  this.outOfOrder = false;
 }
 
 SweepEvent.prototype.vertical = function() {
