@@ -250,8 +250,11 @@ function vertsComputeNormal(a, b, c) {
 function faceGetSubscript(idx) {
   return (idx==0) ? 'a' : ((idx==1) ? 'b' : 'c');
 }
+function numHash(n, p) {
+  return Math.round(n*p);
+}
 function vertexHash(v, p) {
-  return Math.round(v.x*p)+'_'+Math.round(v.y*p)+'_'+Math.round(v.z*p);
+  return numHash(v.x, p)+'_'+numHash(v.y, p)+'_'+numHash(v.z, p);
 }
 
 // Remove all meshes with a particular name from a scene.

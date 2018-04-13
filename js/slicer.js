@@ -159,9 +159,11 @@ Slicer.prototype.setPreviewSlice = function() {
   // current vertices and faces
   var vertices = this.previewVertices;
   var faces = this.previewFaces;
+
   // local vars for ease of access
   var vertexCount = this.sourceVertexCount;
   var faceCount = this.sourceFaceCount;
+
   // erase any sliced verts and faces
   vertices.length = vertexCount;
   faces.length = faceCount;
@@ -172,7 +174,9 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = vertexCount;
 
   var layerBuilder = new LayerBuilder(axis);
-  var segmentSet = new SegmentSet(axis, 1e-7);
+  //var segmentSet = new SegmentSet(axis, 1e-7);
+  var attributes = new MCG.Attributes(axis, 5);
+  var segmentSet = new MCG.SegmentSet(attributes);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
@@ -185,21 +189,6 @@ Slicer.prototype.setPreviewSlice = function() {
     var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
     var [A, B, C] = vertsSorted.verts;
     var ccw = vertsSorted.ccw;
-
-    /*var aA = A[axis];
-    var aB = B[axis];
-    var aC = C[axis];
-
-    if (aA === aC) continue;
-    if (aA === sliceLevel && aA < aB) continue;
-    if (aC === sliceLevel && aB < aC) continue;
-
-    if (new THREE.Vector3(2.1, 2.1, A.z).sub(A).length() < 1.6) {
-      console.log(A, B, C, sliceLevel);
-      debug.line(A, B);
-      debug.line(B, C);
-      debug.line(C, A);
-    }*/
 
     // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
     if (B[axis] > sliceLevel) {
@@ -232,7 +221,7 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace);
 
       layerBuilder.addSegment(AB, AC, newFace.normal);
-      segmentSet.addSegment(AB, AC, newFace.normal);
+      segmentSet.add(AB, AC, newFace.normal);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -271,7 +260,7 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace2);
 
       layerBuilder.addSegment(AC, BC, newFace2.normal);
-      segmentSet.addSegment(AC, BC, newFace2.normal);
+      segmentSet.add(AC, BC, newFace2.normal);
     }
   }
 
@@ -279,7 +268,10 @@ Slicer.prototype.setPreviewSlice = function() {
   //layer.triangulate(vertices, faces);
 
   debug.cleanup();
-  segmentSet.unify();
+  //segmentSet.unify();
+  if (segmentSet.segments.length>0) var polygonSet = segmentSet.toPolygonSet();
+  //console.log(polygonSet);
+  //MCG.Boolean.union(segmentSet, attributes);
 }
 
 Slicer.prototype.setLayerSlice = function() {
