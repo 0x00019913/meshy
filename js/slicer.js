@@ -19,6 +19,8 @@ function Slicer(sourceVertices, sourceFaces, params) {
   this.lineWidth = this.sliceHeight;
   this.numWalls = 2;
 
+  this.precision = 5;
+
   // set from params
   if (params) {
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
@@ -26,6 +28,7 @@ function Slicer(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
     if (params.hasOwnProperty("lineWidth")) this.lineWidth = params.lineWidth;
     if (params.hasOwnProperty("numWalls")) this.numWalls = params.numWalls;
+    if (params.hasOwnProperty("precision")) this.precision = params.precision;
   }
 
   this.previewGeometryReady = false;
@@ -175,8 +178,8 @@ Slicer.prototype.setPreviewSlice = function() {
 
   var layerBuilder = new LayerBuilder(axis);
   //var segmentSet = new SegmentSet(axis, 1e-7);
-  var attributes = new MCG.Attributes(axis, 5);
-  var segmentSet = new MCG.SegmentSet(attributes);
+  var context = new MCG.Context(axis, sliceLevel, this.precision);
+  var segmentSet = new MCG.SegmentSet(context);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
@@ -221,7 +224,8 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace);
 
       layerBuilder.addSegment(AB, AC, newFace.normal);
-      segmentSet.add(AB, AC, newFace.normal);
+      var segment = new MCG.Segment(context).fromVector3Pair(AB, AC, newFace.normal);
+      segmentSet.add(segment);
     }
     // else, slice into two triangles: A-B-AC and B-BC-AC
     else {
@@ -260,18 +264,18 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace2);
 
       layerBuilder.addSegment(AC, BC, newFace2.normal);
-      segmentSet.add(AC, BC, newFace2.normal);
+      var segment = new MCG.Segment(context).fromVector3Pair(AC, BC, newFace2.normal);
+      segmentSet.add(segment);
     }
   }
 
   //var layer = layerBuilder.getLayer();
   //layer.triangulate(vertices, faces);
-
   debug.cleanup();
-  //segmentSet.unify();
-  if (segmentSet.segments.length>0) var polygonSet = segmentSet.toPolygonSet();
-  //console.log(polygonSet);
-  //MCG.Boolean.union(segmentSet, attributes);
+  if (segmentSet.count() > 0) {
+    //var polygonSet = segmentSet.toPolygonSet();
+    MCG.Boolean.union(segmentSet, context);
+  }
 }
 
 Slicer.prototype.setLayerSlice = function() {
@@ -306,10 +310,15 @@ Slicer.prototype.makeLayerGeometry = function() {
   var layerVertices = [];
 
   for (var l=0; l<layers.length; l++) {
+    console.log(l, layers.length);
     var layer = layers[l];
-    //console.log(l, layers.length);
-    layer.computeContours(this.lineWidth, this.numWalls);
-    layer.writeContoursToVerts(layerVertices);
+    var polygonSet = layer.segmentSet.toPolygonSet();
+    polygonSet.forEachPointPair(function(p1, p2) {
+      layerVertices.push(p1.toVector3());
+      layerVertices.push(p2.toVector3());
+    });
+    //layer.computeContours(this.lineWidth, this.numWalls);
+    //layer.writeContoursToVerts(layerVertices);
   }
 
   this.layerGeometryReady = true;
@@ -320,25 +329,23 @@ Slicer.prototype.computeLayers = function() {
   var layers = [];
 
   // arrays of segments, each array signifying all segments in one layer
-  var segmentLists = this.buildLayerSegmentLists();
+  var segmentSets = this.buildLayerSegmentSets();
 
   var layerBuilder = new LayerBuilder(this.axis);
 
-  for (var i=0; i<segmentLists.length; i++) {
-    var segmentList = segmentLists[i];
-    for (var s=0; s<segmentList.length; s++) {
+  for (var i=0; i<segmentSets.length; i++) {
+    var segmentSet = segmentSets[i];
+
+    var layer = new Layer(segmentSet);
+
+    /*for (var s=0; s<segmentSet.length; s++) {
       var segment = segmentList[s];
 
       layerBuilder.addSegment(segment[0], segment[1], segment[2]);
     }
 
-    if (false && i!=2) {
-      layerBuilder.clear();
-      continue;
-    }
-
     var layer = layerBuilder.getLayer();
-    layerBuilder.clear();
+    layerBuilder.clear();*/
 
     layers.push(layer);
   }
@@ -384,8 +391,8 @@ Slicer.prototype.buildLayerFaceLists = function() {
   return layerLists;
 }
 
-// build arrays of segments in each slicing plane
-Slicer.prototype.buildLayerSegmentLists = function() {
+// build segment sets in each slicing plane
+Slicer.prototype.buildLayerSegmentSets = function() {
   var layerLists = this.buildLayerFaceLists();
 
   // various local vars
@@ -397,19 +404,22 @@ Slicer.prototype.buildLayerSegmentLists = function() {
   var vertices = this.sourceVertices;
   var faces = this.sourceFaces;
 
-  var layerSegmentLists = new Array(numLayers);
+  var segmentSets = new Array(numLayers);
 
   // running set of active face indices as we sweep up along the layers
   var sweepSet = new Set();
 
   for (var i=0; i<numLayers; i++) {
+    // height of layer from mesh min
+    var sliceLevel = min + (i + 0.5) * sliceHeight;
+
     // reaching a new layer, insert whatever new active face indices for that layer
     if (layerLists[i].length>0) sweepSet = new Set([...sweepSet, ...layerLists[i]]);
 
-    // accumulate these for this layer
-    var layerSegmentList = [];
-    // height of layer from mesh min
-    var sliceLevel = min + (i + 0.5) * sliceHeight;
+    var context = new MCG.Context(axis, sliceLevel, this.precision);
+
+    // accumulate segments for this layer
+    var segmentSet = new MCG.SegmentSet(context);
 
     // for each index in the sweep list, see if it intersects the slicing plane:
     //  if it's below the slicing plane, eliminate it
@@ -440,20 +450,25 @@ Slicer.prototype.buildLayerSegmentLists = function() {
         }
         var int2 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
 
-        layerSegmentList.push([int1, int2, bounds.face.normal]);
+        var segment = new MCG.Segment(context);
+        segment.fromVector3Pair(int1, int2, bounds.face.normal);
+        segmentSet.add(segment);
+        //layerSegmentList.push([int1, int2, bounds.face.normal]);
       }
     }
 
-    layerSegmentLists[i] = layerSegmentList;
+    segmentSets[i] = segmentSet;
   }
 
-  return layerSegmentLists;
+  return segmentSets;
 }
 
 
 
 // contains a single slice of the mesh
-function Layer(polys) {
+function Layer(segmentSet) {
+  this.segmentSet = segmentSet;
+  /*
   // the original polygons made from the surface of the mesh
   this.basePolygons = polys;
   // arrays of vertices forming the printable contours of the mesh
@@ -465,6 +480,7 @@ function Layer(polys) {
   this.skeletons = null;
   // arrays of vertices forming the infill
   this.infill = null;
+  */
 }
 
 // triangulate every polygon in the layer
@@ -675,8 +691,6 @@ LayerBuilder.prototype.makePolys = function() {
 
   // assign holes to the polys containing them
   this.calculateHierarchy(polys);
-
-  console.log(polys);
 
   return polys.polys;
 }
