@@ -1,17 +1,15 @@
 MCG.Polygon = (function() {
 
-  function Polygon(sourcePoints, attributes) {
-    this.attributes = attributes;
+  function Polygon(sourcePoints, context) {
+    this.context = context;
 
-    this.axis = attributes.axis;
-    this.ah = attributes.ah;
-    this.av = attributes.av;
-    this.up = attributes.up;
+    this.axis = context.axis;
+    this.ah = context.ah;
+    this.av = context.av;
+    this.up = context.up;
 
-    this.precision = attributes.precision;
-    this.epsilon = attributes;
-
-    this.valid = true;
+    this.precision = context.precision;
+    this.epsilon = context;
 
     this.count = 0;
     this.area = 0;
@@ -19,7 +17,6 @@ MCG.Polygon = (function() {
 
     // no vertices or an insufficient number of vertices
     if (!sourcePoints || sourcePoints.length < 3) {
-      this.valid = false;
       return;
     }
 
@@ -55,7 +52,6 @@ MCG.Polygon = (function() {
 
     // if entire polygon is collinear, it's invalid
     if (this.count < 3) {
-      this.valid = false;
       return;
     }
 
@@ -64,12 +60,41 @@ MCG.Polygon = (function() {
     // calculate area
     for (var i = 2; i < this.count; i++) {
       if (ct > 1) {
-        this.area += area(points[0], points[i-1], points[i]);
+        this.area += area(points[0], points[i-1], points[i], context);
       }
     }
 
     this.hole = this.area < 0;
   }
+
+  Object.assign(Polygon.prototype, {
+
+    forEach: function(f) {
+      var points = this.points;
+      var ct = this.count;
+
+      for (var i = 0; i < ct; i++) {
+        f(points[i]);
+      }
+    },
+
+    forEachPointPair: function(f) {
+      var points = this.points;
+      var ct = this.count;
+
+      for (var i = 0; i < ct; i++) {
+        var p1 = points[i];
+        var p2 = points[(i+1+ct)%ct];
+
+        f(p1, p2);
+      }
+    },
+
+    valid: function() {
+      return this.count >= 3;
+    }
+
+  });
 
   return Polygon;
 

@@ -4,15 +4,17 @@
 
 var MCG = {};
 
-MCG.GeometryTypes = {
-  point: 1,
-  polygon: 2,
-  segment: 3,
+MCG.Types = {
+  context: 1,
 
-  abstractSet: 11,
-  polygonSet: 12,
-  segmentSet: 13,
+  vector: 11,
+  polygon: 12,
+  segment: 13,
 
-  abstractAdjacencyMap: 21,
-  directedAdjacencyMap: 22
+  abstractSet: 21,
+  polygonSet: 22,
+  segmentSet: 23,
+
+  abstractAdjacencyMap: 31,
+  directedAdjacencyMap: 32
 };

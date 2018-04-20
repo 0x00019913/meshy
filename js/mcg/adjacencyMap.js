@@ -69,8 +69,6 @@ MCG.DirectedAdjacencyMap = (function() {
       var node = m[current];
       loop.push(node.pt);
 
-      console.log(node.pt);
-
       var npt = node.nextPoint(prevpt);
 
       if (npt === null) return null;
@@ -107,7 +105,7 @@ MCG.DirectedAdjacencyMap = (function() {
 
 MCG.AdjacencyMapNode = (function() {
 
-  // one node signifies one Point; a neighbor is another Point
+  // one node signifies one point; a neighbor is another point
   // if count == 0, the node has no neighbor and is either isolated or at the end
   // of a (directed) chain of edges
   // if count == 1, the node points to one neighbor and a traversal can go to
@@ -197,37 +195,37 @@ MCG.AdjacencyMapNode = (function() {
   }
 
   AdjacencyMapNode.prototype.getRightmostNeighbor = function(prevpt) {
-      var neighbors = this.neighbors;
-      var pt = this.pt;
+    if (prevpt === undefined) return null;
+    
+    var neighbors = this.neighbors;
+    var pt = this.pt;
 
-      var inDir = prevpt.vectorTo(pt);
-      var right = inDir.cross(this.up);
+    var inDir = prevpt.vectorTo(pt).toVector3();
+    var right = inDir.cross(this.up);
 
-      var anglemax = 0;
-      var anglemaxidx = -1;
+    var anglemax = 0;
+    var anglemaxidx = -1;
 
-      for (var ni = 0; ni < neighbors.length; ni++) {
-        var npt = neighbors[ni];
+    for (var ni = 0; ni < neighbors.length; ni++) {
+      var npt = neighbors[ni];
 
-        var d = pt.vectorTo(npt);
-        var angle = inDir.angleTo(d);
+      var d = pt.vectorTo(npt).toVector3();
+      var angle = inDir.angleTo(d);
 
-        // correct for angles greater than pi
-        if (d.dot(right) > 0) angle = 2*Math.PI - angle;
+      // correct for angles greater than pi
+      if (d.dot(right) > 0) angle = 2*Math.PI - angle;
 
-        if (angle > 2*Math.PI) angle = 0;
+      if (angle > 2*Math.PI) angle = 0;
 
-        if (angle >= anglemax) {
-          anglemax = angle;
-          anglemaxidx = ni;
-        }
+      if (angle >= anglemax) {
+        anglemax = angle;
+        anglemaxidx = ni;
       }
+    }
 
-      var p = anglemaxidx > -1 ? neighbors[anglemaxidx] : null;
+    var p = anglemaxidx > -1 ? neighbors[anglemaxidx] : null;
 
-      console.log(anglemax/Math.PI/2, anglemaxidx, shallowCopy(neighbors), p);
-
-      return p;
+    return p;
   }
 
   return AdjacencyMapNode;

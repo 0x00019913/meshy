@@ -1,20 +1,41 @@
 MCG.GeometrySet = (function() {
 
-  function GeometrySet(attributes) {
-    this.attributes = attributes;
+  function GeometrySet(context) {
+    this.context = context;
 
-    this.axis = attributes.axis;
-    this.ah = attributes.ah;
-    this.av = attributes.av;
-    this.up = attributes.up;
+    this.axis = context.axis;
+    this.ah = context.ah;
+    this.av = context.av;
+    this.up = context.up;
 
-    this.precision = attributes.precision;
-    this.epsilon = attributes;
+    this.precision = context.precision;
+    this.epsilon = context;
 
-    this.count = 0;
+    this.elements = [];
 
-    this.type = MCG.GeometryTypes.abstractSet;
+    this.type = MCG.Types.abstractSet;
   }
+
+  Object.assign(GeometrySet.prototype, {
+
+    forEach: function(f) {
+      var elements = this.elements;
+      var ct = this.elements.length;
+
+      for (var i = 0; i < ct; i++) {
+        f(elements[i]);
+      }
+    },
+
+    add: function(e) {
+      if (e.valid()) this.elements.push(e);
+    },
+
+    count: function() {
+      return this.elements.length;
+    }
+
+  });
 
   return GeometrySet;
 
@@ -23,17 +44,26 @@ MCG.GeometrySet = (function() {
 
 MCG.PolygonSet = (function() {
 
-  function PolygonSet(attributes) {
-    MCG.GeometrySet.call(this, attributes);
+  function PolygonSet(context) {
+    MCG.GeometrySet.call(this, context);
 
-    this.type = MCG.GeometryTypes.polygonSet;
-    this.polygons = [];
+    this.type = MCG.Types.polygonSet;
   }
 
-  PolygonSet.prototype.add = function(p) {
-    this.polygons.push(p);
-    this.count++;
-  }
+  PolygonSet.prototype = Object.create(MCG.GeometrySet.prototype)
+
+  Object.assign(PolygonSet.prototype, {
+
+    forEachPointPair: function(f) {
+      var polygons = this.elements;
+      var ct = this.count();
+
+      for (var i = 0; i < ct; i++) {
+        polygons[i].forEachPointPair(f);
+      }
+    }
+
+  });
 
   return PolygonSet;
 
@@ -42,66 +72,53 @@ MCG.PolygonSet = (function() {
 
 MCG.SegmentSet = (function() {
 
-  function SegmentSet(attributes) {
-    MCG.GeometrySet.call(this, attributes);
+  function SegmentSet(context) {
+    MCG.GeometrySet.call(this, context);
 
-    this.type = MCG.GeometryTypes.segmentSet;
-    this.segments = [];
+    this.type = MCG.Types.segmentSet;
   }
 
-  SegmentSet.prototype.add = function(v1, v2, normal) {
-    var attributes = this.attributes;
+  SegmentSet.prototype = Object.create(MCG.GeometrySet.prototype);
 
-    var p1 = new MCG.Point(v1, attributes);
-    var p2 = new MCG.Point(v2, attributes);
+  Object.assign(SegmentSet.prototype, {
+    addPointPair: function(p1, p2) {
+      this.add(new MCG.Segment(this.context, p1, p2));
+    },
 
-    if (MCG.Math.coincident(p1, p2)) return;
+    forEachPointPair: function(f) {
+      var segments = this.elements;
+      var ct = this.count();
 
-    // determine which way the winding order points
-    var cross = this.up.clone().cross(normal);
-    var dot = cross.dot(v2.clone().sub(v1));
-
-    // make segment s.t. polygon is on the left when traversing from v1 to v2
-    var segment = dot > 0 ? new MCG.Segment(p1, p2) : new MCG.Segment(p2, p1);
-
-    this.segments.push(segment);
-    this.count++;
-  }
-
-  SegmentSet.prototype.toPolygonSet = function() {
-    var attributes = this.attributes;
-
-    var pset = new MCG.PolygonSet(attributes);
-
-    var p = Math.pow(10, this.precision);
-    var adjacencyMap = new MCG.DirectedAdjacencyMap(attributes);
-
-    var segments = this.segments;
-    var ns = segments.length;
-
-    for (var si = 0; si < ns; si++) adjacencyMap.addSegment(segments[si]);
-
-    var loops = adjacencyMap.getLoops();
-    for (var li = 0; li < loops.length; li++) {
-      pset.add(new MCG.Polygon(loops[li], attributes));
-    }
-
-    debug.cleanup();
-    var o = 0;
-    for (var i=0; i<pset.polygons.length; i++) {
-      o += 1;
-      var poly = pset.polygons[i];
-      console.log(poly);
-      //poly.checkCollinear();
-      var np = poly.points.length;
-      for (var j=0; j<np; j++) {
-        debug.line(poly.points[j].src, poly.points[(j+1+np)%np].src, 1, false, o, attributes.axis);
+      for (var i = 0; i < ct; i++) {
+        var s = segments[i];
+        f(s.p1, s.p2);
       }
-    }
-    debug.lines();
+    },
 
-    return pset;
-  }
+    toPolygonSet: function() {
+      var context = this.context;
+
+      var pset = new MCG.PolygonSet(context);
+
+      var p = Math.pow(10, this.precision);
+      var adjacencyMap = new MCG.DirectedAdjacencyMap(context);
+
+      var segments = this.elements;
+      var ns = segments.length;
+
+      for (var si = 0; si < ns; si++) {
+        adjacencyMap.addSegment(segments[si]);
+      }
+
+      var loops = adjacencyMap.getLoops();
+      for (var li = 0; li < loops.length; li++) {
+        pset.add(new MCG.Polygon(loops[li], context));
+      }
+
+      return pset;
+    }
+
+  });
 
   return SegmentSet;
 
