@@ -176,8 +176,7 @@ Slicer.prototype.setPreviewSlice = function() {
   // current vertex
   var vidx = vertexCount;
 
-  var layerBuilder = new LayerBuilder(axis);
-  //var segmentSet = new SegmentSet(axis, 1e-7);
+  //var layerBuilder = new LayerBuilder(axis);
   var context = new MCG.Context(axis, sliceLevel, this.precision);
   var segmentSet = new MCG.SegmentSet(context);
 
@@ -223,7 +222,7 @@ Slicer.prototype.setPreviewSlice = function() {
 
       faces.push(newFace);
 
-      layerBuilder.addSegment(AB, AC, newFace.normal);
+      //layerBuilder.addSegment(AB, AC, newFace.normal);
       var segment = new MCG.Segment(context).fromVector3Pair(AB, AC, newFace.normal);
       segmentSet.add(segment);
     }
@@ -263,7 +262,7 @@ Slicer.prototype.setPreviewSlice = function() {
       faces.push(newFace1);
       faces.push(newFace2);
 
-      layerBuilder.addSegment(AC, BC, newFace2.normal);
+      //layerBuilder.addSegment(AC, BC, newFace2.normal);
       var segment = new MCG.Segment(context).fromVector3Pair(AC, BC, newFace2.normal);
       segmentSet.add(segment);
     }
@@ -273,8 +272,14 @@ Slicer.prototype.setPreviewSlice = function() {
   //layer.triangulate(vertices, faces);
   debug.cleanup();
   if (segmentSet.count() > 0) {
-    //var polygonSet = segmentSet.toPolygonSet();
-    MCG.Boolean.union(segmentSet, context);
+    var polygonSet = segmentSet.toPolygonSet();
+    polygonSet.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2, 1, false, 0.1, axis);
+    });
+    debug.lines();
+    //MCG.Boolean.union(segmentSet, context);
   }
 }
 
@@ -310,16 +315,18 @@ Slicer.prototype.makeLayerGeometry = function() {
   var layerVertices = [];
 
   for (var l=0; l<layers.length; l++) {
-    console.log(l, layers.length);
     var layer = layers[l];
-    var polygonSet = layer.segmentSet.toPolygonSet();
-    polygonSet.forEachPointPair(function(p1, p2) {
+
+    var axis = this.axis;
+    layer.base.forEachPointPair(function(p1, p2) {
+      //debug.line(p1.toVector3(), p2.toVector3());
       layerVertices.push(p1.toVector3());
       layerVertices.push(p2.toVector3());
     });
     //layer.computeContours(this.lineWidth, this.numWalls);
     //layer.writeContoursToVerts(layerVertices);
   }
+  debug.lines();
 
   this.layerGeometryReady = true;
   this.layerVertices = layerVertices;
@@ -331,9 +338,12 @@ Slicer.prototype.computeLayers = function() {
   // arrays of segments, each array signifying all segments in one layer
   var segmentSets = this.buildLayerSegmentSets();
 
-  var layerBuilder = new LayerBuilder(this.axis);
+  //var layerBuilder = new LayerBuilder(this.axis);
 
+  var axis = this.axis;
   for (var i=0; i<segmentSets.length; i++) {
+    //if (i!=15) continue;
+
     var segmentSet = segmentSets[i];
 
     var layer = new Layer(segmentSet);
@@ -430,25 +440,26 @@ Slicer.prototype.buildLayerSegmentSets = function() {
       if (bounds.max < sliceLevel) sweepSet.delete(idx);
       else {
         // get verts sorted in ascending order on axis; call it [A,B,C]
-        var verts = faceGetVertsSorted(bounds.face, vertices, axis).verts;
-        var a0 = verts[0][axis];
-        var a1 = verts[1][axis];
-        var a2 = verts[2][axis];
+        var [A, B, C] = faceGetVertsSorted(bounds.face, vertices, axis).verts;
+        var aA = A[axis];
+        var aB = B[axis];
+        var aC = C[axis];
 
         // face is flat or intersects slicing plane at a point
-        if (a0 === a2) continue;
-        if (a0 === sliceLevel && a0 < a1) continue;
-        if (a2 === sliceLevel && a1 < a2) continue;
+        if (aA === aC) continue;
+        if (aA === sliceLevel && aA < aB) continue;
+        if (aC === sliceLevel && aB < aC) continue;
 
         // if B is above slicing plane, calculate AB and AC intersection
-        if (a1 > sliceLevel) {
-          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
+        var int1;
+        if (aB > sliceLevel) {
+          int1 = segmentPlaneIntersection(axis, sliceLevel, A, B);
         }
         // else, calculate BC and AC intersection
         else {
-          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
+          int1 = segmentPlaneIntersection(axis, sliceLevel, B, C);
         }
-        var int2 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
+        var int2 = segmentPlaneIntersection(axis, sliceLevel, A, C);
 
         var segment = new MCG.Segment(context);
         segment.fromVector3Pair(int1, int2, bounds.face.normal);
@@ -467,7 +478,7 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
 // contains a single slice of the mesh
 function Layer(segmentSet) {
-  this.segmentSet = segmentSet;
+  this.base = segmentSet.toPolygonSet();
   /*
   // the original polygons made from the surface of the mesh
   this.basePolygons = polys;
