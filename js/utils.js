@@ -690,7 +690,7 @@ function compare(i, j, epsilon) {
 function acos(a) {
   return Math.acos(clamp(a, -1, 1));
 }
-// clamps a to [-1, 1] range and returns its acos
+// clamps a to [-1, 1] range and returns its asin
 function asin(a) {
   return Math.asin(clamp(a, -1, 1));
 }
