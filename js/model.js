@@ -1979,7 +1979,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to "preview".
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = "preview"; // todo: switch back to preview
+  this.sliceMode = "layer"; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
@@ -2282,7 +2282,6 @@ Model.prototype.import = function(file, callback) {
       for (var tri=0; tri<n; tri++) {
         var face = new THREE.Face3();
 
-        face.normal = getVector3(dv, offset, isLittleEndian).normalize();
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
@@ -2300,6 +2299,8 @@ Model.prototype.import = function(file, callback) {
           face[faceGetSubscript(vert)] = idx;
           offset += 12;
         }
+
+        faceComputeNormal(face, _this.vertices);
 
         // ignore "attribute byte count" (2 bytes)
         offset += 2;
