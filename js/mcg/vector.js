@@ -88,8 +88,12 @@ MCG.Vector = (function() {
                       this.v + other.v * s);
     },
 
+    lengthSq: function() {
+      return this.h * this.h + this.v * this.v;
+    },
+
     length: function() {
-      return Math.sqrt(this.h * this.h + this.v * this.v);
+      return Math.sqrt(this.lengthSq());
     },
 
     distanceToSq: function(other) {
@@ -99,6 +103,16 @@ MCG.Vector = (function() {
 
     distanceTo: function(other) {
       return Math.sqrt(this.distanceToSq(other));
+    },
+
+    dot: function(other) {
+      return this.h * other.h + this.v * other.v;
+    },
+
+    angleTo: function(other) {
+      var normalization = Math.sqrt(this.lengthSq() * other.lengthSq());
+
+      return acos(this.dot(other) / normalization);
     },
 
     vectorTo: function(other) {

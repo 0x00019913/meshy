@@ -1,41 +1,46 @@
 MCG.AdjacencyMap = (function() {
 
-  function AdjacencyMap(attributes) {
-    this.attributes = attributes;
+  function AdjacencyMap(context) {
+    this.context = context;
 
-    this.axis = attributes.axis;
-    this.ah = attributes.ah;
-    this.av = attributes.av;
-    this.up = attributes.up;
-
-    this.precision = attributes.precision;
-    this.epsilon = attributes;
+    this.type = MCG.Types.abstractAdjacencyMap;
   }
 
   return AdjacencyMap;
 
 })();
 
+
+
 MCG.DirectedAdjacencyMap = (function() {
 
-  function DirectedAdjacencyMap(attributes) {
-    MCG.AdjacencyMap.call(this, attributes);
+  function DirectedAdjacencyMap(context) {
+    MCG.AdjacencyMap.call(this, context);
 
     this.map = {};
+
+    this.type = MCG.Types.directedAdjacencyMap;
   }
 
   DirectedAdjacencyMap.prototype.addSegment = function(s) {
-    var hash1 = s.p1.hash();
-
     var m = this.map;
 
+    var p1 = s.p1;
+    var p2 = s.p2;
+    var hash1 = p1.hash();
+    var hash2 = p2.hash();
+
     if (!m.hasOwnProperty(hash1)) {
-      m[hash1] = new MCG.AdjacencyMapNode(s.p1, this.attributes);
+      m[hash1] = new MCG.AdjacencyMapNode(p1, this.context);
+    }
+    if (!m.hasOwnProperty(hash2)) {
+      m[hash2] = new MCG.AdjacencyMapNode(p2, this.context);
     }
 
-    var node = m[hash1];
+    var node1 = m[hash1];
+    var node2 = m[hash2];
 
-    node.addNeighbor(s.p2);
+    node1.addNode(node2);
   }
 
   // get the key to a node with only one neighbor; a loop starts here
@@ -58,30 +63,36 @@ MCG.DirectedAdjacencyMap = (function() {
   DirectedAdjacencyMap.prototype.getLoop = function() {
     var m = this.map;
 
-    var start = this.getKey();
-    if (start === null) return null;
+    var startkey;
 
-    var current = start;
-    var prevpt = null;
-    var loop = [];
+    // get a key from the map
+    while ((startkey = this.getKey()) !== null) {
+      // if couldn't get key, no loop to find
+      if (startkey === null) return null;
 
-    do {
-      var node = m[current];
-      loop.push(node.pt);
+      var start = m[startkey];
+      var current = start;
+      var prev = null;
 
-      var npt = node.nextPoint(prevpt);
+      var loop = [];
 
-      if (npt === null) return null;
+      // iterate until we circle back to the start
+      do {
+        loop.push(current.pt);
 
-      var next = npt.hash();
+        var next = current.nextNode(prev);
+        if (next === null) break;
 
-      if (node.count === 0) delete m[current];
+        prev = current;
+        current = next;
+      } while (current !== start);
 
-      prevpt = node.pt;
-      current = next;
-    } while (current !== start);
+      // if complete loop, return that
+      if (current === start) return loop;
+    }
 
-    return loop;
+    // failed to find a loop
+    return null;
   }
 
   // return as many loops as the adjacency map has
@@ -90,10 +101,9 @@ MCG.DirectedAdjacencyMap = (function() {
     var m = this.map;
     var loops = [];
 
-    while (!objectIsEmpty(m)) {
-      var loop = this.getLoop();
-      if (loop === null) break;
+    var loop = null;
 
+    while ((loop = this.getLoop()) !== null) {
       loops.push(loop);
     }
 
@@ -112,24 +122,19 @@ MCG.AdjacencyMapNode = (function() {
   // that neighbor
   // if count > 1, the node has multiple outgoing directed paths; in that case,
   // neighbor information is recorded in the neighbors array
-  function AdjacencyMapNode(pt, attributes) {
+  function AdjacencyMapNode(pt, context) {
     this.pt = pt;
     this.count = 0;
     this.neighbor = null;
-
-    this.up = attributes.up;
-    this.epsilon = attributes.epsilon;
 
     // array of neighbor vertices
     this.neighbors = null;
   }
 
-  // if no neighbors, set neighbor to npt
+  // if no neighbors, set neighbor to other
   // if 1+ neighbors already exist, push to neighbors array (init if necessary)
-  AdjacencyMapNode.prototype.addNeighbor = function(npt) {
-    var pt = this.pt;
-
-    if (this.count === 0) this.neighbor = npt;
+  AdjacencyMapNode.prototype.addNode = function(other) {
+    if (this.count === 0) this.neighbor = other;
     else {
       if (this.count === 1) {
         this.neighbors = [];
@@ -138,44 +143,27 @@ MCG.AdjacencyMapNode = (function() {
         this.neighbor = null;
       }
 
-      this.neighbors.push(npt);
+      this.neighbors.push(other);
     }
 
     this.count++;
   }
 
-  // get the neighbor's point:
-  //  if there is one neighbor, return that
-  //  if there are multiple neighbors, take the rightmost possible turn
-  AdjacencyMapNode.prototype.nextPoint = function(prevpt) {
-    if (this.count < 1) {
-      return null;
-    }
-    else {
-      var p = null;
-
-      if (this.count === 1) p = this.neighbor;
-      else p = this.getRightmostNeighbor(prevpt);
-
-      var result = p !== null ? this.removeNeighbor(p) : null;
-
-      return result;
-    }
-  }
-
-  AdjacencyMapNode.prototype.removeNeighbor = function(pt) {
+  AdjacencyMapNode.prototype.removeNode = function(node) {
     var n = null;
 
     // only one neighbor; get it and null out the current neighbor
     if (this.count === 1) {
-      n = this.neighbor;
-      this.neighbor = null;
-      this.count--;
+      if (this.neighbor === node) {
+        n = this.neighbor;
+        this.neighbor = null;
+        this.count--;
+      }
     }
     // multiple neighbors
     else if (this.count > 1) {
       // find neighbor
-      var idx = this.neighbors.indexOf(pt);
+      var idx = this.neighbors.indexOf(node);
 
       // if found neighbor, get it and remove it from neighbors array
       if (idx > -1) {
@@ -194,28 +182,51 @@ MCG.AdjacencyMapNode = (function() {
     return n;
   }
 
-  AdjacencyMapNode.prototype.getRightmostNeighbor = function(prevpt) {
-    if (prevpt === undefined) return null;
-    
+  // get the neighbor node:
+  //  if there is one neighbor, return that
+  //  if there are multiple neighbors, take the rightmost possible turn
+  AdjacencyMapNode.prototype.nextNode = function(prev) {
+    if (this.count < 1) {
+      return null;
+    }
+    else {
+      var p = null;
+
+      if (this.count === 1) p = this.neighbor;
+      else p = this.getRightmostNode(prev);
+
+      var result = p !== null ? this.removeNode(p) : null;
+
+      return result;
+    }
+  }
+
+  AdjacencyMapNode.prototype.getRightmostNode = function(prev) {
+    if (prev === undefined || prev === null) return null;
+
     var neighbors = this.neighbors;
     var pt = this.pt;
+    var prevpt = prev.pt;
 
-    var inDir = prevpt.vectorTo(pt).toVector3();
-    var right = inDir.cross(this.up);
+    var inDir = prevpt.vectorTo(pt);
 
-    var anglemax = 0;
+    var PI = Math.PI;
+
+    var anglemax = -PI;
     var anglemaxidx = -1;
 
-    for (var ni = 0; ni < neighbors.length; ni++) {
-      var npt = neighbors[ni];
+    var left = MCG.Math.left;
 
-      var d = pt.vectorTo(npt).toVector3();
+    for (var ni = 0; ni < neighbors.length; ni++) {
+      var npt = neighbors[ni].pt;
+
+      var d = pt.vectorTo(npt);
       var angle = inDir.angleTo(d);
 
-      // correct for angles greater than pi
-      if (d.dot(right) > 0) angle = 2*Math.PI - angle;
+      // correct for negative angles
+      if (left(prevpt, pt, npt)) angle = -angle;
 
-      if (angle > 2*Math.PI) angle = 0;
+      if (angle > PI) angle = -PI;
 
       if (angle >= anglemax) {
         anglemax = angle;
