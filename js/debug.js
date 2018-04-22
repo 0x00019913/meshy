@@ -49,8 +49,8 @@ Debug.prototype.oneline = function(v, w, o, axis, c) {
   mesh.name = "debugLine";
   this.scene.add(mesh);
 
-  this.point(vv);
-  this.point(ww);
+  //this.point(vv);
+  //this.point(ww);
 }
 Debug.prototype.ray = function(v, r, l) {
   this.line(v, v.clone().add(r.clone().setLength(l)));
@@ -75,6 +75,12 @@ Debug.prototype.point = function(v, o, axis) {
 Debug.prototype.face = function(f, vs) {
   var [a, b, c] = faceGetVerts(f, vs);
   this.point(a.clone().add(b).add(c).divideScalar(3));
+}
+Debug.prototype.fedges = function(f, vs) {
+  var [a, b, c] = faceGetVerts(f, vs);
+  this.oneline(a, b, 0, undefined, 0x66ff66);
+  this.oneline(b, c, 0, undefined, 0x66ff66);
+  this.oneline(c, a, 0, undefined, 0x66ff66);
 }
 Debug.prototype.points = function(idx, incr) {
   var color = 0xff6666;
