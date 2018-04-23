@@ -194,8 +194,8 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch");
   repairFolder.add(this, "cancelPatch");
 
-  this.verticalResolution = 0.1;
-  this.planarResolution = 0.05;
+  this.verticalResolution = .5;//todo: back to 0.1
+  this.planarResolution = 0.1;
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
   this.supportAngle = 45;
@@ -400,7 +400,7 @@ Stage.prototype.buildSliceFolderActive = function() {
     folder.add(
       this,
       "sliceMode",
-      ["preview", "layer"]
+      { "preview": SlicerModes.preview, "layer": SlicerModes.layer }
     ).onChange(this.setSliceMode.bind(this));
 
     this.sliceSettingsFolder = folder.addFolder("Layer Settings");
@@ -728,7 +728,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 22; //6; //326;
+  this.currentSlice = 15; //6; //326;
   this.setSlice();
 
   this.filename = this.model.filename;

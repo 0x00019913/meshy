@@ -40,9 +40,9 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.wireframe = false;
 
   // current mode and the meshes it switches in and out
-  this.mode = "basic";
-  this.basicMesh = null;
-  this.sliceMode = "preview";
+  this.mode = "base";
+  this.baseMesh = null;
+  this.sliceMode = SlicerModes.preview;
   this.slicer = null; // instance of module responsible for slicing
   this.slicePreviewMesh = null;
   this.sliceLayerMesh = null;
@@ -62,7 +62,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // all materials used in the model
   this.materials = {
-    basicMesh: new THREE.MeshStandardMaterial({
+    baseMesh: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: THREE.FaceColors
     }),
@@ -211,10 +211,10 @@ Model.prototype.translate = function(axis, amount) {
 
   // set tags and clean up
 
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.normalsNeedUpdate = true;
-  this.basicMesh.geometry.boundingSphere = null;
-  this.basicMesh.geometry.boundingBox = null;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.normalsNeedUpdate = true;
+  this.baseMesh.geometry.boundingSphere = null;
+  this.baseMesh.geometry.boundingBox = null;
 
   this.min.add(amount);
   this.max.add(amount);
@@ -258,10 +258,10 @@ Model.prototype.rotate = function(axis, amount) {
     this.faces[f].normal.applyAxisAngle(axisVector, degree);
   }
 
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.normalsNeedUpdate = true;
-  this.basicMesh.geometry.boundingSphere = null;
-  this.basicMesh.geometry.boundingBox = null;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.normalsNeedUpdate = true;
+  this.baseMesh.geometry.boundingSphere = null;
+  this.baseMesh.geometry.boundingBox = null;
   if (this.centerOfMass) {
     // transform center of mass
     this.centerOfMass.applyAxisAngle(axisToVector3(axis),degree);
@@ -304,12 +304,12 @@ Model.prototype.scale = function (axis, amount) {
     this.vertices[v].multiply(amount);
   }
   // normals may shift as a result of the scaling, so recompute
-  this.basicMesh.geometry.computeFaceNormals();
+  this.baseMesh.geometry.computeFaceNormals();
 
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.normalsNeedUpdate = true;
-  this.basicMesh.geometry.boundingSphere = null;
-  this.basicMesh.geometry.boundingBox = null;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.normalsNeedUpdate = true;
+  this.baseMesh.geometry.boundingSphere = null;
+  this.baseMesh.geometry.boundingBox = null;
   this.surfaceArea = null;
   this.volume = null;
   this.min.multiply(amount);
@@ -353,10 +353,10 @@ Model.prototype.mirror = function(axis) {
     face.normal[axis] *= -1;
   }
 
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.elementsNeedUpdate = true;
-  this.basicMesh.geometry.boundingSphere = null;
-  this.basicMesh.geometry.boundingBox = null;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.elementsNeedUpdate = true;
+  this.baseMesh.geometry.boundingSphere = null;
+  this.baseMesh.geometry.boundingBox = null;
   // swap the min/max and negate
   var tmp = this.min[axis];
   this.min[axis] = -1*this.max[axis];
@@ -393,8 +393,8 @@ Model.prototype.flipNormals = function() {
     face.normal.multiplyScalar(-1);
   }
 
-  this.basicMesh.geometry.elementsNeedUpdate = true;
-  this.basicMesh.geometry.normalsNeedUpdate = true;
+  this.baseMesh.geometry.elementsNeedUpdate = true;
+  this.baseMesh.geometry.normalsNeedUpdate = true;
 }
 
 /* MEASUREMENT */
@@ -612,8 +612,8 @@ Model.prototype.faceIntersection = function(face, axis, pos) {
 Model.prototype.toggleWireframe = function() {
   this.wireframe = !this.wireframe;
   this.printout.log("Wireframe is " + (this.wireframe ? "on" : "off") + ".");
-  if (this.basicMesh) {
-    this.basicMesh.material.wireframe = this.wireframe;
+  if (this.baseMesh) {
+    this.baseMesh.material.wireframe = this.wireframe;
   }
   if (this.slicePreviewMesh) {
     this.slicePreviewMesh.material[0].wireframe = this.wireframe;
@@ -622,10 +622,10 @@ Model.prototype.toggleWireframe = function() {
 
 // Get and set material color.
 Model.prototype.getMeshColor = function() {
-  if (this.basicMesh) return this.basicMesh.material.color.getHex();
+  if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
 Model.prototype.setMeshColor = function(color) {
-  if (this.basicMesh) return this.basicMesh.material.color.set(color);
+  if (this.baseMesh) return this.baseMesh.material.color.set(color);
 }
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then
@@ -705,10 +705,10 @@ Model.prototype.setMode = function(mode, params) {
   // remove any current meshes in the scene
   removeMeshByName(this.scene, "model");
 
-  // basic mode - display the normal, plain mesh
-  if (mode == "basic") {
-    if (!this.basicMesh) this.makeBasicMesh();
-    this.scene.add(this.basicMesh);
+  // base mode - display the normal, plain mesh
+  if (mode == "base") {
+    if (!this.baseMesh) this.makeBaseMesh();
+    this.scene.add(this.baseMesh);
   }
   // slicing mode - init slicer and display a model in preview mode by default
   else if (mode == "slice") {
@@ -744,40 +744,40 @@ Model.prototype.removeGeometryComponent = function(name) {
   this.vertices.splice(component.vstart, component.vcount);
   this.faces.splice(component.fstart, component.fcount);
 
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.elementsNeedUpdate = true;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.elementsNeedUpdate = true;
 
   delete this.geometryComponents[name];
 
   this.count = this.faces.length;
 }
 
-// Create the basic mesh (as opposed to another display mode).
-Model.prototype.makeBasicMesh = function() {
-  if (this.basicMesh) return;
+// Create the base mesh (as opposed to another display mode).
+Model.prototype.makeBaseMesh = function() {
+  if (this.baseMesh) return;
 
   /* make mesh and put it into the scene */
   var geo = new THREE.Geometry();
   geo.vertices = this.vertices;
   geo.faces = this.faces;
-  this.basicMesh = new THREE.Mesh(geo, this.materials.basicMesh);
-  this.basicMesh.name = "model";
-  this.basicMesh.frustumCulled = false;
+  this.baseMesh = new THREE.Mesh(geo, this.materials.baseMesh);
+  this.baseMesh.name = "model";
+  this.baseMesh.frustumCulled = false;
 }
 
 // Create a slice mesh for the current slice mode.
 Model.prototype.makeSliceMesh = function() {
-  if (this.sliceMode=="preview") this.makeSlicePreviewMesh();
-  else if (this.sliceMode=="layer") this.makeSliceLayerMesh();
+  if (this.sliceMode==SlicerModes.preview) this.makeSlicePreviewMesh();
+  else if (this.sliceMode==SlicerModes.layer) this.makeSliceLayerMesh();
 
   this.setSliceMeshGeometry();
 }
 
 Model.prototype.addSliceMesh = function() {
-  if (this.sliceMode=="preview") {
+  if (this.sliceMode==SlicerModes.preview) {
     if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
   }
-  else if (this.sliceMode=="layer") {
+  else if (this.sliceMode==SlicerModes.layer) {
     if (this.sliceLayerMesh) this.scene.add(this.sliceLayerMesh);
   }
 }
@@ -791,7 +791,7 @@ Model.prototype.setSliceMeshGeometry = function() {
   var sliceVertices = sliceGeometry.vertices;
   var sliceFaces = sliceGeometry.faces;
 
-  if (this.sliceMode=="preview") {
+  if (this.sliceMode==SlicerModes.preview) {
     var mesh = this.slicePreviewMesh;
     if (!mesh) return;
 
@@ -801,7 +801,7 @@ Model.prototype.setSliceMeshGeometry = function() {
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
   }
-  else if (this.sliceMode=="layer") {
+  else if (this.sliceMode==SlicerModes.layer) {
     var mesh = this.sliceLayerMesh;
     if (!mesh) return;
 
@@ -962,7 +962,7 @@ Model.prototype.viewThickness = function(threshold) {
 
 
   function onDone() {
-    this.basicMesh.geometry.colorsNeedUpdate = true;
+    this.baseMesh.geometry.colorsNeedUpdate = true;
 
     this.printout.log("Mesh thickness below the threshold is displayed in red.");
   }
@@ -979,7 +979,7 @@ Model.prototype.clearThicknessView = function() {
     this.faces[i].color.setRGB(1.0, 1.0, 1.0);
   }
 
-  this.basicMesh.geometry.colorsNeedUpdate = true;
+  this.baseMesh.geometry.colorsNeedUpdate = true;
 }
 
 
@@ -1170,8 +1170,8 @@ Model.prototype.acceptPatch = function() {
     face.c = vertexMapIdx(vertexMap, vertices[face.c], this.vertices, p);
     this.addFace(face);
   }
-  this.basicMesh.geometry.verticesNeedUpdate = true;
-  this.basicMesh.geometry.elementsNeedUpdate = true;
+  this.baseMesh.geometry.verticesNeedUpdate = true;
+  this.baseMesh.geometry.elementsNeedUpdate = true;
 
   // record the starts and counts for the added patch geometry
   this.addGeometryComponent(
@@ -1952,7 +1952,7 @@ Model.prototype.generateSupports = function(
     this.max
   );
 
-  var geometry = this.basicMesh.geometry
+  var geometry = this.baseMesh.geometry
 
   this.addGeometryComponent(
     "support",
@@ -1977,16 +1977,16 @@ Model.prototype.removeSupports = function() {
 /* SLICING */
 
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
-// defaults to "preview".
+// defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = "layer"; // todo: switch back to preview
+  this.sliceMode = SlicerModes.layer; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
 
-// Turn off slice mode: set mode to "basic".
+// Turn off slice mode: set mode to "base".
 Model.prototype.deactivateSliceMode = function() {
-  this.setMode("basic");
+  this.setMode("base");
   this.slicer = null;
   this.slicePreviewMesh = null;
   this.sliceLayerMesh = null;
@@ -2036,7 +2036,7 @@ Model.prototype.recalculateLayers = function(lineWidth, numWalls) {
   this.slicer.unreadyLayerGeometry();
 
   // layer geometry is on the screen, so recalculate now
-  if (this.sliceMode == "layer") {
+  if (this.sliceMode == SlicerModes.layer) {
     this.slicer.makeLayerGeometry();
     this.setSliceMeshGeometry();
   }
@@ -2199,8 +2199,8 @@ Model.prototype.import = function(file, callback) {
       // record where the main geometry begins
       _this.addGeometryComponent("model", 0, _this.vertices.length, 0, _this.faces.length);
 
-      // set mode to basic mesh, which creates the mesh and puts it in the scene
-      _this.setMode("basic");
+      // set mode to base mesh, which creates the mesh and puts it in the scene
+      _this.setMode("base");
       _this.printout.log("Imported file: " + file.name);
     } catch(e) {
       _this.printout.error("Error importing: " + e);

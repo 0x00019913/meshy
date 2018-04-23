@@ -1,5 +1,10 @@
 /* slicer.js */
 
+var SlicerModes = {
+  preview: 1,
+  layer: 2
+}
+
 function Slicer(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
@@ -13,7 +18,7 @@ function Slicer(sourceVertices, sourceFaces, params) {
 
   this.layers = null;
 
-  this.mode = "preview";
+  this.mode = SlicerModes.preview;
   this.axis = "z";
   this.sliceHeight = 0.5;
   this.lineWidth = this.sliceHeight;
@@ -77,8 +82,8 @@ Slicer.prototype.calculateFaceBounds = function() {
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  if (mode=="preview") this.makePreviewGeometry();
-  else if (this.mode=="layer") this.makeLayerGeometry();
+  if (mode==SlicerModes.preview) this.makePreviewGeometry();
+  else if (this.mode==SlicerModes.layer) this.makeLayerGeometry();
 
   this.setSlice(this.currentSlice);
 }
@@ -107,11 +112,11 @@ Slicer.prototype.setNumWalls = function(numWalls) {
 }
 
 Slicer.prototype.getGeometry = function() {
-  if (this.mode=="preview") return {
+  if (this.mode==SlicerModes.preview) return {
     vertices: this.previewVertices,
     faces: this.previewFaces
   };
-  else if (this.mode=="layer") return {
+  else if (this.mode==SlicerModes.layer) return {
     vertices: this.layerVertices,
     faces: null
   };
@@ -127,8 +132,8 @@ Slicer.prototype.getCurrentSlice = function() {
 
 Slicer.prototype.setSlice = function(slice) {
   this.currentSlice = slice;
-  if (this.mode=="preview") this.setPreviewSlice();
-  else if (this.mode=="layer") this.setLayerSlice();
+  if (this.mode==SlicerModes.preview) this.setPreviewSlice();
+  else if (this.mode==SlicerModes.layer) this.setLayerSlice();
 }
 
 Slicer.prototype.setPreviewSlice = function() {
@@ -272,14 +277,13 @@ Slicer.prototype.setPreviewSlice = function() {
   //layer.triangulate(vertices, faces);
   debug.cleanup();
   if (segmentSet.count() > 0) {
-    var polygonSet = segmentSet.toPolygonSet();
+    var polygonSet = MCG.Boolean.union(segmentSet, context).toPolygonSet();
     polygonSet.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
       debug.line(v1, v2, 1, false, 0.1, axis);
     });
     debug.lines();
-    //MCG.Boolean.union(segmentSet, context);
   }
 }
 
