@@ -45,6 +45,18 @@ MCG.Vector = (function() {
       return this;
     },
 
+    setH: function(h) {
+      this.h = Math.round(h);
+
+      return this;
+    },
+
+    setV: function(v) {
+      this.v = Math.round(v);
+
+      return this;
+    },
+
     copy: function(other) {
       this.h = other.h;
       this.v = other.v;
@@ -83,6 +95,31 @@ MCG.Vector = (function() {
       return this;
     },
 
+    multiply: function(other) {
+      this.h = this.h * other.h;
+      this.v = this.v * other.v;
+
+      return this;
+    },
+
+    divide: function(other) {
+      this.h = Math.round(this.h / other.h);
+      this.v = Math.round(this.v / other.v);
+
+      return this;
+    },
+
+    multiplyScalar: function(s) {
+      this.h = Math.round(this.h * s);
+      this.v = Math.round(this.v * s);
+
+      return this;
+    },
+
+    divideScalar: function(s) {
+      return this.multiplyScalar(1 / s);
+    },
+
     addScaledVector: function(other, s) {
       return this.set(this.h + other.h * s,
                       this.v + other.v * s);
@@ -94,6 +131,17 @@ MCG.Vector = (function() {
 
     length: function() {
       return Math.sqrt(this.lengthSq());
+    },
+
+    setLength: function(l) {
+      return this.multiplyScalar(l / this.length());
+    },
+
+    // normalize the vector to length this.context.p (1 in its original
+    // floating-point space)
+    normalize: function() {
+      var length = this.context.p;
+      return this.setLength(length);
     },
 
     distanceToSq: function(other) {
@@ -109,6 +157,11 @@ MCG.Vector = (function() {
       return this.h * other.h + this.v * other.v;
     },
 
+    // component of the cross product normal to the plane
+    cross: function(other) {
+      return this.h * other.v - this.v * other.h;
+    },
+
     angleTo: function(other) {
       var normalization = Math.sqrt(this.lengthSq() * other.lengthSq());
 
@@ -116,8 +169,7 @@ MCG.Vector = (function() {
     },
 
     vectorTo: function(other) {
-      var res = new this.constructor().copy(other);
-      return res.sub(this);
+      return other.clone().sub(this);
     }
 
   });

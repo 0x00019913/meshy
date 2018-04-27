@@ -277,7 +277,7 @@ Slicer.prototype.setPreviewSlice = function() {
   //layer.triangulate(vertices, faces);
   debug.cleanup();
   if (segmentSet.count() > 0) {
-    var polygonSet = MCG.Boolean.union(segmentSet, context).toPolygonSet();
+    var polygonSet = MCG.Boolean.union(segmentSet).toPolygonSet();
     polygonSet.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
@@ -313,7 +313,7 @@ Slicer.prototype.makeLayerGeometry = function() {
 
   // construct the layers array, which contains the structures necessary for
   // computing the actual geometry
-  if (!this.layers) this.computeLayers();
+  if (!this.layers) this.makeLayers();
 
   var layers = this.layers;
   var layerVertices = [];
@@ -321,46 +321,27 @@ Slicer.prototype.makeLayerGeometry = function() {
   for (var l=0; l<layers.length; l++) {
     var layer = layers[l];
 
-    var axis = this.axis;
-    layer.base.forEachPointPair(function(p1, p2) {
-      //debug.line(p1.toVector3(), p2.toVector3());
-      layerVertices.push(p1.toVector3());
-      layerVertices.push(p2.toVector3());
-    });
-    //layer.computeContours(this.lineWidth, this.numWalls);
-    //layer.writeContoursToVerts(layerVertices);
+    layer.computeContours(this.lineWidth, this.numWalls);
+    layer.writeContoursToVerts(layerVertices);
   }
   debug.lines();
 
-  this.layerGeometryReady = true;
   this.layerVertices = layerVertices;
+  this.layerGeometryReady = true;
 }
 
-Slicer.prototype.computeLayers = function() {
+Slicer.prototype.makeLayers = function() {
   var layers = [];
 
   // arrays of segments, each array signifying all segments in one layer
   var segmentSets = this.buildLayerSegmentSets();
 
-  //var layerBuilder = new LayerBuilder(this.axis);
-
-  var axis = this.axis;
   for (var i=0; i<segmentSets.length; i++) {
-    //if (i!=15) continue;
+    // unify base contours
+    var segmentSet = MCG.Boolean.union(segmentSets[i]);
 
-    var segmentSet = segmentSets[i];
-
+    // create layer from the contours
     var layer = new Layer(segmentSet);
-
-    /*for (var s=0; s<segmentSet.length; s++) {
-      var segment = segmentList[s];
-
-      layerBuilder.addSegment(segment[0], segment[1], segment[2]);
-    }
-
-    var layer = layerBuilder.getLayer();
-    layerBuilder.clear();*/
-
     layers.push(layer);
   }
 
@@ -468,7 +449,6 @@ Slicer.prototype.buildLayerSegmentSets = function() {
         var segment = new MCG.Segment(context);
         segment.fromVector3Pair(int1, int2, bounds.face.normal);
         segmentSet.add(segment);
-        //layerSegmentList.push([int1, int2, bounds.face.normal]);
       }
     }
 
@@ -482,83 +462,20 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
 // contains a single slice of the mesh
 function Layer(segmentSet) {
+  // base polygon set; use this to generate offsets
   this.base = segmentSet.toPolygonSet();
-  /*
-  // the original polygons made from the surface of the mesh
-  this.basePolygons = polys;
-  // arrays of vertices forming the printable contours of the mesh
-  this.contours = null;
-  // polygons delineating the boundary of infill
-  this.innerPolygons = null;
-  // straight skeleton for every base polygon; potentially replace this with an
-  // array of offsetters which will have different options for offsetting
-  this.skeletons = null;
-  // arrays of vertices forming the infill
-  this.infill = null;
-  */
-}
 
-// triangulate every polygon in the layer
-Layer.prototype.triangulate = function(vertices, faces) {
-  // polys is an array of edgeloops signifying every polygon in the slice
-  var polys = this.basePolygons;
+  // internal contours
+  this.contours = [];
 
-  for (var p = 0; p < polys.length; p++) {
-    var poly = polys[p];
-
-    // nfirst merge polygon's holes so that we don't triangulate over them
-    poly.mergeHolesIntoPoly();
-    // get vertices
-    var pvertices = poly.getVertexArray();
-    // get triangulation indices; this destroys the polygon
-    var pindices  = poly.triangulate();
-
-    var offset = vertices.length;
-
-    // append poly vertices
-    arrayAppend(vertices, pvertices);
-
-    // make new faces and append them to the faces array
-    for (var i = 0; i < pindices.length; i += 3) {
-      var face = new THREE.Face3(
-        pindices[i] + offset,
-        pindices[i+1] + offset,
-        pindices[i+2] + offset
-      );
-      faceComputeNormal(face, vertices);
-      face.materialIndex = 2;
-
-      faces.push(face);
-    }
-  }
-}
-
-Layer.prototype.makeSkeletons = function() {
-  var skeletons = [];
-
-  var polys = this.basePolygons;
-
-  for (var i=0; i<polys.length; i++) {
-    //if (i!=1) continue;
-    skeletons.push(new StraightSkeleton(polys[i]));
-  }
-
-  this.skeletons = skeletons;
+  // set of open polygons containing the mesh infill
+  this.infill = [];
 }
 
 Layer.prototype.computeContours = function(lineWidth, numWalls) {
-  if (!this.skeletons) this.makeSkeletons();
-
-  var skeletons = this.skeletons;
   var contours = [];
 
-  for (var i=0; i<skeletons.length; i++) {
-    var skeleton = skeletons[i];
-    for (var w=0; w<numWalls; w++) {
-      var offset = (w + 0.5) * lineWidth;
-      contours = contours.concat(skeleton.generateOffsetCurve(offset));
-    }
-  }
+
 
   this.contours = contours;
 }
@@ -566,7 +483,24 @@ Layer.prototype.computeContours = function(lineWidth, numWalls) {
 Layer.prototype.writeContoursToVerts = function(vertices) {
   if (!this.contours) return;
 
-  var contours = this.contours;
+  this.base.forEachPointPair(function(p1, p2) {
+    debug.point(p1.toVector3());
+    vertices.push(p1.toVector3());
+    vertices.push(p2.toVector3());
+  });
+
+  var off = this.base.offset(1);
+  /*off.forEachPointPair(function(p1, p2) {
+    var v1 = p1.toVector3();
+    var v2 = p2.toVector3();
+    debug.oneline(v1, v2, 0.1, p1.context.axis);
+  });
+  var po = MCG.Boolean.union(off);
+  po.forEachPointPair(function(p1, p2) {
+    vertices.push(p1.toVector3());
+    vertices.push(p2.toVector3());
+  });*/
+  /*var contours = this.contours;
 
   for (var c=0; c<contours.length; c++) {
     var contour = contours[c];
@@ -578,233 +512,5 @@ Layer.prototype.writeContoursToVerts = function(vertices) {
     // to avoid n mod computations
     vertices.push(contour[contour.length-1]);
     vertices.push(contour[0]);
-  }
-}
-
-// add pairs of verts with .addSegment, then get the layer with .getLayer
-// and .clear if reusing
-function LayerBuilder(axis) {
-  this.p = 1e9;
-  this.axis = axis;
-  this.ah = cycleAxis(this.axis);
-  this.av = cycleAxis(this.ah);
-  this.up = makeAxisUnitVector(axis);
-
-  this.adjacencyMap = {};
-}
-
-LayerBuilder.prototype.clear = function() {
-  this.adjacencyMap = {};
-}
-
-LayerBuilder.prototype.addSegment = function(v1, v2, normal) {
-  this.insertNeighbor(v1, v2, normal);
-  this.insertNeighbor(v2, v1, normal);
-}
-
-LayerBuilder.prototype.insertNeighbor = function(v1, v2, n) {
-  var v1hash = vertexHash(v1, this.p);
-
-  var a = this.adjacencyMap;
-
-  if (!a.hasOwnProperty(v1hash)) a[v1hash] = this.makeAdjMapNode(v1);
-
-  var v2hash = vertexHash(v2, this.p);
-  if (v1hash == v2hash) return;
-
-  a[v1hash].neighbors.push(v2);
-  a[v1hash].normals.push(n);
-}
-
-LayerBuilder.prototype.makeAdjMapNode = function(v1) {
-  var node = {
-    v : v1,
-    neighbors: [],
-    normals: []
-  };
-
-  return node;
-}
-
-LayerBuilder.prototype.makePolys = function() {
-  var a = this.adjacencyMap;
-  var up = this.up;
-  var axis = this.axis;
-  var p = this.p;
-
-  var polys = {
-    polys: [],
-    holes: []
-  };
-
-  // repeats until adjacency map is empty
-  while (!objectIsEmpty(a)) {
-    // vertex hashes for start, current, and prev
-    var start = null;
-    var current = null;
-    var prev = null;
-
-    // pick a random vertex
-    for (key in a) {
-      start = key;
-      break;
-    }
-
-    // should never happen, but just in case
-    if (start == null) break;
-
-    var vertices = [];
-
-    var neighbors, normals;
-
-    current = start;
-
-    // go along the loop till it closes
-    do {
-      if (!a.hasOwnProperty(current)) break;
-
-      vertices.push(a[current].v);
-
-      v = a[current].v;
-      neighbors = a[current].neighbors;
-      normals = a[current].normals;
-
-      delete a[current];
-
-      next = vertexHash(neighbors[0], p);
-
-      // if current is the first vertex
-      if (!prev) {
-        var nextData = a[next];
-        // initialize:
-        // pick the neighbor that's CCW from current for normal edge loops and
-        // CW for holes: vector along axis normal to the plane crossed with an
-        // edge's normal should have a positive component along the CCW edge
-        var dot = up.clone().cross(normals[0]).dot(nextData.v.clone().sub(v));
-        if (dot < 0) next = vertexHash(neighbors[1], p);
-
-        prev = current;
-        current = next;
-      }
-      // else, continuing the loop
-      else {
-        if (next == prev) next = vertexHash(neighbors[1], p);
-
-        prev = current;
-        current = next;
-      }
-
-    } while (current != start);
-
-    var poly = new Polygon(axis, vertices);
-
-    if (!poly.valid) continue;
-
-    if (poly.hole) polys.holes.push(poly);
-    else polys.polys.push(poly);
-  }
-
-  // assign holes to the polys containing them
-  this.calculateHierarchy(polys);
-
-  return polys.polys;
-}
-
-LayerBuilder.prototype.calculateHierarchy = function(edgeLoops) {
-  var polys = edgeLoops.polys;
-  var holes = edgeLoops.holes;
-  var np = polys.length;
-  var nh = holes.length;
-
-  // for every polygon, make sets of polys/holes inside/outside
-  // e.g., if polysInside[i] contains entry j, then poly i contains poly j;
-  // if holesOutside[i] contains entry j; then poly i does not contain hole j
-  var polysInside = new Array(np);
-  var polysOutside = new Array(np);
-  var holesInside = new Array(np);
-  var holesOutside = new Array(np);
-  for (var i=0; i<np; i++) {
-    polysInside[i] = new Set();
-    polysOutside[i] = new Set();
-    holesInside[i] = new Set();
-    holesOutside[i] = new Set();
-  }
-
-  // tests whether poly i contains poly j
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<np; j++) {
-      if (i==j) continue;
-
-      // if j contains i, then i does not contain j
-      if (polysInside[j].has(i)) {
-        polysOutside[i].add(j);
-        // if j contains i, then i does not contain polys j does not contain
-        polysOutside[i] = new Set([...polysOutside[i], ...polysOutside[j]]);
-        continue;
-      }
-
-      var ipoly = polys[i];
-      var jpoly = polys[j];
-
-      if (ipoly.contains(jpoly)) {
-        polysInside[i].add(j);
-        // if i contains j, i also contains polys j contains
-        polysInside[i] = new Set([...polysInside[i], ...polysInside[j]]);
-      }
-      else {
-        polysOutside[i].add(j);
-        // if i does not contain j, i does not contain anything j contains
-        polysOutside[i] = new Set([...polysOutside[i], ...polysInside[j]]);
-      }
-    }
-  }
-
-  // test whether poly i contains hole j
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<nh; j++) {
-      var ipoly = polys[i];
-      var jhole = holes[j];
-
-      if (ipoly.contains(jhole)) holesInside[i].add(j);
-      else holesOutside[i].add(j);
-    }
-  }
-
-  // back up the initial hole containment data so we can reference it while we
-  // mutate the actual data
-  var sourceHolesInside = new Array(np);
-  for (var i=0; i<np; i++) {
-    sourceHolesInside[i] = new Set(holesInside[i]);
-  }
-
-  // if poly i contains poly j, eliminate holes contained by j from i's list
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<np; j++) {
-      if (i==j) continue;
-
-      var ipoly = polys[i];
-      var jpoly = polys[j];
-
-      if (polysInside[i].has(j)) {
-        var iholes = holesInside[i];
-        var sjholes = sourceHolesInside[j];
-
-        // for every hole in j, if i contains it, delete it from i's holes so
-        // that every poly only has the holes which it immediately contains
-        for (var jh of sjholes) iholes.delete(jh);
-      }
-    }
-  }
-  // build the hole array for every edge loop
-  for (var i=0; i<np; i++) {
-    var ipoly = polys[i];
-
-    for (var h of holesInside[i]) ipoly.holes.push(holes[h]);
-  }
-}
-
-LayerBuilder.prototype.getLayer = function() {
-  var polys = this.makePolys();
-
-  return new Layer(polys);
+  }*/
 }

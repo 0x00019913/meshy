@@ -1,9 +1,9 @@
 MCG.Sweep = (function() {
 
-  function sweep(src) {
-    if (!src) return;
+  function sweep(src0, src1) {
+    if (!src0) return;
 
-    var context = src.context;
+    var context = src0.context;
 
     var axis = context.axis;
     var ah = context.ah;
@@ -16,14 +16,14 @@ MCG.Sweep = (function() {
 
     var drawEvents = false;
     var printEvents = false;
-    var incrHeight = false;
 
     // priority queue storing events from left to right
     var events = new PriorityQueue({
       comparator: pqComparator
     });
 
-    src.forEachPointPair(addPointPair);
+    src0.forEachPointPair(addPointPair);
+    if (src1 !== undefined) src1.forEachPointPair(addPointPair);
 
     // structure storing the sweep line status
     var status = new RBTree(rbtComparator);
@@ -32,6 +32,7 @@ MCG.Sweep = (function() {
     while (events.length > 0) {
 
       var ev = events.dequeue();
+      //console.log(ev);
 
       if (ev.isLeft) {
         var ins = status.insert(ev);
@@ -79,10 +80,10 @@ MCG.Sweep = (function() {
         }
 
         if (eventValid(tev)) {
-          var pl = tev.p;
-          var pr = ev.p;
-          if (tev.weight < 0) resultSet.addPointPair(pr, pl);
-          else if (tev.weight > 0) resultSet.addPointPair(pl, pr);
+          var pf = tev.weight < 0 ? ev.p : tev.p;
+          var ps = tev.weight < 0 ? tev.p : ev.p;
+
+          resultSet.addPointPair(pf, ps);
 
           //eventDraw(ev, 0.1, undefined, true);
         }
@@ -93,11 +94,6 @@ MCG.Sweep = (function() {
       statusDraw(o+0.6);
       o += 1;
     }
-
-    var pset = resultSet.toPolygonSet();
-    resultSet.forEachPointPair(function(p1, p2) {
-      debug.line(p1.toVector3(), p2.toVector3(), 1, false, 0.1, axis);
-    });
 
     debug.lines();
 
@@ -366,8 +362,7 @@ MCG.Sweep = (function() {
           e.p.v, ')',
           '(', e.twin.p.h,
           e.twin.p.v, ')',
-          e.p.distanceTo(e.twin.p).toFixed(2),
-          "s", slope.toFixed(7),
+          "s", Math.sign(slope),
           "w", src.weight,
           "d", src.depthBelow, src.depthAbove,
           src.contributing ? "t" : "f"];
@@ -377,8 +372,7 @@ MCG.Sweep = (function() {
           d+3, 1,
           2, d+3,
           d+3, 1,
-          9,
-          2, 11,
+          2, 2,
           2, 2,
           2, 2, 2,
           1]

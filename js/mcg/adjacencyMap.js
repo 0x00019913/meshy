@@ -43,13 +43,27 @@ MCG.DirectedAdjacencyMap = (function() {
     node1.addNode(node2);
   }
 
+  DirectedAdjacencyMap.prototype.nodeSelectors = {
+    noPredecessors: function(node) { return node.predcount === 0; },
+    oneNeighbor: function(node) { return node.count === 1; }
+  }
+
+  DirectedAdjacencyMap.prototype.getKeyWithNoPredecessors = function() {
+    return this.getKey(this.nodeSelectors.noPredecessors);
+  }
+
+  DirectedAdjacencyMap.prototype.getKeyWithOneNeighbor = function() {
+    return this.getKey(this.nodeSelectors.oneNeighbor);
+  }
+
   // get the key to a node with only one neighbor; a loop starts here
-  DirectedAdjacencyMap.prototype.getKey = function() {
+  DirectedAdjacencyMap.prototype.getKey = function(sel) {
     var res = null;
     var m = this.map;
+    if (sel === undefined) sel = this.nodeSelectors.noPredecessors;
 
     for (var key in m) {
-      if (m[key].count === 1) {
+      if (sel(m[key])) {
         res = key;
         break;
       }
@@ -66,7 +80,7 @@ MCG.DirectedAdjacencyMap = (function() {
     var startkey;
 
     // get a key from the map
-    while ((startkey = this.getKey()) !== null) {
+    while ((startkey = this.getKeyWithOneNeighbor()) !== null) {
       // if couldn't get key, no loop to find
       if (startkey === null) return null;
 
@@ -125,9 +139,11 @@ MCG.AdjacencyMapNode = (function() {
   function AdjacencyMapNode(pt, context) {
     this.pt = pt;
     this.count = 0;
-    this.neighbor = null;
+    this.predcount = 0;
 
-    // array of neighbor vertices
+    // neighbor; is set if count === 1
+    this.neighbor = null;
+    // array of neighbor nodes; is set if count > 1
     this.neighbors = null;
   }
 
@@ -147,6 +163,7 @@ MCG.AdjacencyMapNode = (function() {
     }
 
     this.count++;
+    other.predcount++;
   }
 
   AdjacencyMapNode.prototype.removeNode = function(node) {
@@ -178,6 +195,8 @@ MCG.AdjacencyMapNode = (function() {
         }
       }
     }
+
+    if (n !== null) n.predcount--;
 
     return n;
   }

@@ -4,8 +4,8 @@ MCG.Boolean = (function() {
     union: union
   };
 
-  function union(a) {
-    return MCG.Sweep.sweep(a);
+  function union(a, b) {
+    return MCG.Sweep.sweep(a, b);
   }
 
 
