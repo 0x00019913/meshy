@@ -161,6 +161,8 @@ MCG.Polygon = (function() {
         var d = dist / Math.sin(angles[i]);
 
         cpoints[i].addScaledVector(b, d);
+
+        //debug.line(points[i].toVector3(), cpoints[i].toVector3());
       }
 
       return clone;

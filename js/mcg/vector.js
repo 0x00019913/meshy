@@ -170,6 +170,14 @@ MCG.Vector = (function() {
 
     vectorTo: function(other) {
       return other.clone().sub(this);
+    },
+
+    hcompare: function(other) {
+      return this.h - other.h;
+    },
+
+    vcompare: function(other) {
+      return this.v - other.v;
     }
 
   });

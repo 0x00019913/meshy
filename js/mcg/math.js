@@ -1,4 +1,4 @@
-MCG.Math = (function() {
+Object.assign(MCG.Math, (function() {
 
   function coincident(a, b) {
     return a.h === b.h && a.v === b.v;
@@ -29,7 +29,8 @@ MCG.Math = (function() {
   }
 
   function collinear(a, b, c) {
-    return narea(a, b, c) === 0;
+    var p = a.context.p;
+    return Math.abs(narea(a, b, c)) < p;
   }
 
   function left(a, b, c) {
@@ -116,4 +117,4 @@ MCG.Math = (function() {
     bisector: bisector
   };
 
-})();
+})());

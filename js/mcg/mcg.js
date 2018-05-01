@@ -18,3 +18,8 @@ MCG.Types = {
   abstractAdjacencyMap: 31,
   directedAdjacencyMap: 32
 };
+
+// namespaces
+MCG.Math = {};
+MCG.Sweep = {};
+MCG.Boolean = {};

@@ -277,12 +277,31 @@ Slicer.prototype.setPreviewSlice = function() {
   //layer.triangulate(vertices, faces);
   debug.cleanup();
   if (segmentSet.count() > 0) {
-    var polygonSet = MCG.Boolean.union(segmentSet).toPolygonSet();
+    var polygonSet = segmentSet.toPolygonSet();
     polygonSet.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2);
+    });
+    var result = MCG.Boolean.union(polygonSet, undefined, true).toPolygonSet();
+    result.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
       debug.line(v1, v2, 1, false, 0.1, axis);
     });
+
+    for (var io = -20; io < 20; io++) {
+      break;
+      if (io != 12) continue;
+      var offset = result.offset(io * 0.25);
+      var uoffset = MCG.Boolean.union(offset, undefined);
+      var upoffset = uoffset.toPolygonSet();
+      upoffset.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3();
+        var v2 = p2.toVector3();
+        debug.line(v1, v2, 1, false, 0.1, axis);
+      });
+    }
     debug.lines();
   }
 }
@@ -319,10 +338,11 @@ Slicer.prototype.makeLayerGeometry = function() {
   var layerVertices = [];
 
   for (var l=0; l<layers.length; l++) {
+    if (l!=1) continue;
     var layer = layers[l];
 
     layer.computeContours(this.lineWidth, this.numWalls);
-    layer.writeContoursToVerts(layerVertices);
+    layer.writeToVerts(layerVertices);
   }
   debug.lines();
 
@@ -473,33 +493,54 @@ function Layer(segmentSet) {
 }
 
 Layer.prototype.computeContours = function(lineWidth, numWalls) {
+  // todo: remove
+  lineWidth = 4;
+  numWalls = 0;
+  debug.cleanup();
+
+  var base = this.base;
+
   var contours = [];
 
-
+  for (var w = 0; w < numWalls; w++) {
+    var offsetSegments = MCG.Boolean.union(base.offset((w + 0.5) * -lineWidth));
+    contours.push(offsetSegments.toPolygonSet());
+  }
 
   this.contours = contours;
 }
 
-Layer.prototype.writeContoursToVerts = function(vertices) {
+Layer.prototype.writeToVerts = function(vertices) {
   if (!this.contours) return;
+  for (var c = 0; c < this.contours.length; c++) {
+    this.contours[c].forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3());
+      vertices.push(p2.toVector3());
+    });
+  }
 
+  this.base.computeBisectors();
   this.base.forEachPointPair(function(p1, p2) {
-    debug.point(p1.toVector3());
     vertices.push(p1.toVector3());
     vertices.push(p2.toVector3());
   });
 
-  var off = this.base.offset(1);
-  /*off.forEachPointPair(function(p1, p2) {
-    var v1 = p1.toVector3();
-    var v2 = p2.toVector3();
-    debug.oneline(v1, v2, 0.1, p1.context.axis);
+  this.base.forEachPoint(function(p, b) {
+    var pv = p.toVector3();
+    var pbv = p.clone().addScaledVector(b, 0.25).toVector3();
+    debug.line(pv, pbv);
   });
-  var po = MCG.Boolean.union(off);
-  po.forEachPointPair(function(p1, p2) {
-    vertices.push(p1.toVector3());
-    vertices.push(p2.toVector3());
-  });*/
+
+  /*for (var i=0; i<15; i++) {
+    break;
+    if (i!=13) continue;
+    var off = this.base.offset(i * -0.25);
+    var po = MCG.Boolean.union(off, undefined, true);
+    po.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3());
+      vertices.push(p2.toVector3());
+    });
+  }*/
   /*var contours = this.contours;
 
   for (var c=0; c<contours.length; c++) {

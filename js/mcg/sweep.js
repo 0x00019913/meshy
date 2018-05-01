@@ -1,6 +1,6 @@
-MCG.Sweep = (function() {
+Object.assign(MCG.Sweep, (function() {
 
-  function sweep(src0, src1) {
+  function sweep(src0, src1, dbg) {
     if (!src0) return;
 
     var context = src0.context;
@@ -10,34 +10,37 @@ MCG.Sweep = (function() {
     var av = context.av;
     var p = context.p;
 
-    var efactory = new SweepEventFactory(context);
+    var efactory = new MCG.Sweep.SweepEventFactory(context);
 
     var resultSet = new MCG.SegmentSet(context);
 
-    var drawEvents = false;
-    var printEvents = false;
+    var drawEvents = dbg;
+    var printEvents = dbg;
 
     // priority queue storing events from left to right
     var events = new PriorityQueue({
-      comparator: pqComparator
+      comparator: function(a, b) { return a.sweepcompare(b); }
     });
 
     src0.forEachPointPair(addPointPair);
     if (src1 !== undefined) src1.forEachPointPair(addPointPair);
 
     // structure storing the sweep line status
-    var status = new RBTree(rbtComparator);
+    var status = new RBTree(
+      function(a, b) { return a.linecompare(b); }
+    );
 
     var o = 1.0;
+    var ct = 0;
     while (events.length > 0) {
+      if (ct++ > 100) break;
 
       var ev = events.dequeue();
-      //console.log(ev);
 
       if (ev.isLeft) {
         var ins = status.insert(ev);
 
-        if (!ins) console.log("insert already existing event");
+        if (!ins && printEvents) console.log("insert already existing event");
 
         var it;
 
@@ -51,23 +54,8 @@ MCG.Sweep = (function() {
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
 
-        if (dn !== null) {
-          if (ev.collinear(dn)) {
-            handleEventOverlap(ev, dn);
-          }
-          else {
-            handleEventIntersection(ev, dn);
-          }
-        }
-
-        if (up !== null) {
-          if (ev.collinear(up)) {
-            handleEventOverlap(ev, up);
-          }
-          else {
-            handleEventIntersection(ev, up);
-          }
-        }
+        handleAdjacentEvents(ev, dn);
+        handleAdjacentEvents(up, ev);
       }
       else {
         var tev = ev.twin;
@@ -75,7 +63,7 @@ MCG.Sweep = (function() {
 
         eventPrint(ev);
 
-        if (!rem && printEvents) {
+        if (!rem && printEvents && tev.contributing) {
           console.log("remove nonexistent event", tev.id, ev.id, pqString());
         }
 
@@ -99,45 +87,48 @@ MCG.Sweep = (function() {
 
     return resultSet;
 
+
+    // create an event pair for a p1-p2 segment
     function addPointPair(p1, p2) {
-      // make events
-      var e1 = efactory.create(p1, context);
-      var e2 = efactory.create(p2, context);
-
-      // link events to each other
-      e1.twin = e2;
-      e2.twin = e1;
-
+      // determine direction: if dir, p1 is left and p2 is right; reverse if !dir
       var vertical = p1.h === p2.h;
       var dir = vertical ? (p1.v < p2.v) : (p1.h < p2.h);
 
-      // assign flags
-      // (p1 and p2 assigned s.t. poly interior is on left of p1 -> p2 edge;
+      // make events
+      var el = efactory.createLeft(dir ? p1 : p2);
+      var er = efactory.createRight(dir ? p2 : p1);
+
       // weight is +1 if vertical line going up through p1 -> p2 edge transitions
       // from outside polygon to inside, else -1)
-      // if vertical:
-      //  if points up, poly interior is on left, p1 is first (left) point
-      //  else, poly interior is on right, p2 is first (left) point
-      // else:
-      //  if points right, poly interior is up, p1 is first (left) point
-      //  else, poly interior is down, p2 is first (left) point
-      e1.weight = e2.weight = dir ? 1 : -1;
-      e1.isLeft = dir;
-      e2.isLeft = !e1.isLeft;
+      el.weight = dir ? 1 : -1;
 
-      queue(e1);
-      queue(e2);
+      // link events to each other
+      el.twin = er;
+      er.twin = el;
+
+      queue(el);
+      queue(er);
     }
 
     function queue(e) {
       events.queue(e);
     }
 
-    // handle collinear overlap between a pair of events
-    function handleEventOverlap(a, b) {
-      if (a === null || b === null) return;
+    // handle (possibly collinear) intersection between a pair of left events
+    function handleAdjacentEvents(a, b) {
+      if (a === null || b === null) return null;
 
-      // Intersection may look like this (or one may be entirely contained in
+      if (a.collinear(b)) {
+        return handleCollinearEvents(a, b);
+      }
+      else if (a.intersects(b)) {
+        return handleEventIntersection(a, b);
+      }
+    }
+
+    // handle collinear overlap between a pair of events
+    function handleCollinearEvents(a, b) {
+      // Overlap may look like this (or one may be entirely contained in
       // the other or one or both endpoints may be coincident):
       //
       // p |----x----------| pt
@@ -162,15 +153,12 @@ MCG.Sweep = (function() {
       var ta = a.twin, tb = b.twin;
       var pta = ta.p, ptb = tb.p;
 
-      // (if a is vertical, both are vertical)
-      var vertical = a.vertical();
+      // if one is vertical, both are close enough to vertical
+      var vertical = a.vertical() || b.vertical();
 
-      // axis on which we'll compare bounds (vertical if segment is vertical,
-      // else horizontal)
-      var caxis = vertical ? "v" : "h";
-
-      var lcomp = pa[caxis] - pb[caxis];
-      var rcomp = pta[caxis] - ptb[caxis];
+      // compare bounds for left events and right events
+      var lcomp = vertical ? pa.vcompare(pb) : pa.hcompare(pb);
+      var rcomp = vertical ? pta.vcompare(ptb) : pta.hcompare(ptb);
 
       // there will be up to two split points, one on the left, another on the
       // right
@@ -192,7 +180,7 @@ MCG.Sweep = (function() {
       if (lcomp !== 0) {
         lsplit = eventSplit(lf, pl);
         eventPrint(lf, "lf");
-        eventPrint(lf, "ls");
+        eventPrint(ls, "ls");
         queue(lf.twin);
         queue(lsplit);
         eventPrint(lf.twin, "lr");
@@ -245,10 +233,6 @@ MCG.Sweep = (function() {
 
     // handle a possible intersection between a pair of events
     function handleEventIntersection(a, b) {
-      if (a === null || b === null) return;
-
-      if (!a.intersects(b)) return;
-
       var pi = a.intersection(b);
 
       if (printEvents) console.log("intersection (", pi.h, pi.v, ")");
@@ -265,16 +249,18 @@ MCG.Sweep = (function() {
         if (ita !== null) {
           queue(a.twin);
           queue(ita);
-          //status.remove(b);
-          //queue(b);
+        }
+        else {
+          queue(a);
         }
 
         var itb = eventSplit(b, pi);
         if (itb !== null) {
           queue(b.twin);
           queue(itb);
-          //status.remove(a);
-          //queue(a);
+        }
+        else {
+          queue(b);
         }
 
         eventPrint(a, "a ");
@@ -300,6 +286,8 @@ MCG.Sweep = (function() {
     function eventSplit(e, pi) {
       var te = e.twin;
 
+      status.remove(e);
+
       // if either endpoint is coincident with split point, don't split
       var coincident = MCG.Math.coincident;
       if (coincident(e.p, pi) || coincident(te.p, pi)) return null;
@@ -310,6 +298,8 @@ MCG.Sweep = (function() {
 
       e.twin = ei;
       te.twin = ite;
+
+      status.insert(e);
 
       return ite;
     }
@@ -323,7 +313,7 @@ MCG.Sweep = (function() {
 
       if (!e.contributing) return false;
 
-      var da = e.depthAbove;
+      var da = e.depthBelow + e.weight;
       var db = e.depthBelow;
 
       return (da === 0 && db > 0) || (da > 0 && db === 0);
@@ -364,7 +354,7 @@ MCG.Sweep = (function() {
           e.twin.p.v, ')',
           "s", Math.sign(slope),
           "w", src.weight,
-          "d", src.depthBelow, src.depthAbove,
+          "d", src.depthBelow, src.depthBelow + src.weight,
           src.contributing ? "t" : "f"];
       var p =
         [1, 3, 3,
@@ -425,196 +415,8 @@ MCG.Sweep = (function() {
     }
   }
 
-  function pqComparator(a, b) {
-    // in case events are the same
-    if (a.id === b.id) return 0;
-
-    var pa = a.p, pb = b.p;
-
-    // primary sorting on horizontal coordinate (x if up axis is z)
-    var hcomp = pa.h - pb.h;
-    if (hcomp !== 0) return hcomp;
-
-    // secondary sorting on vertical coordinate (y if up axis is z)
-    var vcomp = pa.v - pb.v;
-    if (vcomp !== 0) return vcomp;
-
-    // tertiary sorting on left/right (right goes first so that, given two
-    //   segments sharing an endpoint but with no vertical overlap, the left
-    //   segment leaves the sweep status structure before the next goes in)
-    var lrcomp = lrcompare(a, b);
-    if (lrcomp !== 0) return lrcomp;
-
-    // quaternary sorting on slope (increasing)
-    var scomp = scompare(a, b);
-    if (scomp !== 0) return scomp;
-
-    // quinary sorting on id: there is no meaningful ordering for collinear
-    //   segments, so at least pick a unique ordering to be consistent
-    return a.id - b.id;
-  }
-
-  function rbtComparator(a, b) {
-    if (a.id === b.id) return 0;
-
-    // primary sorting on vertical coordinate at the start of the later event
-    // (y if up axis is z)
-    var vcomp = vcompare(a, b);
-    if (vcomp !== 0) return vcomp;
-
-    // secondary sorting on slope
-    var scomp = scompare(a, b);
-    if (scomp !== 0) return scomp;
-
-    // quaternary sorting on id: there is no meaningful ordering for collinear
-    //   segments, so at least pick a unique ordering to be consistent
-    return a.id - b.id;
-  }
-
-  // return vertical axis comparison for two left events at the later event's
-  // horizontal coordinate
-  function vcompare(a, b) {
-    var pa = a.p, pb = b.p;
-    var ah = pa.h, bh = pb.h;
-
-    if (ah === bh) return pa.v - pb.v;
-
-    var f = ah < bh ? a : b;
-    var s = ah < bh ? b : a;
-
-    // if s is left of f-f.twin, then, at their earliest common horizontal
-    //   coordinate, s is above f-f.twin; if right, then it's below; else it
-    //   falls exactly on f-f.twin
-    var res = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
-    // result is inverted if a is first
-    if (ah < bh) res *= -1;
-    return res;
-  }
-
-  // return left-right comparison for two events (right goes first)
-  function lrcompare(a, b) {
-    if (!a.isLeft && b.isLeft) return -1;
-    else if (a.isLeft && !b.isLeft) return 1;
-    else return 0;
-  }
-
-  // returns slope comparison for two left events that share at least one point:
-  //   a's slope is greater if a's twin is to b-b.twin's left (above b);
-  //   a's slope is less if a's twin is to b-b.twin's right (below b);
-  //   equal slopes if collinear
-  function scompare(a, b) {
-    var pa = a.p, pat = a.twin.p;
-    var pb = b.p, pbt = b.twin.p;
-
-    if (MCG.Math.coincident(pb, pat)) {
-      return -MCG.Math.leftCompare(pb, pbt, pa);
-    }
-    else {
-      return MCG.Math.leftCompare(pb, pbt, pat);
-    }
-  }
-
-  function SweepEvent(p) {
-    this.p = p || new MCG.Vector();
-
-    this.id = -1;
-
-    this.depthBelow = 0;
-    this.depthAbove = 0;
-
-    this.twin = null;
-    this.isLeft = false;
-    this.weight = 0;
-
-    this.contributing = true;
-  }
-
-  SweepEvent.prototype.vertical = function() {
-    return this.p.h === this.twin.p.h;
-  }
-
-  SweepEvent.prototype.setDepthFromBelow = function(eventBelow) {
-    var depthBelow = eventBelow !== null ? eventBelow.depthAbove : 0;
-
-    this.depthBelow = depthBelow;
-    this.depthAbove = depthBelow + this.weight;
-
-    this.twin.depthBelow = this.depthBelow;
-    this.twin.depthAbove = this.depthAbove;
-  }
-
-  SweepEvent.prototype.collinear = function(other) {
-    var p = this.p, pt = this.twin.p;
-    var po = other.p, pot = other.twin.p;
-
-    var collinear = MCG.Math.collinear;
-
-    return collinear(p, pt, po) && collinear(p, pt, pot);
-  }
-
-  SweepEvent.prototype.endpointsCoincident = function(other) {
-    if (MCG.Math.coincident(this.p, other.p)) return true;
-    if (MCG.Math.coincident(this.twin.p, other.twin.p)) return true;
-
-    return false;
-  }
-
-  // interpolate event's value at horizontal coordinate h
-  SweepEvent.prototype.interpolate = function(h) {
-    var p = this.p;
-
-    if (this.vertical() || p.h === h) return p.v;
-    else {
-      var pt = this.twin.p;
-      return Math.round(p.v + (h - p.h) * (pt.v - p.v) / (pt.h - p.h));
-    }
-  }
-
-  SweepEvent.prototype.intersects = function(other) {
-    return MCG.Math.intersect(this.p, this.twin.p, other.p, other.twin.p);
-  }
-
-  SweepEvent.prototype.intersection = function(other) {
-    if (this.endpointsCoincident(other)) return null;
-
-    return MCG.Math.intersection(this.p, this.twin.p, other.p, other.twin.p);
-  }
-
-  SweepEvent.prototype.clone = function(p) {
-    var e = new this.constructor(p);
-
-    // copy properties and set point
-    Object.assign(e, this);
-    e.p = p;
-
-    return e;
-  }
-
-  SweepEvent.prototype.setNoncontributing = function() {
-    this.contributing = false;
-    this.twin.contributing = false;
-  }
-
-  function SweepEventFactory() {
-    this.id = 0;
-  }
-
-  SweepEventFactory.prototype.create = function(p) {
-    var e = new SweepEvent(p);
-    e.id = this.id++;
-
-    return e;
-  }
-
-  SweepEventFactory.prototype.clone = function(e, p) {
-    var ne = e.clone(p);
-    ne.id = this.id++;
-
-    return ne;
-  }
-
   return {
     sweep: sweep
   };
 
-})();
+})());
