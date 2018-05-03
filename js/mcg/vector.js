@@ -140,6 +140,8 @@ MCG.Vector = (function() {
     // normalize the vector to length this.context.p (1 in its original
     // floating-point space)
     normalize: function() {
+      if (this.h === 0 && this.v === 0) return this;
+      
       var length = this.context.p;
       return this.setLength(length);
     },

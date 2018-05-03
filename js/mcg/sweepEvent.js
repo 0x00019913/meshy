@@ -1,8 +1,15 @@
 Object.assign(MCG.Sweep, (function() {
 
   function SweepEvent(p, id) {
+    // MCG.Vector at which this event is located
     this.p = p;
+
+    // store parent for testing collinearity and slopes - this prevents drift
+    // from multiple split points snapping to the integer grid
     this.parent = this;
+
+    // used as a last-resort ordering criterion for events; the factory
+    // guarantees that event ids are unique
     this.id = id !== undefined ? id : -1;
 
     this.isLeft = false;
@@ -12,12 +19,12 @@ Object.assign(MCG.Sweep, (function() {
   Object.assign(SweepEvent.prototype, {
 
     clone: function(p, id) {
-      var e = new this.constructor(p, id);
+      var e = new this.constructor(p);
 
       // copy properties and set point
       Object.assign(e, this);
       e.p = p;
-      id = id !== undefined ? id : -1;
+      e.id = id !== undefined ? id : -1;
 
       return e;
     },
@@ -81,19 +88,19 @@ Object.assign(MCG.Sweep, (function() {
     vcompare: function(other) {
       var a = this, b = other;
       var pa = a.p, pb = b.p;
-      var ah = pa.h, bh = pb.h;
+      var pah = pa.h, pbh = pb.h;
 
-      if (ah === bh) return pa.v - pb.v;
+      if (pah === pbh) return pa.v - pb.v;
 
-      var f = ah < bh ? a : b;
-      var s = ah < bh ? b : a;
+      var f = pah < pbh ? a : b;
+      var s = pah < pbh ? b : a;
 
       // if s is left of f-f.twin, then, at their earliest common horizontal
       // coordinate, s is above f-f.twin; if right, then it's below; else it
       // falls exactly on f-f.twin
       var res = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
       // result is inverted if a is first
-      if (ah < bh) res *= -1;
+      if (pah < pbh) res *= -1;
       return res;
     },
 
@@ -109,8 +116,33 @@ Object.assign(MCG.Sweep, (function() {
     //   a's slope is less if a's twin is to b-b.twin's right (below b);
     //   equal slopes if collinear
     scompare: function(other) {
-      var pa = this.p, pat = this.twin.p;
-      var pb = other.p, pbt = other.twin.p;
+      var a = this, b = other;
+
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
+
+      var lc = MCG.Math.leftCompare(pb, pbt, pa);
+      var lct = MCG.Math.leftCompare(pb, pbt, pat);
+
+      // if a on b-b.t and a.t on b-b.t, the two segments have the same slope
+      if (lc === 0 && lct === 0) return 0;
+      // else, if a not right of b-b.t and a.t not left of b-b.t, a's slope is less
+      else if (lc != -1 && lct != 1) return -1;
+      // else, if a not left of b-b.t and a.t not right of b-b.t, b's slope is less
+      else if (lc != 1 && lct != -1) return 1;
+      // should never happen (lines don't intersect), but do a literal slope
+      // test in case it does
+      else {
+        var ah = pa.h, ath = pat.h;
+        var bh = pb.h, bth = pbt.h;
+        var sa = ah === ath ? Infinity : (pat.v - pa.v) / (ath - ah);
+        var sb = bh === bth ? Infinity : (pbt.v - pb.v) / (bth - bh);
+
+        return Math.sign(sa - sb);
+      }
+
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
 
       if (MCG.Math.coincident(pb, pat)) {
         return -MCG.Math.leftCompare(pb, pbt, pa);
@@ -118,7 +150,51 @@ Object.assign(MCG.Sweep, (function() {
       else {
         return MCG.Math.leftCompare(pb, pbt, pat);
       }
+    },
+
+    toString: function(pref) {
+      pref = (pref || "--");
+
+      var src = this.isLeft ? this : this.twin;
+      var d = 4;
+      var diff = src.p.vectorTo(src.twin.p);
+      var slope = src.vertical() ? Infinity : diff.v/diff.h;
+
+      var data =
+        [this.isLeft ? "L " : "R ", this.id, this.twin.id,
+          '(', this.p.h,
+          this.p.v, ')',
+          '(', this.twin.p.h,
+          this.twin.p.v, ')',
+          "s", Math.sign(slope),
+          "l", this.p.vectorTo(this.twin.p).length().toFixed(0),
+          "w", src.weight,
+          "d", src.depthBelow, src.depthBelow + src.weight,
+          src.contributing ? "t" : "f"];
+      var p =
+        [1, 3, 3,
+          2, d+3,
+          d+3, 1,
+          2, d+3,
+          d+3, 1,
+          2, 2,
+          2, 9,
+          2, 2,
+          2, 2, 2,
+          1]
+      var r = "";
+      for (var d=0; d<data.length; d++) r += lpad(data[d], p[d]);
+
+      return pref + " " + r;
+
+      function lpad(s, n) {
+        n++;
+        var ss = ""+s;
+        var l = ss.length;
+        return " ".repeat(Math.max(n-l, 0)) + ss;
+      }
     }
+
   });
 
 
@@ -157,19 +233,19 @@ Object.assign(MCG.Sweep, (function() {
       var depthBelow = below !== null ? below.depthBelow + below.weight : 0;
 
       this.depthBelow = depthBelow;
-
-      this.twin.depthBelow = this.depthBelow;
     },
 
     collinear: function(other) {
-      var p = this.p, pt = this.twin.p;
-      var po = other.p, pot = other.twin.p;
+      var a = this.parent, b = other.parent;
 
-      if (this.vertical() && other.vertical()) return true;
+      var pa = a.p, pat = a.twin.parent.p;
+      var pb = b.p, pbt = b.twin.parent.p;
+
+      if (a.vertical() && b.vertical()) return true;
 
       var collinear = MCG.Math.collinear;
 
-      return collinear(p, pt, po) && collinear(p, pt, pot);
+      return collinear(pa, pat, pb) && collinear(pa, pat, pbt);
     },
 
     endpointsCoincident: function(other) {
@@ -179,14 +255,25 @@ Object.assign(MCG.Sweep, (function() {
       return false;
     },
 
+    // returns MCG.Math.IntersectionFlags
     intersects: function(other) {
-      return MCG.Math.intersect(this.p, this.twin.p, other.p, other.twin.p);
+      var a = this, b = other;
+
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
+
+      return MCG.Math.intersect(pa, pat, pb, pbt);
     },
 
     intersection: function(other) {
-      if (this.endpointsCoincident(other)) return null;
+      var a = this, b = other;
 
-      return MCG.Math.intersection(this.p, this.twin.p, other.p, other.twin.p);
+      if (a.endpointsCoincident(b)) return null;
+
+      var pa = a.parent.p, pat = a.twin.parent.p;
+      var pb = b.parent.p, pbt = b.twin.parent.p;
+
+      return MCG.Math.intersection(pa, pat, pb, pbt);
     },
 
     setNoncontributing: function() {
@@ -212,6 +299,10 @@ Object.assign(MCG.Sweep, (function() {
 
     clone: function(e, p) {
       return e.clone(p, this.id++);
+    },
+
+    count: function() {
+      return this.id;
     }
 
   });

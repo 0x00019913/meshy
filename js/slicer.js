@@ -279,11 +279,14 @@ Slicer.prototype.setPreviewSlice = function() {
   if (segmentSet.count() > 0) {
     var polygonSet = segmentSet.toPolygonSet();
     polygonSet.forEachPointPair(function(p1, p2) {
+      return;
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
       debug.line(v1, v2);
     });
-    var result = MCG.Boolean.union(polygonSet, undefined, true).toPolygonSet();
+    debug.lines();
+    var result = MCG.Boolean.union(polygonSet, undefined, false).toPolygonSet();
+    if (result.count() < 1 || !result.elements[0].valid()) console.log(result, "NO RESULT GEOMETRY");
     result.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();

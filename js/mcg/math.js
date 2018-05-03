@@ -29,27 +29,72 @@ Object.assign(MCG.Math, (function() {
   }
 
   function collinear(a, b, c) {
-    var p = a.context.p;
-    return Math.abs(narea(a, b, c)) < p;
+    return Math.abs(narea(a, b, c)) < a.context.p;
   }
 
   function left(a, b, c) {
-    return area(a, b, c) > 0;
+    var n = narea(a, b, c);
+
+    if (Math.abs(n) < a.context.p) return false;
+    return n > 0;
   }
 
   function leftOn(a, b, c) {
-    return area(a, b, c) >= 0;
+    var n = narea(a, b, c);
+
+    if (Math.abs(n) < a.context.p) return true;
+    return n > 0;
   }
 
   // returns 0 if c collinear with a-b, 1 if c left of a-b, else -1
   function leftCompare(a, b, c) {
-    return Math.sign(area(a, b, c));
+    var n = narea(a, b, c);
+
+    if (Math.abs(n) < a.context.p) return 0;
+    return Math.sign(n);
   }
 
-  // intersection predicate: return true if a0-a1 segment intersects b0-b1
-  // segment; can return true if an endpoint of one segment is on the other, so
-  // check for that separately
-  function intersect(a0, a1, b0, b1) {
+  // signifies special types of intersection between a0-a1 and b0-b1 segments
+  var IntersectionFlags = {
+    none: 0,            // no intersection
+    intermediate: 1,    // intersection excludes endpoints
+    a0: 2,              // intersection point is a0
+    a1: 4,              // intersectoin point is a1
+    b0: 8,              // intersection point is b0
+    b1: 16              // intersection point is b1
+  };
+
+  // intersection predicate: return true if a-b segment intersects c-d
+  // segment; returns
+  function intersect(a, b, c, d) {
+    // leftness checks for the endpoint of one segment against the other segment
+    var labc = leftCompare(a, b, c), labd = leftCompare(a, b, d);
+    var lcda = leftCompare(c, d, a), lcdb = leftCompare(c, d, b);
+
+    var result = IntersectionFlags.none;
+
+    // a-b segment is between endpoints of c-d segment
+    var abBtwn = labc !== labd || labc === 0;
+    // c-d segment is between endpoints of a-b segment
+    var cdBtwn = lcda !== lcdb || lcda === 0;
+
+    // check if one endpoint lies on the other segment
+
+    // c lies on a-b and between a-b
+    if (labc === 0 && cdBtwn) result |= IntersectionFlags.b0;
+    if (labd === 0 && cdBtwn) result |= IntersectionFlags.b1;
+    if (lcda === 0 && abBtwn) result |= IntersectionFlags.a0;
+    if (lcdb === 0 && abBtwn) result |= IntersectionFlags.a1;
+
+    // possible intersection on intermediate points
+    if (result === IntersectionFlags.none) {
+      if (abBtwn && cdBtwn) {
+        result = IntersectionFlags.intermediate;
+      }
+    }
+
+    return result;
+
     return !!(leftOn(a0, a1, b0) ^ leftOn(a0, a1, b1)) &&
            !!(leftOn(b0, b1, a0) ^ leftOn(b0, b1, a1));
   }
@@ -81,7 +126,7 @@ Object.assign(MCG.Math, (function() {
     return da.h * db.v === db.h * da.v;
   }
 
-  // create a vector that is orthogonal to and right of a-b segment
+  // create a normalized vector that is orthogonal to and right of a-b segment
   function orthogonalRightVector(a, b) {
     var d = a.vectorTo(b);
     var h = d.h, v = d.v;
@@ -110,6 +155,7 @@ Object.assign(MCG.Math, (function() {
     left: left,
     leftOn: leftOn,
     leftCompare: leftCompare,
+    IntersectionFlags: IntersectionFlags,
     intersect: intersect,
     intersection: intersection,
     parallel: parallel,

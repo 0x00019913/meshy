@@ -31,16 +31,19 @@ Object.assign(MCG.Sweep, (function() {
     );
 
     var o = 1.0;
-    var ct = 0;
+    var ct = 0, lim = 10000;
     while (events.length > 0) {
-      if (ct++ > 100) break;
+      if (ct++ > lim) {
+        console.log("exceeded event limit", lim);
+        break;
+      }
 
       var ev = events.dequeue();
 
       if (ev.isLeft) {
         var ins = status.insert(ev);
 
-        if (!ins && printEvents) console.log("insert already existing event");
+        if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, pqString());
 
         var it;
 
@@ -121,8 +124,8 @@ Object.assign(MCG.Sweep, (function() {
       if (a.collinear(b)) {
         return handleCollinearEvents(a, b);
       }
-      else if (a.intersects(b)) {
-        return handleEventIntersection(a, b);
+      else {
+        return handleIntersectingEvents(a, b);
       }
     }
 
@@ -232,13 +235,33 @@ Object.assign(MCG.Sweep, (function() {
     }
 
     // handle a possible intersection between a pair of events
-    function handleEventIntersection(a, b) {
-      var pi = a.intersection(b);
+    function handleIntersectingEvents(a, b) {
+      var flags = MCG.Math.IntersectionFlags;
+      var intersect = a.intersects(b);
 
-      if (printEvents) console.log("intersection (", pi.h, pi.v, ")");
+      // intersection point
+      var pi;
 
-      eventPrint(a, "sa");
-      eventPrint(b, "sb");
+      if (intersect === flags.intermediate) pi = a.intersection(b)
+      else if (intersect === flags.a0) pi = a.p;
+      else if (intersect === flags.a1) pi = a.twin.p;
+      else if (intersect === flags.b0) pi = b.p;
+      else if (intersect === flags.b1) pi = b.twin.p;
+      // if no intersection or intersection at two endpoints
+      else pi = null;
+
+      if (pi && printEvents) {
+        console.log("intersection (", pi.h, pi.v, ")", intersect);
+        var a0 = a.p, a1 = a.twin.p;
+        var b0 = b.p, b1 = b.twin.p;
+        var leftCompare = MCG.Math.leftCompare;
+        var labc = leftCompare(a0, a1, b0), labd = leftCompare(a0, a1, b1);
+        var lcda = leftCompare(b0, b1, a0), lcdb = leftCompare(b0, b1, a1);
+        //console.log(labc, labd, lcda, lcdb);
+
+        eventPrint(a, "sa");
+        eventPrint(b, "sb");
+      }
 
       if (pi !== null) {
 
@@ -286,8 +309,6 @@ Object.assign(MCG.Sweep, (function() {
     function eventSplit(e, pi) {
       var te = e.twin;
 
-      status.remove(e);
-
       // if either endpoint is coincident with split point, don't split
       var coincident = MCG.Math.coincident;
       if (coincident(e.p, pi) || coincident(te.p, pi)) return null;
@@ -298,8 +319,6 @@ Object.assign(MCG.Sweep, (function() {
 
       e.twin = ei;
       te.twin = ite;
-
-      status.insert(e);
 
       return ite;
     }
@@ -338,54 +357,11 @@ Object.assign(MCG.Sweep, (function() {
       console.log(pqString());
     }
 
-    function eventString(e) {
-      if (!e) return "null";
-
-      var src = e.isLeft ? e : e.twin;
-      var d = 4;
-      var diff = src.p.vectorTo(src.twin.p);
-      var slope = src.vertical() ? Infinity : diff.v/diff.h;
-
-      var data =
-        [e.isLeft ? "L " : "R ", e.id, e.twin.id,
-          '(', e.p.h,
-          e.p.v, ')',
-          '(', e.twin.p.h,
-          e.twin.p.v, ')',
-          "s", Math.sign(slope),
-          "w", src.weight,
-          "d", src.depthBelow, src.depthBelow + src.weight,
-          src.contributing ? "t" : "f"];
-      var p =
-        [1, 3, 3,
-          2, d+3,
-          d+3, 1,
-          2, d+3,
-          d+3, 1,
-          2, 2,
-          2, 2,
-          2, 2, 2,
-          1]
-      var r = "";
-      for (var d=0; d<data.length; d++) r += lpad(data[d], p[d]);
-
-      if (!eventValid(e)) r += " i";
-
-      return r;
-
-      function lpad(s, n) {
-        n++;
-        var ss = ""+s;
-        var l = ss.length;
-        return " ".repeat(Math.max(n-l, 0)) + ss;
-      }
-    }
-
     function eventPrint(e, pref, force) {
       if (!force && !printEvents) return;
 
-      pref = (pref || "--");
-      console.log(pref, eventString(e));
+      if (e===null) console.log(pref, "null");
+      else console.log(e.toString(pref));
     }
 
     function eventDraw(e, incr, color, force) {
@@ -409,8 +385,10 @@ Object.assign(MCG.Sweep, (function() {
       incr = incr || 0;
       var it = status.iterator();
       var e;
+      var o = 0;
       while ((e = it.next()) !== null) {
-        if (e.contributing) eventDraw(e, incr, 0x444444, force);
+        if (e.contributing) eventDraw(e, incr+o, 0x444444, force);
+        o += 0.02;
       }
     }
   }
