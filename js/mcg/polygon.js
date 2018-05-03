@@ -34,6 +34,8 @@ MCG.Polygon = (function() {
       }
     }
 
+    if (!this.valid()) return this;
+
     if (this.closed) {
       // eliminate points 0 and/or 1 if they are collinear with their neighbors
       var ct = this.count();

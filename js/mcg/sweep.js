@@ -75,8 +75,6 @@ Object.assign(MCG.Sweep, (function() {
           var ps = tev.weight < 0 ? tev.p : ev.p;
 
           resultSet.addPointPair(pf, ps);
-
-          //eventDraw(ev, 0.1, undefined, true);
         }
 
         eventDraw(ev, o);

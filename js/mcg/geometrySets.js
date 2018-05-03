@@ -135,7 +135,7 @@ MCG.SegmentSet = (function() {
       var loops = adjacencyMap.getLoops();
       for (var li = 0; li < loops.length; li++) {
         var polygon = new MCG.Polygon(context, loops[li]);
-        pset.add(polygon);
+        if (polygon.valid()) pset.add(polygon);
       }
 
       return pset;

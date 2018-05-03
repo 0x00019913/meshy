@@ -45,7 +45,8 @@ MCG.DirectedAdjacencyMap = (function() {
 
   DirectedAdjacencyMap.prototype.nodeSelectors = {
     noPredecessors: function(node) { return node.predcount === 0; },
-    oneNeighbor: function(node) { return node.count === 1; }
+    oneNeighbor: function(node) { return node.count === 1; },
+    neighbors: function(node) { return node.count > 0; }
   }
 
   DirectedAdjacencyMap.prototype.getKeyWithNoPredecessors = function() {
@@ -56,11 +57,19 @@ MCG.DirectedAdjacencyMap = (function() {
     return this.getKey(this.nodeSelectors.oneNeighbor);
   }
 
-  // get the key to a node with only one neighbor; a loop starts here
+  // get a key that has some neighbors; prioritize nodes with one neighbor
+  DirectedAdjacencyMap.prototype.getKeyWithNeighbors = function() {
+    res = this.getKey(this.nodeSelectors.oneNeighbor);
+    if (res) return res;
+
+    return this.getKey(this.nodeSelectors.neighbors);
+  }
+
+  // get the key to a node that satisfies selector sel
   DirectedAdjacencyMap.prototype.getKey = function(sel) {
     var res = null;
     var m = this.map;
-    if (sel === undefined) sel = this.nodeSelectors.noPredecessors;
+    if (sel === undefined) sel = this.nodeSelectors.oneNeighbor;
 
     for (var key in m) {
       if (sel(m[key])) {
@@ -80,7 +89,7 @@ MCG.DirectedAdjacencyMap = (function() {
     var startkey;
 
     // get a key from the map
-    while ((startkey = this.getKeyWithOneNeighbor()) !== null) {
+    while ((startkey = this.getKeyWithNeighbors()) !== null) {
       // if couldn't get key, no loop to find
       if (startkey === null) return null;
 
@@ -221,7 +230,9 @@ MCG.AdjacencyMapNode = (function() {
   }
 
   AdjacencyMapNode.prototype.getRightmostNode = function(prev) {
-    if (prev === undefined || prev === null) return null;
+    // traversal might have started at a node with two neighbors without getting
+    // there from a previous node; in that case, just pick one of the neighbors
+    if (prev === null) return this.neighbors[0];
 
     var neighbors = this.neighbors;
     var pt = this.pt;
