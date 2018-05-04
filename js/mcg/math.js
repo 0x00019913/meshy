@@ -6,7 +6,7 @@ Object.assign(MCG.Math, (function() {
 
   // area of a-b-c triangle in integer space
   function area(a, b, c) {
-    var cross = (b.h-a.h) * (c.v-a.v) - (b.v-a.v) * (c.h-a.h);
+    var cross = (c.h-b.h) * (a.v-b.v) - (c.v-b.v) * (a.h-b.h);
     return cross / 2;
   }
 
@@ -22,28 +22,10 @@ Object.assign(MCG.Math, (function() {
 
   // area of a-b-c triangle using normalized a-b and a-c edges
   function narea(a, b, c) {
-    var ab = a.vectorTo(b).normalize();
-    var ac = a.vectorTo(c).normalize();
+    var bc = b.vectorTo(c).normalize();
+    var ba = b.vectorTo(a).normalize();
 
-    return ab.cross(ac) / 2;
-  }
-
-  function collinear(a, b, c) {
-    return Math.abs(narea(a, b, c)) < a.context.p;
-  }
-
-  function left(a, b, c) {
-    var n = narea(a, b, c);
-
-    if (Math.abs(n) < a.context.p) return false;
-    return n > 0;
-  }
-
-  function leftOn(a, b, c) {
-    var n = narea(a, b, c);
-
-    if (Math.abs(n) < a.context.p) return true;
-    return n > 0;
+    return bc.cross(ba) / 2;
   }
 
   // returns 0 if c collinear with a-b, 1 if c left of a-b, else -1
@@ -52,6 +34,42 @@ Object.assign(MCG.Math, (function() {
 
     if (Math.abs(n) < a.context.p) return 0;
     return Math.sign(n);
+  }
+
+  function collinear(a, b, c) {
+    var abdistsq = a.distanceToSq(b);
+    var bcdistsq = b.distanceToSq(c);
+    var cadistsq = c.distanceToSq(a);
+    var maxdist = Math.sqrt(Math.max(abdistsq, bcdistsq, cadistsq));
+
+    // Given triangle a-b-c, take the longest side - let's say it's a-b.
+    // If a, b, and c are collinear, c's deviation from a-b should be at most
+    // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
+    return Math.abs(area(a, b, c)) < maxdist * Math.SQRT1_2;
+  }
+
+  function left(a, b, c) {
+    return leftCompare(a, b, c) > 0;
+  }
+
+  function leftOn(a, b, c) {
+    return leftCompare(a, b, c) >= 0;
+  }
+
+  function leftCompareStrict(a, b, c) {
+    return Math.sign(area(a, b, c));
+  }
+
+  function collinearStrict(a, b, c) {
+    return leftCompareStrict(a, b, c) === 0;
+  }
+
+  function leftStrict(a, b, c) {
+    return leftCompareStrict(a, b, c) > 0;
+  }
+
+  function leftOnStrict(a, b, c) {
+    return leftCompareStrict(a, b, c) >= 0;
   }
 
   // signifies special types of intersection between a0-a1 and b0-b1 segments
@@ -151,10 +169,14 @@ Object.assign(MCG.Math, (function() {
     area: area,
     farea: farea,
     narea: narea,
+    leftCompare: leftCompare,
     collinear: collinear,
     left: left,
     leftOn: leftOn,
-    leftCompare: leftCompare,
+    leftCompareStrict: leftCompareStrict,
+    collinearStrict: collinearStrict,
+    leftStrict: leftStrict,
+    leftOnStrict: leftOnStrict,
     IntersectionFlags: IntersectionFlags,
     intersect: intersect,
     intersection: intersection,

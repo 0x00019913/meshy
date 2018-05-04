@@ -12,6 +12,8 @@ MCG.GeometrySet = (function() {
 
     add: function(e) {
       if (e.valid()) this.elements.push(e);
+
+      return this;
     },
 
     count: function() {

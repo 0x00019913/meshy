@@ -14,9 +14,6 @@ Object.assign(MCG.Sweep, (function() {
 
     var resultSet = new MCG.SegmentSet(context);
 
-    var drawEvents = dbg;
-    var printEvents = dbg;
-
     // priority queue storing events from left to right
     var events = new PriorityQueue({
       comparator: function(a, b) { return a.sweepcompare(b); }
@@ -40,12 +37,29 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
+      var drawEvents = dbg;
+      var printEvents = dbg;
+
       if (ev.isLeft) {
         var ins = status.insert(ev);
 
-        if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, pqString());
+        if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
 
         var it;
+        it = status.findIter(ev);
+        if (!it) {
+          var iter = status.iterator();
+          var e, p = null;
+          while ((e = iter.next()) !== null) {
+            eventPrint(e, ">S");
+            if (p) {
+              var a = p, b = e;
+              var pa = a.p, pb = b.p;
+              console.log(pa.h-pb.h, pa.v-pb.v, a.lrcompare(b), a.scompare(b));
+            }
+            p = e;
+          }
+        }
 
         it = status.findIter(ev);
         var dn = it.prev();
@@ -57,6 +71,9 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
 
+        //if (up) eventPrint(up, "up");
+        //if (dn) eventPrint(dn, "dn");
+
         handleAdjacentEvents(ev, dn);
         handleAdjacentEvents(up, ev);
       }
@@ -67,7 +84,7 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(ev);
 
         if (!rem && printEvents && tev.contributing) {
-          console.log("remove nonexistent event", tev.id, ev.id, pqString());
+          console.log("remove nonexistent event", tev.id, ev.id, statusString());
         }
 
         if (eventValid(tev)) {
@@ -81,10 +98,16 @@ Object.assign(MCG.Sweep, (function() {
       }
 
       statusDraw(o+0.6);
-      o += 1;
+      if (drawEvents) o += 1;
     }
 
     debug.lines();
+
+    resultSet.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3();
+        var v2 = p2.toVector3();
+        //debug.oneline(v1, v2, 0.05, "z");
+    });
 
     return resultSet;
 
@@ -336,7 +359,7 @@ Object.assign(MCG.Sweep, (function() {
       return (da === 0 && db > 0) || (da > 0 && db === 0);
     }
 
-    function pqString() {
+    function statusString() {
       var iter = status.iterator();
       var result = "[ ";
       var e;
@@ -349,10 +372,10 @@ Object.assign(MCG.Sweep, (function() {
       return result;
     }
 
-    function pqPrint(force) {
+    function statusPrint(force) {
       if (!printEvents && !force) return;
 
-      console.log(pqString());
+      console.log(statusString());
     }
 
     function eventPrint(e, pref, force) {

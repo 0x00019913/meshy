@@ -111,18 +111,25 @@ Object.assign(MCG.Sweep, (function() {
       else return 0;
     },
 
-    // returns slope comparison for two left events that share at least one point:
+    // returns slope comparison for two events that share at least one point:
     //   a's slope is greater if a's twin is to b-b.twin's left (above b);
     //   a's slope is less if a's twin is to b-b.twin's right (below b);
     //   equal slopes if collinear
     scompare: function(other) {
-      var a = this, b = other;
+      var a = this.isLeft ? this : this.twin;
+      var b = other.isLeft ? other : other.twin;
+
+      var va = a.vertical(), vb = b.vertical();
+
+      if (va && vb) return 0;
+      else if (!va && vb) return -1;
+      else if (va && !vb) return 1;
 
       var pa = a.p, pat = a.twin.p;
       var pb = b.p, pbt = b.twin.p;
 
-      var lc = MCG.Math.leftCompare(pb, pbt, pa);
-      var lct = MCG.Math.leftCompare(pb, pbt, pat);
+      var lc = MCG.Math.leftCompareStrict(pb, pbt, pa);
+      var lct = MCG.Math.leftCompareStrict(pb, pbt, pat);
 
       // if a on b-b.t and a.t on b-b.t, the two segments have the same slope
       if (lc === 0 && lct === 0) return 0;
@@ -140,16 +147,6 @@ Object.assign(MCG.Sweep, (function() {
 
         return Math.sign(sa - sb);
       }
-
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
-
-      if (MCG.Math.coincident(pb, pat)) {
-        return -MCG.Math.leftCompare(pb, pbt, pa);
-      }
-      else {
-        return MCG.Math.leftCompare(pb, pbt, pat);
-      }
     },
 
     toString: function(pref) {
@@ -166,7 +163,7 @@ Object.assign(MCG.Sweep, (function() {
           this.p.v, ')',
           '(', this.twin.p.h,
           this.twin.p.v, ')',
-          "s", Math.sign(slope),
+          "s", slope===Infinity ? "v" : Math.sign(slope),
           "l", this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weight,
           "d", src.depthBelow, src.depthBelow + src.weight,
@@ -238,8 +235,14 @@ Object.assign(MCG.Sweep, (function() {
     collinear: function(other) {
       var a = this.parent, b = other.parent;
 
-      var pa = a.p, pat = a.twin.parent.p;
-      var pb = b.p, pbt = b.twin.parent.p;
+      var pa = a.parent.p, pat = a.twin.parent.p;
+      var pb = b.parent.p, pbt = b.twin.parent.p;
+
+      //if (MCG.Math.coincident(this.p, other.p)) return false;
+
+      // verify that the event pairs actually overlap
+      if (a.twin.p.h < b.p.h || a.p.h > b.twin.p.h) return false;
+      if (a.twin.p.v < b.p.v || a.p.v > b.twin.p.v) return false;
 
       if (a.vertical() && b.vertical()) return true;
 
