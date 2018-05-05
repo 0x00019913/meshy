@@ -74,20 +74,19 @@ Stage.prototype.generateUI = function() {
   exportFolder.add(this, "exportSTLascii");
 
   var settingsFolder = this.gui.addFolder("Settings");
-  settingsFolder.add(this, "toggleFloor");
-  settingsFolder.add(this, "toggleAxisWidget");
 
-  var displayFolder = this.gui.addFolder("Mesh Display");
+  settingsFolder.add(this, "isLittleEndian");
+  settingsFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
+
+  var displayFolder = this.gui.addFolder("Display");
+  displayFolder.add(this, "toggleFloor");
+  displayFolder.add(this, "toggleAxisWidget");
   displayFolder.add(this, "toggleCOM");
   displayFolder.add(this, "toggleWireframe");
   displayFolder.add(this, "cameraToModel");
   this.meshColor = "#662828"; // todo: reset to 0xffffff
   this.meshColorController =
     displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
-
-  var technicalFolder = settingsFolder.addFolder("Technical");
-  technicalFolder.add(this, "isLittleEndian");
-  technicalFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
 
   var transformFolder = this.gui.addFolder("Transform");
 
@@ -728,7 +727,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 246; //492; //6; //326;
+  this.currentSlice = 25; //246; //492; //6; //326;
   this.setSlice();
 
   this.filename = this.model.filename;

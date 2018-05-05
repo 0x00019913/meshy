@@ -45,7 +45,7 @@ Object.assign(MCG.Math, (function() {
     // Given triangle a-b-c, take the longest side - let's say it's a-b.
     // If a, b, and c are collinear, c's deviation from a-b should be at most
     // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
-    return Math.abs(area(a, b, c)) < maxdist * Math.SQRT1_2;
+    return Math.abs(area(a, b, c)) < maxdist * Math.SQRT2*4;
   }
 
   function left(a, b, c) {

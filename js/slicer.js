@@ -16,8 +16,6 @@ function Slicer(sourceVertices, sourceFaces, params) {
 
   this.layerVertices = null;
 
-  this.layers = null;
-
   this.mode = SlicerModes.preview;
   this.axis = "z";
   this.sliceHeight = 0.5;
@@ -47,6 +45,14 @@ function Slicer(sourceVertices, sourceFaces, params) {
 
   this.calculateFaceBounds();
 
+  // first slice is half a slice height below mesh min, hence +1
+  this.numSlices = Math.floor(0.5 + (this.max - this.min) / this.sliceHeight) + 2;
+  this.currentSlice = this.numSlices;
+
+  // construct the layers array, which contains the structures necessary for
+  // computing the actual geometry
+  this.makeLayers();
+
   this.setMode(this.mode);
 }
 
@@ -74,9 +80,6 @@ Slicer.prototype.calculateFaceBounds = function() {
 
   this.min = min;
   this.max = max;
-  // first slice is half a slice height below mesh min, hence +1
-  this.numSlices = Math.floor(0.5 + (max - min) / this.sliceHeight) + 2;
-  this.currentSlice = this.numSlices;
 }
 
 Slicer.prototype.setMode = function(mode) {
@@ -182,111 +185,93 @@ Slicer.prototype.setPreviewSlice = function() {
   var vidx = vertexCount;
 
   //var layerBuilder = new LayerBuilder(axis);
-  var context = new MCG.Context(axis, sliceLevel, this.precision);
-  var segmentSet = new MCG.SegmentSet(context);
+  //var context = new MCG.Context(axis, sliceLevel, this.precision);
+  //var segmentSet = new MCG.SegmentSet(context);
 
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
     var slicedFace = slicedFaces[f];
 
-    // in the following, A is the bottom vert, B is the middle vert, and XY
-    // are the points there the triangle intersects the X-Y segment
+    this.sliceFace(slicedFace, vertices, sliceLevel, axis, function(normal, ccw, A, B, C, D) {
+      if (D === undefined) {
+        var idxA = vidx;
+        var idxB = idxA + 1;
+        var idxC = idxA + 2;
+        vertices.push(A);
+        vertices.push(B);
+        vertices.push(C);
+        vidx += 3;
 
-    // get verts sorted on axis; check if this flipped winding order (default is CCW)
-    var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
-    var [A, B, C] = vertsSorted.verts;
-    var ccw = vertsSorted.ccw;
+        var newFace;
+        if (ccw) newFace = new THREE.Face3(idxA, idxB, idxC);
+        else newFace = new THREE.Face3(idxB, idxA, idxC);
 
-    // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
-    if (B[axis] > sliceLevel) {
-      // calculate intersection of A-B and A-C
-      var AB = segmentPlaneIntersection(axis, sliceLevel, A, B);
-      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
+        newFace.normal.copy(slicedFace.normal);
 
-      // get indices of these verts in the final vert array before pushing them there
-      var idxA = vidx;
-      var idxAB = idxA + 1;
-      var idxAC = idxA + 2;
-      vertices.push(A);
-      vertices.push(AB);
-      vertices.push(AC);
-      vidx += 3;
+        // explicitly visible
+        newFace.materialIndex = 0;
 
-      // create the new face and push it into the faces array
-      var newFace;
-      if (ccw) {
-        newFace = new THREE.Face3(idxA, idxAB, idxAC);
+        faces.push(newFace);
       }
       else {
-        newFace = new THREE.Face3(idxA, idxAC, idxAB);
+        var idxA = vidx;
+        var idxB = idxA + 1;
+        var idxC = idxA + 2;
+        var idxD = idxA + 3;
+        vertices.push(A);
+        vertices.push(B);
+        vertices.push(C);
+        vertices.push(D);
+        vidx += 4;
+
+        // create the new faces and push it into the faces array
+        var newFace1, newFace2;
+        if (ccw) {
+          newFace1 = new THREE.Face3(idxA, idxB, idxC);
+          newFace2 = new THREE.Face3(idxC, idxB, idxD);
+        }
+        else {
+          newFace1 = new THREE.Face3(idxB, idxA, idxC);
+          newFace2 = new THREE.Face3(idxB, idxC, idxD);
+        }
+        newFace1.normal.copy(slicedFace.normal);
+        newFace2.normal.copy(slicedFace.normal);
+
+        // explicitly visible
+        newFace1.materialIndex = 0;
+        newFace2.materialIndex = 0;
+
+        faces.push(newFace1);
+        faces.push(newFace2);
       }
-      newFace.normal.copy(slicedFace.normal);
-
-      // explicitly visible
-      newFace.materialIndex = 0;
-
-      faces.push(newFace);
-
-      //layerBuilder.addSegment(AB, AC, newFace.normal);
-      var segment = new MCG.Segment(context).fromVector3Pair(AB, AC, newFace.normal);
-      segmentSet.add(segment);
-    }
-    // else, slice into two triangles: A-B-AC and B-BC-AC
-    else {
-      // calculate intersection of A-C and B-C
-      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
-      var BC = segmentPlaneIntersection(axis, sliceLevel, B, C);
-      // get indices of these verts in the vert array before pushing them there
-      var idxA = vidx;
-      var idxB = idxA + 1;
-      var idxAC = idxA + 2;
-      var idxBC = idxA + 3;
-      vertices.push(A);
-      vertices.push(B);
-      vertices.push(AC);
-      vertices.push(BC);
-      vidx += 4;
-
-      // create the new faces and push it into the faces array
-      var newFace1, newFace2;
-      if (ccw) {
-        newFace1 = new THREE.Face3(idxA, idxB, idxAC);
-        newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
-      }
-      else {
-        newFace1 = new THREE.Face3(idxA, idxAC, idxB);
-        newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
-      }
-      newFace1.normal.copy(slicedFace.normal);
-      newFace2.normal.copy(slicedFace.normal);
-
-      // explicitly visible
-      newFace1.materialIndex = 0;
-      newFace2.materialIndex = 0;
-
-      faces.push(newFace1);
-      faces.push(newFace2);
-
-      //layerBuilder.addSegment(AC, BC, newFace2.normal);
-      var segment = new MCG.Segment(context).fromVector3Pair(AC, BC, newFace2.normal);
-      segmentSet.add(segment);
-    }
+    });
   }
 
-  //var layer = layerBuilder.getLayer();
-  //layer.triangulate(vertices, faces);
+  var layer = this.layers[slice];
+
   debug.cleanup();
+
+  var union = MCG.Boolean.union(layer.base);
+  union.forEachPointPair(function(p1, p2) {
+    var v1 = p1.toVector3();
+    var v2 = p2.toVector3();
+    debug.line(v1, v2);
+  });
+  debug.lines();
+
+  return;
+
   if (segmentSet.count() > 0) {
     var polygonSet = segmentSet.toPolygonSet();
     var ps = polygonSet;//new MCG.PolygonSet(context).add(polygonSet.elements[0]);
     ps.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
-      //debug.line(v1, v2);
+      debug.line(v1, v2);
     });
     debug.lines();
 
-    var result = MCG.Boolean.union(ps, undefined, false).toPolygonSet();
+    var result = MCG.Boolean.union(ps, undefined, true).toPolygonSet();
     if (result.count() < 1 || !result.elements[0].valid()) console.log(result, "NO RESULT GEOMETRY");
     result.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
@@ -294,20 +279,6 @@ Slicer.prototype.setPreviewSlice = function() {
       debug.line(v1, v2, 1, false, 0.1, axis);
     });
 
-    /*
-    for (var io = -20; io < 20; io++) {
-      break;
-      if (io != 12) continue;
-      var offset = result.offset(io * 0.25);
-      var uoffset = MCG.Boolean.union(offset, undefined);
-      var upoffset = uoffset.toPolygonSet();
-      upoffset.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3();
-        var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, 0.1, axis);
-      });
-    }
-    */
     debug.lines();
   }
 }
@@ -336,15 +307,10 @@ Slicer.prototype.makePreviewGeometry = function() {
 Slicer.prototype.makeLayerGeometry = function() {
   if (this.layerGeometryReady) return;
 
-  // construct the layers array, which contains the structures necessary for
-  // computing the actual geometry
-  if (!this.layers) this.makeLayers();
-
   var layers = this.layers;
   var layerVertices = [];
 
-  for (var l=0; l<layers.length; l++) {
-    if (l!=1) continue;
+  for (var l = 0; l < layers.length; l++) {
     var layer = layers[l];
 
     layer.computeContours(this.lineWidth, this.numWalls);
@@ -357,18 +323,25 @@ Slicer.prototype.makeLayerGeometry = function() {
 }
 
 Slicer.prototype.makeLayers = function() {
-  var layers = [];
+  var layers = new Array(this.numSlices);
 
   // arrays of segments, each array signifying all segments in one layer
   var segmentSets = this.buildLayerSegmentSets();
 
+  debug.cleanup();
+
   for (var i=0; i<segmentSets.length; i++) {
     // unify base contours
-    var segmentSet = MCG.Boolean.union(segmentSets[i]);
+    try {
+      //var segmentSet = MCG.Boolean.union(segmentSets[i], undefined, false);
+    }
+    catch (e) {
+      console.log(i, e);
+    }
 
     // create layer from the contours
-    var layer = new Layer(segmentSet);
-    layers.push(layer);
+    var layer = new Layer(segmentSets[i]);
+    layers[i] = layer;
   }
 
   this.layers = layers;
@@ -387,15 +360,15 @@ Slicer.prototype.buildLayerFaceLists = function() {
   var min = this.min, max = this.max;
   var faceBounds = this.faceBounds;
 
-  var numLayers = this.numSlices - 2;
+  var numSlices = this.numSlices;
 
   // position fo first and last layer
-  var layer0 = min + sliceHeight/2;
-  var layerk = layer0 + sliceHeight * (numLayers - 1);
+  var layer0 = min - sliceHeight/2;
+  var layerk = layer0 + sliceHeight * (numSlices);
 
   // init layer lists
-  var layerLists = new Array(numLayers + 1);
-  for (var i=0; i<=numLayers; i++) layerLists[i] = [];
+  var layerLists = new Array(numSlices + 1);
+  for (var i = 0; i <= numSlices; i++) layerLists[i] = [];
 
   // bucket the faces
   for (var i=0; i<this.sourceFaceCount; i++) {
@@ -403,7 +376,7 @@ Slicer.prototype.buildLayerFaceLists = function() {
     var index;
 
     if (bounds.min < layer0) index = 0;
-    else if (bounds.min > layerk) index = numLayers;
+    else if (bounds.min > layerk) index = numSlices;
     else index = Math.ceil((bounds.min - layer0) / sliceHeight);
 
     layerLists[index].push(i);
@@ -432,7 +405,7 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
   for (var i=0; i<numLayers; i++) {
     // height of layer from mesh min
-    var sliceLevel = min + (i + 0.5) * sliceHeight;
+    var sliceLevel = min + (i - 0.5) * sliceHeight;
 
     // reaching a new layer, insert whatever new active face indices for that layer
     if (layerLists[i].length>0) sweepSet = new Set([...sweepSet, ...layerLists[i]]);
@@ -450,31 +423,11 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
       if (bounds.max < sliceLevel) sweepSet.delete(idx);
       else {
-        // get verts sorted in ascending order on axis; call it [A,B,C]
-        var [A, B, C] = faceGetVertsSorted(bounds.face, vertices, axis).verts;
-        var aA = A[axis];
-        var aB = B[axis];
-        var aC = C[axis];
-
-        // face is flat or intersects slicing plane at a point
-        if (aA === aC) continue;
-        if (aA === sliceLevel && aA < aB) continue;
-        if (aC === sliceLevel && aB < aC) continue;
-
-        // if B is above slicing plane, calculate AB and AC intersection
-        var int1;
-        if (aB > sliceLevel) {
-          int1 = segmentPlaneIntersection(axis, sliceLevel, A, B);
-        }
-        // else, calculate BC and AC intersection
-        else {
-          int1 = segmentPlaneIntersection(axis, sliceLevel, B, C);
-        }
-        var int2 = segmentPlaneIntersection(axis, sliceLevel, A, C);
-
-        var segment = new MCG.Segment(context);
-        segment.fromVector3Pair(int1, int2, bounds.face.normal);
-        segmentSet.add(segment);
+        this.sliceFace(bounds.face, vertices, sliceLevel, axis, function(normal, ccw, A, B) {
+          var segment = new MCG.Segment(context);
+          segment.fromVector3Pair(A, B, normal);
+          segmentSet.add(segment);
+        });
       }
     }
 
@@ -482,6 +435,42 @@ Slicer.prototype.buildLayerSegmentSets = function() {
   }
 
   return segmentSets;
+}
+
+// slice a face at the given level and then call the callback
+// callback arguments:
+//  normal: face normal
+//  ccw: used for winding the resulting verts
+//  A, B, C, D: A and B are the sliced verts, the others are from the original
+//    geometry (if sliced into one triangle, D will be undefined);
+//    if ccw, the triangles are ABC and CBD, else BAC and BCD
+Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
+  // in the following, A is the bottom vert, B is the middle vert, and XY
+  // are the points there the triangle intersects the X-Y segment
+
+  var normal = face.normal;
+
+  // get verts sorted on axis; check if this flipped winding order (default is CCW)
+  var vertsSorted = faceGetVertsSorted(face, vertices, axis);
+  var [A, B, C] = vertsSorted.verts;
+  var ccw = vertsSorted.ccw;
+
+  // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
+  if (B[axis] > level) {
+    // calculate intersection of A-B and A-C
+    var AB = segmentPlaneIntersection(axis, level, A, B);
+    var AC = segmentPlaneIntersection(axis, level, A, C);
+
+    callback(normal, ccw, AB, AC, A);
+  }
+  // else, slice into two triangles: A-B-AC and B-BC-AC
+  else {
+    // calculate intersection of A-C and B-C
+    var AC = segmentPlaneIntersection(axis, level, A, C);
+    var BC = segmentPlaneIntersection(axis, level, B, C);
+
+    callback(normal, ccw, BC, AC, B, A);
+  }
 }
 
 
@@ -499,16 +488,13 @@ function Layer(segmentSet) {
 }
 
 Layer.prototype.computeContours = function(lineWidth, numWalls) {
-  // todo: remove
-  lineWidth = 4;
-  numWalls = 0;
-  debug.cleanup();
-
   var base = this.base;
 
   var contours = [];
+  contours.push(base);
 
   for (var w = 0; w < numWalls; w++) {
+    break;
     var offsetSegments = MCG.Boolean.union(base.offset((w + 0.5) * -lineWidth));
     contours.push(offsetSegments.toPolygonSet());
   }
@@ -517,47 +503,14 @@ Layer.prototype.computeContours = function(lineWidth, numWalls) {
 }
 
 Layer.prototype.writeToVerts = function(vertices) {
-  if (!this.contours) return;
-  for (var c = 0; c < this.contours.length; c++) {
-    this.contours[c].forEachPointPair(function(p1, p2) {
+  var contours = this.contours;
+
+  if (!contours) return;
+
+  for (var c = 0; c < contours.length; c++) {
+    contours[c].forEachPointPair(function(p1, p2) {
       vertices.push(p1.toVector3());
       vertices.push(p2.toVector3());
     });
   }
-
-  this.base.computeBisectors();
-  this.base.forEachPointPair(function(p1, p2) {
-    vertices.push(p1.toVector3());
-    vertices.push(p2.toVector3());
-  });
-
-  this.base.forEachPoint(function(p, b) {
-    var pv = p.toVector3();
-    var pbv = p.clone().addScaledVector(b, 0.25).toVector3();
-    debug.line(pv, pbv);
-  });
-
-  /*for (var i=0; i<15; i++) {
-    break;
-    if (i!=13) continue;
-    var off = this.base.offset(i * -0.25);
-    var po = MCG.Boolean.union(off, undefined, true);
-    po.forEachPointPair(function(p1, p2) {
-      vertices.push(p1.toVector3());
-      vertices.push(p2.toVector3());
-    });
-  }*/
-  /*var contours = this.contours;
-
-  for (var c=0; c<contours.length; c++) {
-    var contour = contours[c];
-
-    for (var i=0; i<contour.length-1; i++) {
-      vertices.push(contour[i]);
-      vertices.push(contour[i+1]);
-    }
-    // to avoid n mod computations
-    vertices.push(contour[contour.length-1]);
-    vertices.push(contour[0]);
-  }*/
 }

@@ -93,6 +93,10 @@ Object.assign(MCG.Sweep, (function() {
 
           resultSet.addPointPair(pf, ps);
         }
+        else {
+          debug.point(ev.p.toVector3(), 0.3, "z");
+          debug.point(tev.p.toVector3(), 0.3, "z");
+        }
 
         eventDraw(ev, o);
       }
@@ -106,7 +110,7 @@ Object.assign(MCG.Sweep, (function() {
     resultSet.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3();
         var v2 = p2.toVector3();
-        //debug.oneline(v1, v2, 0.05, "z");
+        //debug.oneline(v1, v2, 0.2, "z");
     });
 
     return resultSet;
@@ -155,8 +159,8 @@ Object.assign(MCG.Sweep, (function() {
       // Overlap may look like this (or one may be entirely contained in
       // the other or one or both endpoints may be coincident):
       //
-      // p |----x----------| pt
-      // q      |----------y----| qt
+      // p |----x----------| p.t
+      // q      |----------y----| q.t
       //
       // In this case:
       // 1. split at x and y (creates 2 new left and 2 new right events:

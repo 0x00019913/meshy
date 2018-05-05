@@ -98,7 +98,7 @@ Object.assign(MCG.Sweep, (function() {
       // if s is left of f-f.twin, then, at their earliest common horizontal
       // coordinate, s is above f-f.twin; if right, then it's below; else it
       // falls exactly on f-f.twin
-      var res = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
+      var res = MCG.Math.leftCompare(f.parent.p, f.parent.twin.p, s.p);
       // result is inverted if a is first
       if (pah < pbh) res *= -1;
       return res;
