@@ -112,6 +112,18 @@ Object.assign(MCG.Sweep, (function() {
       var f = pah < pbh ? a : b;
       var s = pah < pbh ? b : a;
 
+      var h = Math.max(pah, pbh);
+      var ft = f.twin;
+
+      var interp = f.p.v + (ft.p.v-f.p.v) * (h-f.p.h) / (ft.p.h-f.p.h);
+      var result = s.p.v - interp;
+      if (pah < pbh) result *= -1;
+
+      return Math.sign(result);
+
+      var f = pah < pbh ? a : b;
+      var s = pah < pbh ? b : a;
+
       // if s is left of f-f.twin, then, at their earliest common horizontal
       // coordinate, s is above f-f.twin; if right, then it's below; else it
       // falls exactly on f-f.twin
@@ -288,8 +300,8 @@ Object.assign(MCG.Sweep, (function() {
 
       if (a.endpointsCoincident(b)) return null;
 
-      var pa = a.parent.p, pat = a.twin.parent.p;
-      var pb = b.parent.p, pbt = b.twin.parent.p;
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
 
       return MCG.Math.intersection(pa, pat, pb, pbt);
     },

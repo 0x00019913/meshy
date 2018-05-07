@@ -37,10 +37,12 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
-      var printEvents = dbg;
-      var drawEvents = printEvents;
+      var printEvents = dbg && inRange(ev.p.h, 12*p, 13*p) && inRange(ev.p.v, 25*p, 26.1*p);
+      var drawEvents = false && printEvents;
 
       if (ev.isLeft) {
+        if (!ev.contributing) continue;
+
         var ins = status.insert(ev);
 
         if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
@@ -68,7 +70,7 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(ev, o, 0x999999);
 
         //if (up) eventPrint(up, "up");
-        //if (dn) eventPrint(dn, "dn");
+        if (dn) eventPrint(dn, "dn");
 
         handleAdjacentEvents(ev, dn);
         handleAdjacentEvents(up, ev);
@@ -132,6 +134,22 @@ Object.assign(MCG.Sweep, (function() {
 
       queue(el);
       queue(er);
+
+      return el;
+    }
+
+    function recreateEventPair(ev) {
+      eventInvalidate(ev);
+
+      var tev = ev.twin;
+
+      var p1 = ev.weight > 0 ? ev.p : tev.p;
+      var p2 = ev.weight > 0 ? tev.p : ev.p;
+
+      var el = addPointPair(p1, p2);
+
+      // assign weight and reverse sign if event pair points were flipped
+      el.weight = ev.p === el.p ? ev.weight : -ev.weight;
     }
 
     function queue(e) {
@@ -263,7 +281,7 @@ Object.assign(MCG.Sweep, (function() {
       // intersection point
       var pi;
 
-      if (intersect === flags.intermediate) pi = a.intersection(b)
+      if (intersect === flags.intermediate) pi = a.intersection(b);
       else if (intersect === flags.a0) pi = a.p;
       else if (intersect === flags.a1) pi = a.twin.p;
       else if (intersect === flags.b0) pi = b.p;
@@ -273,18 +291,13 @@ Object.assign(MCG.Sweep, (function() {
 
       if (pi && printEvents) {
         console.log("intersection (", pi.h, pi.v, ")", intersect);
-        var a0 = a.p, a1 = a.twin.p;
-        var b0 = b.p, b1 = b.twin.p;
-        var leftCompare = MCG.Math.leftCompare;
-        var labc = leftCompare(a0, a1, b0), labd = leftCompare(a0, a1, b1);
-        var lcda = leftCompare(b0, b1, a0), lcdb = leftCompare(b0, b1, a1);
-        //console.log(labc, labd, lcda, lcdb);
 
         eventPrint(a, "sa");
         eventPrint(b, "sb");
       }
 
       if (pi !== null) {
+        var va = a.vertical(), vb = b.vertical();
 
         eventDraw(a, o+0.1, undefined);
         eventDraw(b, o+0.1, undefined);
@@ -293,8 +306,12 @@ Object.assign(MCG.Sweep, (function() {
         if (ita !== null) {
           queue(a.twin);
           queue(ita);
+
+          if (a.vertical() !== va) recreateEventPair(a);
+          if (ita.vertical() !== va) recreateEventPair(ita);
         }
         else {
+          status.remove(a);
           queue(a);
         }
 
@@ -302,8 +319,12 @@ Object.assign(MCG.Sweep, (function() {
         if (itb !== null) {
           queue(b.twin);
           queue(itb);
+
+          if (b.vertical() !== vb) recreateEventPair(b);
+          if (itb.vertical() !== vb) recreateEventPair(itb);
         }
         else {
+          status.remove(b);
           queue(b);
         }
 
