@@ -86,6 +86,9 @@ function clamp(x, minVal, maxVal) {
   else if (x > maxVal) x = maxVal;
   return x;
 }
+function inRange(x, minVal, maxVal) {
+  return (minVal===undefined || x >= minVal) && (maxVal===undefined || x <= maxVal);
+}
 function vector3Abs(v) {
   var result = new THREE.Vector3();
   result.x = Math.abs(v.x);

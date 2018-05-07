@@ -56,8 +56,12 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      // quinary sorting on id: there is no meaningful ordering for collinear
-      //   segments, so at least pick a unique ordering to be consistent
+      var hpcomp = a.parent.p.h - b.parent.p.h;
+      if (hpcomp !== 0) return hpcomp;
+
+      var hptcomp = a.twin.parent.p.h - b.twin.parent.p.h;
+      if (hptcomp !== 0) return hptcomp;
+
       return a.id - b.id;
     },
 
@@ -78,8 +82,12 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      // quaternary sorting on id: there is no meaningful ordering for collinear
-      // segments, so at least pick a unique ordering to be consistent
+      var hpcomp = a.parent.p.h - b.parent.p.h;
+      if (hpcomp !== 0) return hpcomp;
+
+      var hptcomp = a.twin.parent.p.h - b.twin.parent.p.h;
+      if (hptcomp !== 0) return hptcomp;
+
       return a.id - b.id;
     },
 
@@ -90,7 +98,16 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pb = b.p;
       var pah = pa.h, pbh = pb.h;
 
-      if (pah === pbh) return pa.v - pb.v;
+      var pav = pa.v, pbv = pb.v;
+
+      // if events horizontally coincident, just test the vertical coordinate
+      if (pah === pbh) return pav - pbv;
+
+      var patv = a.twin.p.v, pbtv = b.twin.p.v;
+
+      // if no horizontal overlap, decide by which is higher/lower
+      if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
+      if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
 
       var f = pah < pbh ? a : b;
       var s = pah < pbh ? b : a;
@@ -98,7 +115,7 @@ Object.assign(MCG.Sweep, (function() {
       // if s is left of f-f.twin, then, at their earliest common horizontal
       // coordinate, s is above f-f.twin; if right, then it's below; else it
       // falls exactly on f-f.twin
-      var res = MCG.Math.leftCompare(f.parent.p, f.parent.twin.p, s.p);
+      var res = MCG.Math.leftCompareStrict(f.parent.p, f.parent.twin.p, s.p);
       // result is inverted if a is first
       if (pah < pbh) res *= -1;
       return res;
@@ -163,19 +180,19 @@ Object.assign(MCG.Sweep, (function() {
           this.p.v, ')',
           '(', this.twin.p.h,
           this.twin.p.v, ')',
-          "s", slope===Infinity ? "v" : Math.sign(slope),
-          "l", this.p.vectorTo(this.twin.p).length().toFixed(0),
+          slope===Infinity ? "v" : Math.sign(slope)==1 ? "+" : Math.sign(slope)==-1 ? "-" : 0,
+          this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weight,
           "d", src.depthBelow, src.depthBelow + src.weight,
           src.contributing ? "t" : "f"];
       var p =
-        [1, 3, 3,
+        [1, 4, 4,
           2, d+3,
           d+3, 1,
           2, d+3,
           d+3, 1,
-          2, 2,
-          2, 9,
+          2,
+          9,
           2, 2,
           2, 2, 2,
           1]
@@ -233,16 +250,14 @@ Object.assign(MCG.Sweep, (function() {
     },
 
     collinear: function(other) {
-      var a = this.parent, b = other.parent;
+      var a = this, b = other;
 
       var pa = a.parent.p, pat = a.twin.parent.p;
       var pb = b.parent.p, pbt = b.twin.parent.p;
 
-      //if (MCG.Math.coincident(this.p, other.p)) return false;
-
       // verify that the event pairs actually overlap
-      if (a.twin.p.h < b.p.h || a.p.h > b.twin.p.h) return false;
-      if (a.twin.p.v < b.p.v || a.p.v > b.twin.p.v) return false;
+      if (a.twin.p.h <= b.p.h || a.p.h >= b.twin.p.h) return false;
+      if (a.twin.p.v <= b.p.v || a.p.v >= b.twin.p.v) return false;
 
       if (a.vertical() && b.vertical()) return true;
 

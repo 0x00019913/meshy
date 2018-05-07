@@ -28,7 +28,7 @@ Object.assign(MCG.Sweep, (function() {
     );
 
     var o = 1.0;
-    var ct = 0, lim = 10000;
+    var ct = 0, lim = 50000;
     while (events.length > 0) {
       if (ct++ > lim) {
         console.log("exceeded event limit", lim);
@@ -37,8 +37,8 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
-      var drawEvents = dbg;
       var printEvents = dbg;
+      var drawEvents = printEvents;
 
       if (ev.isLeft) {
         var ins = status.insert(ev);
@@ -46,24 +46,20 @@ Object.assign(MCG.Sweep, (function() {
         if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
 
         var it;
-        it = status.findIter(ev);
-        if (!it) {
-          var iter = status.iterator();
-          var e, p = null;
-          while ((e = iter.next()) !== null) {
-            eventPrint(e, ">S");
-            if (p) {
-              var a = p, b = e;
-              var pa = a.p, pb = b.p;
-              console.log(pa.h-pb.h, pa.v-pb.v, a.lrcompare(b), a.scompare(b));
-            }
-            p = e;
-          }
-        }
 
         it = status.findIter(ev);
+        if (!it) {
+          eventPrint(ev, undefined, true);
+          statusPrint(true);
+          break;
+        }
         var dn = it.prev();
         it = status.findIter(ev);
+        if (!it) {
+          eventPrint(ev, undefined, true);
+          statusPrint(true);
+          break;
+        }
         var up = it.next();
 
         ev.setDepthFromBelow(dn);
@@ -85,6 +81,10 @@ Object.assign(MCG.Sweep, (function() {
 
         if (!rem && printEvents && tev.contributing) {
           console.log("remove nonexistent event", tev.id, ev.id, statusString());
+          debug.point(ev.p.toVector3(), 0.5, axis);
+          debug.point(tev.p.toVector3(), 0.5, axis);
+
+          statusPrint();
         }
 
         if (eventValid(tev)) {
@@ -92,10 +92,6 @@ Object.assign(MCG.Sweep, (function() {
           var ps = tev.weight < 0 ? tev.p : ev.p;
 
           resultSet.addPointPair(pf, ps);
-        }
-        else {
-          debug.point(ev.p.toVector3(), 0.3, "z");
-          debug.point(tev.p.toVector3(), 0.3, "z");
         }
 
         eventDraw(ev, o);
@@ -376,10 +372,23 @@ Object.assign(MCG.Sweep, (function() {
       return result;
     }
 
-    function statusPrint(force) {
+    function statusPrintShort(force) {
       if (!printEvents && !force) return;
 
       console.log(statusString());
+    }
+
+    function statusPrint(force) {
+      if (!printEvents && !force) return;
+
+      var iter = status.iterator(), e, p = null;
+      while ((e = iter.prev()) !== null) {
+        if (p) {
+          console.log(p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p));
+        }
+        eventPrint(e, "N ", force);
+        p = e;
+      }
     }
 
     function eventPrint(e, pref, force) {

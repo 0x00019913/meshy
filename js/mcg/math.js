@@ -30,6 +30,23 @@ Object.assign(MCG.Math, (function() {
 
   // returns 0 if c collinear with a-b, 1 if c left of a-b, else -1
   function leftCompare(a, b, c) {
+    var abdistsq = a.distanceToSq(b);
+    var bcdistsq = b.distanceToSq(c);
+    var cadistsq = c.distanceToSq(a);
+    var maxdist = Math.sqrt(Math.max(abdistsq, bcdistsq, cadistsq));
+
+    var tarea = area(a, b, c);
+
+    // Given triangle a-b-c, take the longest side - let's say it's a-b.
+    // If a, b, and c are collinear, c's deviation from a-b should be at most
+    // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
+    // (deviation results from the fact that the coordinates snap to an integer
+    // grid, so the integer coords may not be collinear even if their original
+    // float coords were within a reasonable epsilon)
+
+    if (Math.abs(tarea) < maxdist * Math.SQRT2) return 0;
+    else return Math.sign(tarea);
+
     var n = narea(a, b, c);
 
     if (Math.abs(n) < a.context.p) return 0;
@@ -37,15 +54,7 @@ Object.assign(MCG.Math, (function() {
   }
 
   function collinear(a, b, c) {
-    var abdistsq = a.distanceToSq(b);
-    var bcdistsq = b.distanceToSq(c);
-    var cadistsq = c.distanceToSq(a);
-    var maxdist = Math.sqrt(Math.max(abdistsq, bcdistsq, cadistsq));
-
-    // Given triangle a-b-c, take the longest side - let's say it's a-b.
-    // If a, b, and c are collinear, c's deviation from a-b should be at most
-    // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
-    return Math.abs(area(a, b, c)) < maxdist * Math.SQRT2*4;
+    return leftCompare(a, b, c) === 0;
   }
 
   function left(a, b, c) {

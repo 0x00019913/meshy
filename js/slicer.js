@@ -184,10 +184,6 @@ Slicer.prototype.setPreviewSlice = function() {
   // current vertex
   var vidx = vertexCount;
 
-  //var layerBuilder = new LayerBuilder(axis);
-  //var context = new MCG.Context(axis, sliceLevel, this.precision);
-  //var segmentSet = new MCG.SegmentSet(context);
-
   // slice the faces
   for (var f = 0; f < slicedFaces.length; f++) {
     var slicedFace = slicedFaces[f];
@@ -251,13 +247,14 @@ Slicer.prototype.setPreviewSlice = function() {
 
   debug.cleanup();
 
-  var union = MCG.Boolean.union(layer.base);
-  union.forEachPointPair(function(p1, p2) {
-    var v1 = p1.toVector3();
-    var v2 = p2.toVector3();
-    debug.line(v1, v2);
-  });
-  debug.lines();
+  if (layer) {
+    layer.base.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2);
+    });
+    debug.lines();
+  }
 
   return;
 
@@ -328,19 +325,25 @@ Slicer.prototype.makeLayers = function() {
   // arrays of segments, each array signifying all segments in one layer
   var segmentSets = this.buildLayerSegmentSets();
 
-  debug.cleanup();
-
   for (var i=0; i<segmentSets.length; i++) {
-    // unify base contours
-    try {
-      //var segmentSet = MCG.Boolean.union(segmentSets[i], undefined, false);
-    }
-    catch (e) {
-      console.log(i, e);
-    }
-
     // create layer from the contours
+    if (false && i==156) {
+      segmentSets[i].toPolygonSet().forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.19, "z");
+      });
+
+      var union = MCG.Boolean.union(segmentSets[i].toPolygonSet(), undefined, true);
+
+      union.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.2, "z");
+      });
+    }
     var layer = new Layer(segmentSets[i]);
+
     layers[i] = layer;
   }
 
@@ -478,7 +481,8 @@ Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
 // contains a single slice of the mesh
 function Layer(segmentSet) {
   // base polygon set; use this to generate offsets
-  this.base = segmentSet.toPolygonSet();
+  var polygonSet = segmentSet.toPolygonSet();
+  this.base = MCG.Boolean.union(polygonSet).toPolygonSet();
 
   // internal contours
   this.contours = [];
