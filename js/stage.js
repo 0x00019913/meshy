@@ -515,7 +515,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 100000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .01, 10000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -727,7 +727,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 72;
+  this.currentSlice = 29;
   this.setSlice();
 
   this.filename = this.model.filename;

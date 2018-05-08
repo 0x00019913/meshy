@@ -1,7 +1,7 @@
 Object.assign(MCG.Sweep, (function() {
 
   function sweep(src0, src1, dbg) {
-    if (!src0) return;
+    if (!src0) return null;
 
     var context = src0.context;
 
@@ -28,7 +28,7 @@ Object.assign(MCG.Sweep, (function() {
     );
 
     var o = 1.0;
-    var ct = 0, lim = 50000;
+    var ct = 0, lim = Infinity;
     while (events.length > 0) {
       if (ct++ > lim) {
         console.log("exceeded event limit", lim);
@@ -37,8 +37,8 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
-      var printEvents = dbg && inRange(ev.p.h, 12*p, 13*p) && inRange(ev.p.v, 25*p, 26.1*p);
-      var drawEvents = false && printEvents;
+      var printEvents = dbg && inRange(ev.p.h, 6*p, 7.5*p);
+      var drawEvents = false;
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;

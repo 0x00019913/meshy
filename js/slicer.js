@@ -245,7 +245,7 @@ Slicer.prototype.setPreviewSlice = function() {
 
   var layer = this.layers[slice];
 
-  debug.cleanup();
+  //debug.cleanup();
 
   if (layer) {
     layer.base.forEachPointPair(function(p1, p2) {
@@ -327,12 +327,14 @@ Slicer.prototype.makeLayers = function() {
 
   for (var i=0; i<segmentSets.length; i++) {
     // create layer from the contours
-    if (false && i==72) {
+    if (i==29) {
       segmentSets[i].toPolygonSet().forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
           debug.line(v1, v2, 1, false, 0.175, "z");
       });
+
+      console.log(segmentSets[i].toPolygonSet());
 
       var union = MCG.Boolean.union(segmentSets[i].toPolygonSet(), undefined, true);
 
