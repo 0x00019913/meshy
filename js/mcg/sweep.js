@@ -37,7 +37,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
-      var printEvents = dbg && inRange(ev.p.h, 6*p, 7.5*p);
+      var printEvents = dbg;// && inRange(ev.p.h, 6*p, 7.5*p);
       var drawEvents = false;
 
       if (ev.isLeft) {
@@ -138,7 +138,13 @@ Object.assign(MCG.Sweep, (function() {
       return el;
     }
 
-    function recreateEventPair(ev) {
+    // if an event pair's left-right events are in the incorrect order (this can
+    // occur when splitting events), recreate the event pair
+    function handleSwappedEventPair(ev) {
+      var correct = ev.vertical() ? ev.p.v < ev.twin.p.v : ev.p.h < ev.twin.p.h;
+
+      if (correct) return;
+
       eventInvalidate(ev);
 
       var tev = ev.twin;
@@ -299,6 +305,14 @@ Object.assign(MCG.Sweep, (function() {
       if (pi !== null) {
         var va = a.vertical(), vb = b.vertical();
 
+        // if one event is split at the other's start, both events will end up
+        // in the status structure while having only one point of vertical
+        // overlap; need to remove the split event so that the status structure
+        // remains correctly ordered
+        var coincident = MCG.Math.coincident;
+        if (coincident(pi, b.p)) status.remove(a);
+        if (coincident(pi, a.p)) status.remove(b);
+
         eventDraw(a, o+0.1, undefined);
         eventDraw(b, o+0.1, undefined);
         // don't split if the intersection point is on the end of a segment
@@ -307,8 +321,10 @@ Object.assign(MCG.Sweep, (function() {
           queue(a.twin);
           queue(ita);
 
-          if (a.vertical() !== va) recreateEventPair(a);
-          if (ita.vertical() !== va) recreateEventPair(ita);
+          // if vertical status changed for either segment, it's possible that
+          // the left and right events swapped
+          if (a.vertical() !== va) handleSwappedEventPair(a);
+          if (ita.vertical() !== va) handleSwappedEventPair(ita);
         }
         else {
           status.remove(a);
@@ -320,8 +336,8 @@ Object.assign(MCG.Sweep, (function() {
           queue(b.twin);
           queue(itb);
 
-          if (b.vertical() !== vb) recreateEventPair(b);
-          if (itb.vertical() !== vb) recreateEventPair(itb);
+          if (b.vertical() !== vb) handleSwappedEventPair(b);
+          if (itb.vertical() !== vb) handleSwappedEventPair(itb);
         }
         else {
           status.remove(b);
