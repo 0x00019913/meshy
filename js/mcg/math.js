@@ -95,8 +95,8 @@ Object.assign(MCG.Math, (function() {
   // segment; returns
   function intersect(a, b, c, d) {
     // leftness checks for the endpoint of one segment against the other segment
-    var labc = leftCompare(a, b, c), labd = leftCompare(a, b, d);
-    var lcda = leftCompare(c, d, a), lcdb = leftCompare(c, d, b);
+    var labc = leftCompareStrict(a, b, c), labd = leftCompareStrict(a, b, d);
+    var lcda = leftCompareStrict(c, d, a), lcdb = leftCompareStrict(c, d, b);
 
     var result = IntersectionFlags.none;
 
