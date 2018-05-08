@@ -28,6 +28,9 @@ Object.assign(MCG.Math, (function() {
     return bc.cross(ba) / 2;
   }
 
+  // leftness predicates - these account for the fuzziness introduced by
+  // vertices' snapping to the integer grid
+
   // returns 0 if c collinear with a-b, 1 if c left of a-b, else -1
   function leftCompare(a, b, c) {
     var abdistsq = a.distanceToSq(b);
@@ -46,11 +49,6 @@ Object.assign(MCG.Math, (function() {
 
     if (Math.abs(tarea) < maxdist * Math.SQRT2) return 0;
     else return Math.sign(tarea);
-
-    var n = narea(a, b, c);
-
-    if (Math.abs(n) < a.context.p) return 0;
-    return Math.sign(n);
   }
 
   function collinear(a, b, c) {
@@ -64,6 +62,8 @@ Object.assign(MCG.Math, (function() {
   function leftOn(a, b, c) {
     return leftCompare(a, b, c) >= 0;
   }
+
+  // strict predicates - exact comparisons of area
 
   function leftCompareStrict(a, b, c) {
     return Math.sign(area(a, b, c));
@@ -95,8 +95,8 @@ Object.assign(MCG.Math, (function() {
   // segment; returns
   function intersect(a, b, c, d) {
     // leftness checks for the endpoint of one segment against the other segment
-    var labc = leftCompareStrict(a, b, c), labd = leftCompareStrict(a, b, d);
-    var lcda = leftCompareStrict(c, d, a), lcdb = leftCompareStrict(c, d, b);
+    var labc = leftCompare(a, b, c), labd = leftCompare(a, b, d);
+    var lcda = leftCompare(c, d, a), lcdb = leftCompare(c, d, b);
 
     var result = IntersectionFlags.none;
 

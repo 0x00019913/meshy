@@ -37,8 +37,8 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = events.dequeue();
 
-      var printEvents = dbg;// && inRange(ev.p.h, 6*p, 7.5*p);
-      var drawEvents = false;
+      var printEvents = dbg;
+      var drawEvents = dbg;
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -307,11 +307,16 @@ Object.assign(MCG.Sweep, (function() {
 
         // if one event is split at the other's start, both events will end up
         // in the status structure while having only one point of vertical
-        // overlap; need to remove the split event so that the status structure
-        // remains correctly ordered
+        // overlap
         var coincident = MCG.Math.coincident;
-        if (coincident(pi, b.p)) status.remove(a);
-        if (coincident(pi, a.p)) status.remove(b);
+        if (coincident(pi, a.p)) {
+          status.remove(a);
+          queue(a);
+        }
+        if (coincident(pi, b.p)) {
+          status.remove(b);
+          queue(b);
+        }
 
         eventDraw(a, o+0.1, undefined);
         eventDraw(b, o+0.1, undefined);
