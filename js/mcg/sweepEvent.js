@@ -29,6 +29,10 @@ Object.assign(MCG.Sweep, (function() {
       return e;
     },
 
+    vertical: function() {
+      return this.p.h === this.twin.p.h;
+    },
+
     // determine which of two events comes first in a left-right sweep
     sweepcompare: function(other) {
       var a = this, b = other;
@@ -39,15 +43,15 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pb = b.p;
 
       // primary sorting on horizontal coordinate (x if up axis is z)
-      var hcomp = pa.h - pb.h;
+      var hcomp = pa.hcompare(pb);
       if (hcomp !== 0) return hcomp;
 
       // secondary sorting on vertical coordinate (y if up axis is z)
-      var vcomp = pa.v - pb.v;
+      var vcomp = pa.vcompare(pb);
       if (vcomp !== 0) return vcomp;
 
       // tertiary sorting on left/right (right goes first so that, given two
-      //   segments sharing an endpoint but with no vertical overlap, the left
+      //   segments sharing an endpoint but with no vertical overlap, the first
       //   segment leaves the sweep status structure before the next goes in)
       var lrcomp = a.lrcompare(b);
       if (lrcomp !== 0) return lrcomp;
@@ -56,11 +60,16 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      var hpcomp = a.parent.p.h - b.parent.p.h;
-      if (hpcomp !== 0) return hpcomp;
+      // further comparisons based on parent extents
 
-      var hptcomp = a.twin.parent.p.h - b.twin.parent.p.h;
-      if (hptcomp !== 0) return hptcomp;
+      // parent comparison function
+      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
+
+      var pcomp = a.parent.p[pcompare](b.parent.p);
+      if (pcomp !== 0) return pcomp;
+
+      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
+      if (ptcomp !== 0) return ptcomp;
 
       return a.id - b.id;
     },
@@ -82,11 +91,16 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      var hpcomp = a.parent.p.h - b.parent.p.h;
-      if (hpcomp !== 0) return hpcomp;
+      // further comparisons based on parent extents
 
-      var hptcomp = a.twin.parent.p.h - b.twin.parent.p.h;
-      if (hptcomp !== 0) return hptcomp;
+      // parent comparison function
+      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
+
+      var pcomp = a.parent.p[pcompare](b.parent.p);
+      if (pcomp !== 0) return pcomp;
+
+      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
+      if (ptcomp !== 0) return ptcomp;
 
       return a.id - b.id;
     },
@@ -137,6 +151,7 @@ Object.assign(MCG.Sweep, (function() {
       var a = this.isLeft ? this : this.twin;
       var b = other.isLeft ? other : other.twin;
 
+      // basic checks if one or both are vertical
       var va = a.vertical(), vb = b.vertical();
 
       if (va && vb) return 0;
@@ -146,17 +161,26 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pat = a.twin.p;
       var pb = b.p, pbt = b.twin.p;
 
-      var lc = MCG.Math.leftCompareStrict(pb, pbt, pa);
-      var lct = MCG.Math.leftCompareStrict(pb, pbt, pat);
+      var lc = MCG.Math.leftCompare(pb, pbt, pa);
+      var lct = MCG.Math.leftCompare(pb, pbt, pat);
 
       // if a on b-b.t and a.t on b-b.t, the two segments have the same slope
-      if (lc === 0 && lct === 0) return 0;
+      if (lc === 0 && lct === 0) {
+        // it's possible that events testing as parallel are actually
+        // antiparallel, so one has the greater slope
+        var cva = pa.vcompare(pat), cvb = pb.vcompare(pbt);
+        if (cva > cvb) return -1;
+        else if (cva < cvb) return 1;
+
+        // segments are parallel
+        return 0;
+      }
       // else, if a not right of b-b.t and a.t not left of b-b.t, a's slope is less
       else if (lc != -1 && lct != 1) return -1;
       // else, if a not left of b-b.t and a.t not right of b-b.t, b's slope is less
       else if (lc != 1 && lct != -1) return 1;
       // should never happen (lines don't intersect), but do a literal slope
-      // test in case it does
+      // test just in case
       else {
         var ah = pa.h, ath = pat.h;
         var bh = pb.h, bth = pbt.h;
@@ -181,7 +205,7 @@ Object.assign(MCG.Sweep, (function() {
           this.p.v, ')',
           '(', this.twin.p.h,
           this.twin.p.v, ')',
-          slope===Infinity ? "v" : Math.sign(slope)==1 ? "+" : Math.sign(slope)==-1 ? "-" : 0,
+          slope===Infinity ? "v" : (Math.sign(slope)==1 ? "+" : (Math.sign(slope)==-1 ? "-" : 0)),
           this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weight,
           "d", src.depthBelow, src.depthBelow + src.weight,
@@ -239,10 +263,6 @@ Object.assign(MCG.Sweep, (function() {
   Object.assign(LeftSweepEvent.prototype, {
 
     constructor: LeftSweepEvent,
-
-    vertical: function() {
-      return this.p.h === this.twin.p.h;
-    },
 
     setDepthFromBelow: function(below) {
       var depthBelow = below !== null ? below.depthBelow + below.weight : 0;
