@@ -53,6 +53,7 @@ Object.assign(MCG.Sweep, (function() {
         if (!it) {
           eventPrint(ev, undefined, true);
           statusPrint(true);
+          console.log("failed to find inserted event");
           break;
         }
         var dn = it.prev();
@@ -60,6 +61,7 @@ Object.assign(MCG.Sweep, (function() {
         if (!it) {
           eventPrint(ev, undefined, true);
           statusPrint(true);
+          console.log("failed to find inserted event");
           break;
         }
         var up = it.next();
@@ -141,7 +143,7 @@ Object.assign(MCG.Sweep, (function() {
     // if an event pair's left-right events are in the incorrect order (this can
     // occur when splitting events), recreate the event pair
     function handleSwappedEventPair(ev) {
-      var correct = ev.vertical() ? ev.p.v < ev.twin.p.v : ev.p.h < ev.twin.p.h;
+      var correct = ev.vertical() ? ev.p.vcompare(ev.twin.p) < 0 : ev.p.vcompare(ev.twin.p) < 0;
 
       if (correct) return;
 
@@ -160,6 +162,11 @@ Object.assign(MCG.Sweep, (function() {
 
     function queue(e) {
       events.queue(e);
+    }
+
+    function requeue(e) {
+      status.remove(e);
+      queue(e);
     }
 
     // handle (possibly collinear) intersection between a pair of left events
@@ -284,14 +291,17 @@ Object.assign(MCG.Sweep, (function() {
       var flags = MCG.Math.IntersectionFlags;
       var intersect = a.intersects(b);
 
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
+
       // intersection point
       var pi;
 
       if (intersect === flags.intermediate) pi = a.intersection(b);
-      else if (intersect === flags.a0) pi = a.p;
-      else if (intersect === flags.a1) pi = a.twin.p;
-      else if (intersect === flags.b0) pi = b.p;
-      else if (intersect === flags.b1) pi = b.twin.p;
+      else if (intersect === flags.a0) pi = pa;
+      else if (intersect === flags.a1) pi = pat;
+      else if (intersect === flags.b0) pi = pb;
+      else if (intersect === flags.b1) pi = pbt;
       // if no intersection or intersection at two endpoints
       else pi = null;
 
@@ -303,26 +313,27 @@ Object.assign(MCG.Sweep, (function() {
       }
 
       if (pi !== null) {
+        eventDraw(a, o+0.1, undefined);
+        eventDraw(b, o+0.1, undefined);
+
         var va = a.vertical(), vb = b.vertical();
+
+        var coincident = MCG.Math.coincident;
+        var ita = null, itb = null;
 
         // if one event is split at the other's start, both events will end up
         // in the status structure while having only one point of vertical
-        // overlap
-        var coincident = MCG.Math.coincident;
-        if (coincident(pi, a.p)) {
-          status.remove(a);
-          queue(a);
-        }
-        if (coincident(pi, b.p)) {
-          status.remove(b);
-          queue(b);
-        }
+        // overlap; remove the second event and requeue it so that the split
+        // event can leave first
+        var ca = coincident(a.p, pi) || coincident(a.twin.p, pi);
+        var cb = coincident(b.p, pi) || coincident(b.twin.p, pi);
+        
+        if (ca) requeue(a);
+        if (cb) requeue(b);
 
-        eventDraw(a, o+0.1, undefined);
-        eventDraw(b, o+0.1, undefined);
-        // don't split if the intersection point is on the end of a segment
-        var ita = eventSplit(a, pi);
-        if (ita !== null) {
+        if (!ca) {
+          ita = eventSplit(a, pi);
+
           queue(a.twin);
           queue(ita);
 
@@ -331,22 +342,14 @@ Object.assign(MCG.Sweep, (function() {
           if (a.vertical() !== va) handleSwappedEventPair(a);
           if (ita.vertical() !== va) handleSwappedEventPair(ita);
         }
-        else {
-          status.remove(a);
-          queue(a);
-        }
+        if (!cb) {
+          itb = eventSplit(b, pi);
 
-        var itb = eventSplit(b, pi);
-        if (itb !== null) {
           queue(b.twin);
           queue(itb);
 
           if (b.vertical() !== vb) handleSwappedEventPair(b);
           if (itb.vertical() !== vb) handleSwappedEventPair(itb);
-        }
-        else {
-          status.remove(b);
-          queue(b);
         }
 
         eventPrint(a, "a ");
@@ -371,10 +374,6 @@ Object.assign(MCG.Sweep, (function() {
     // returns newly created left event
     function eventSplit(e, pi) {
       var te = e.twin;
-
-      // if either endpoint is coincident with split point, don't split
-      var coincident = MCG.Math.coincident;
-      if (coincident(e.p, pi) || coincident(te.p, pi)) return null;
 
       // right and left events at intersection point
       var ei = efactory.clone(te, pi);
@@ -437,6 +436,7 @@ Object.assign(MCG.Sweep, (function() {
       if (!force && !printEvents) return;
 
       if (e===null) console.log(pref, "null");
+      else if (e===undefined) console.log(pref, "undefined");
       else console.log(e.toString(pref));
     }
 

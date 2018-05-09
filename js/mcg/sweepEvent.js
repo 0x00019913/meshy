@@ -120,17 +120,6 @@ Object.assign(MCG.Sweep, (function() {
       if (pah < pbh) result *= -1;
 
       return Math.sign(result);
-
-      var f = pah < pbh ? a : b;
-      var s = pah < pbh ? b : a;
-
-      // if s is left of f-f.twin, then, at their earliest common horizontal
-      // coordinate, s is above f-f.twin; if right, then it's below; else it
-      // falls exactly on f-f.twin
-      var res = MCG.Math.leftCompareStrict(f.parent.p, f.parent.twin.p, s.p);
-      // result is inverted if a is first
-      if (pah < pbh) res *= -1;
-      return res;
     },
 
     // return left-right comparison for two events (right goes first)
