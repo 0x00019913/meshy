@@ -27,6 +27,39 @@ Object.assign(MCG.Sweep, (function() {
       function(a, b) { return a.linecompare(b); }
     );
 
+    var a = null, b = null;
+    while (events.length>0) {
+      break;
+      var ev = events.dequeue();
+      eventPrint(ev, "ev", dbg);
+      if (ev.id==6) a = ev;
+      if (ev.id==14) b = ev;
+    }
+
+    if (dbg && a && b) {
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
+
+      // primary sorting on horizontal coordinate (x if up axis is z)
+      var hcomp = pa.hcompare(pb);
+      // secondary sorting on vertical coordinate (y if up axis is z)
+      var vcomp = pa.vcompare(pb);
+      // tertiary sorting on left/right (right goes first so that, given two
+      //   segments sharing an endpoint but with no vertical overlap, the first
+      //   segment leaves the sweep status structure before the next goes in)
+      var lrcomp = a.lrcompare(b);
+      // quaternary sorting on slope (increasing)
+      var scomp = a.scompare(b);
+      // parent comparison function
+      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
+      var pcomp = a.parent.p[pcompare](b.parent.p);
+      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
+
+      eventPrint(a, "a ", dbg);
+      console.log(hcomp, vcomp, lrcomp, scomp, pcomp, ptcomp, Math.sign(pa.vcompare(pat)), Math.sign(pb.vcompare(pbt)), a.collinear(b));
+      eventPrint(b, "b ", dbg);
+    }
+
     var o = 1.0;
     var ct = 0, lim = Infinity;
     while (events.length > 0) {
@@ -72,7 +105,10 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(ev, o, 0x999999);
 
         //if (up) eventPrint(up, "up");
-        if (dn) eventPrint(dn, "dn");
+        if (dn) {
+
+          eventPrint(dn, "dn");
+        }
 
         handleAdjacentEvents(ev, dn);
         handleAdjacentEvents(up, ev);
@@ -96,6 +132,10 @@ Object.assign(MCG.Sweep, (function() {
           var ps = tev.weight < 0 ? tev.p : ev.p;
 
           resultSet.addPointPair(pf, ps);
+        }
+        else if (printEvents) {
+          debug.point(ev.p.toVector3(), 0.25, context.axis);
+          debug.point(tev.p.toVector3(), 0.25, context.axis);
         }
 
         eventDraw(ev, o);
@@ -327,7 +367,7 @@ Object.assign(MCG.Sweep, (function() {
         // event can leave first
         var ca = coincident(a.p, pi) || coincident(a.twin.p, pi);
         var cb = coincident(b.p, pi) || coincident(b.twin.p, pi);
-        
+
         if (ca) requeue(a);
         if (cb) requeue(b);
 

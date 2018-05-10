@@ -33,6 +33,10 @@ Object.assign(MCG.Sweep, (function() {
       return this.p.h === this.twin.p.h;
     },
 
+    horizontal: function() {
+      return this.p.v === this.twin.p.v;
+    },
+
     // determine which of two events comes first in a left-right sweep
     sweepcompare: function(other) {
       var a = this, b = other;
@@ -168,7 +172,7 @@ Object.assign(MCG.Sweep, (function() {
       if (lc === 0 && lct === 0) {
         // it's possible that events testing as parallel are actually
         // antiparallel, so one has the greater slope
-        var cva = pa.vcompare(pat), cvb = pb.vcompare(pbt);
+        var cva = Math.sign(pa.vcompare(pat)), cvb = Math.sign(pb.vcompare(pbt));
         if (cva > cvb) return -1;
         else if (cva < cvb) return 1;
 
@@ -273,18 +277,27 @@ Object.assign(MCG.Sweep, (function() {
     collinear: function(other) {
       var a = this, b = other;
 
-      var pa = a.parent.p, pat = a.twin.parent.p;
-      var pb = b.parent.p, pbt = b.twin.parent.p;
+      var pa = a.p, pat = a.twin.p;
+      var pb = b.p, pbt = b.twin.p;
 
       // verify that the event pairs actually overlap
-      if (a.twin.p.h <= b.p.h || a.p.h >= b.twin.p.h) return false;
-      if (a.twin.p.v <= b.p.v || a.p.v >= b.twin.p.v) return false;
+      if (a.horizontal() && b.horizontal()) {
+        if (Math.max(pa.h, pat.h) <= Math.min(pb.h, pbt.h)) return false;
+        if (Math.max(pb.h, pbt.h) <= Math.min(pa.h, pat.h)) return false;
+      }
+      else {
+        if (Math.max(pa.v, pat.v) <= Math.min(pb.v, pbt.v)) return false;
+        if (Math.max(pb.v, pbt.v) <= Math.min(pa.v, pat.v)) return false;
+      }
 
       if (a.vertical() && b.vertical()) return true;
 
       var collinear = MCG.Math.collinear;
 
-      return collinear(pa, pat, pb) && collinear(pa, pat, pbt);
+      var ppa = a.parent.p, ppat = a.twin.parent.p;
+      var ppb = b.parent.p, ppbt = b.twin.parent.p;
+
+      return collinear(ppa, ppat, ppb) && collinear(ppa, ppat, ppbt);
     },
 
     endpointsCoincident: function(other) {
