@@ -45,7 +45,7 @@ Object.assign(MCG.Math, (function() {
     // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
     // (deviation results from the fact that the coordinates snap to an integer
     // grid, so the integer coords may not be collinear even if their original
-    // float coords were within a reasonable epsilon)
+    // float coords were within a reasonable epsilon).
 
     if (Math.abs(tarea) < maxdist * Math.SQRT2) return 0;
     else return Math.sign(tarea);
@@ -121,9 +121,6 @@ Object.assign(MCG.Math, (function() {
     }
 
     return result;
-
-    return !!(leftOn(a0, a1, b0) ^ leftOn(a0, a1, b1)) &&
-           !!(leftOn(b0, b1, a0) ^ leftOn(b0, b1, a1));
   }
 
   // calculate intersection point of a0-a1 segment and b0-b1 segment

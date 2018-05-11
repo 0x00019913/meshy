@@ -40,17 +40,10 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pat = a.twin.p;
       var pb = b.p, pbt = b.twin.p;
 
-      // primary sorting on horizontal coordinate (x if up axis is z)
       var hcomp = pa.hcompare(pb);
-      // secondary sorting on vertical coordinate (y if up axis is z)
       var vcomp = pa.vcompare(pb);
-      // tertiary sorting on left/right (right goes first so that, given two
-      //   segments sharing an endpoint but with no vertical overlap, the first
-      //   segment leaves the sweep status structure before the next goes in)
       var lrcomp = a.lrcompare(b);
-      // quaternary sorting on slope (increasing)
       var scomp = a.scompare(b);
-      // parent comparison function
       var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
       var pcomp = a.parent.p[pcompare](b.parent.p);
       var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
@@ -71,7 +64,7 @@ Object.assign(MCG.Sweep, (function() {
       var ev = events.dequeue();
 
       var printEvents = dbg;
-      var drawEvents = dbg;
+      var drawEvents = false;
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -84,7 +77,7 @@ Object.assign(MCG.Sweep, (function() {
 
         it = status.findIter(ev);
         if (!it) {
-          eventPrint(ev, undefined, true);
+          eventPrint(ev, "it", true);
           statusPrint(true);
           console.log("failed to find inserted event");
           break;
@@ -92,7 +85,7 @@ Object.assign(MCG.Sweep, (function() {
         var dn = it.prev();
         it = status.findIter(ev);
         if (!it) {
-          eventPrint(ev, undefined, true);
+          eventPrint(ev, "it", true);
           statusPrint(true);
           console.log("failed to find inserted event");
           break;
@@ -105,13 +98,10 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(ev, o, 0x999999);
 
         //if (up) eventPrint(up, "up");
-        if (dn) {
+        if (dn) eventPrint(dn, "dn");
 
-          eventPrint(dn, "dn");
-        }
-
-        handleAdjacentEvents(ev, dn);
         handleAdjacentEvents(up, ev);
+        handleAdjacentEvents(ev, dn);
       }
       else {
         var tev = ev.twin;
@@ -121,8 +111,8 @@ Object.assign(MCG.Sweep, (function() {
 
         if (!rem && printEvents && tev.contributing) {
           console.log("remove nonexistent event", tev.id, ev.id, statusString());
-          debug.point(ev.p.toVector3(), 0.5, axis);
-          debug.point(tev.p.toVector3(), 0.5, axis);
+          debug.point(ev.p.toVector3(), 0.225, axis);
+          debug.point(tev.p.toVector3(), 0.225, axis);
 
           statusPrint();
         }
@@ -134,8 +124,7 @@ Object.assign(MCG.Sweep, (function() {
           resultSet.addPointPair(pf, ps);
         }
         else if (printEvents) {
-          debug.point(ev.p.toVector3(), 0.25, context.axis);
-          debug.point(tev.p.toVector3(), 0.25, context.axis);
+          debug.line(ev.p.toVector3(), tev.p.toVector3(), 1, false, 0.1875, context.axis);
         }
 
         eventDraw(ev, o);
@@ -270,9 +259,11 @@ Object.assign(MCG.Sweep, (function() {
       // point at which rs's twin will be split
       var pr = rcomp > 0 ? ptb : pta;
 
+
       // left split left event
       var lsplit = null;
       if (lcomp !== 0) {
+        var rm = status.remove(lf);
         lsplit = eventSplit(lf, pl);
         eventPrint(lf, "lf");
         eventPrint(ls, "ls");
@@ -280,6 +271,7 @@ Object.assign(MCG.Sweep, (function() {
         queue(lsplit);
         eventPrint(lf.twin, "lr");
         eventPrint(lsplit, "ll");
+        if (rm) status.insert(lf);
       }
 
       if (lcomp !== 0) eventDraw(lf, o+0.3);
@@ -290,11 +282,13 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(rf, "rf");
         eventPrint(rs, "rs");
         var rst = rs.twin;
+        //var rm = status.remove(rst);
         rsplit = eventSplit(rst, pr);
         queue(rsplit);
         queue(rst.twin);
         eventPrint(rst.twin, "rr");
         eventPrint(rsplit, "rl");
+        //if (rm) status.insert(rst);
       }
 
       if (rcomp !== 0) eventDraw(rs.twin, o+0.3);

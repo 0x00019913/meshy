@@ -326,9 +326,16 @@ Slicer.prototype.makeLayers = function() {
   var segmentSets = this.buildLayerSegmentSets();
 
   for (var i=0; i<segmentSets.length; i++) {
+    //if (i!=3425) continue;
     // create layer from the contours
-    if (i==64) {
+    if (i==3425) {
       if (0) {
+        segmentSets[i].forEachPointPair(function(p1, p2) {
+            var v1 = p1.toVector3();
+            var v2 = p2.toVector3();
+            debug.line(v1, v2, 1, false, 0, "z");
+        });
+
         segmentSets[i].toPolygonSet().forEachPointPair(function(p1, p2) {
             var v1 = p1.toVector3();
             var v2 = p2.toVector3();
