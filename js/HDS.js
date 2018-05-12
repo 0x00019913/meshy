@@ -113,7 +113,7 @@ function HDS(sourceVertices, sourceFaces) {
     nodes[n] = new HDSNode(vs[n]);
   }
 
-  // populate face and
+  // populate face and halfedge arrays
   for (var f = 0; f < nf; f++) {
     var face3 = fs[f];
 
