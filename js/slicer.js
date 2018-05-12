@@ -247,34 +247,38 @@ Slicer.prototype.setPreviewSlice = function() {
 
   debug.cleanup();
 
-  if (layer) {
+  if (layer && layer.base.count() > 0) {
     layer.base.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
       debug.line(v1, v2);
     });
+
     debug.lines();
-  }
 
-  return;
-
-  if (segmentSet.count() > 0) {
-    var polygonSet = segmentSet.toPolygonSet();
-    var ps = polygonSet;//new MCG.PolygonSet(context).add(polygonSet.elements[0]);
-    ps.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
+    layer.base.computeBisectors();
+    layer.base.forEachPoint(function(p, b) {
+      var v1 = p.toVector3();
+      var v2 = p.clone().addScaledVector(b, -0.25).toVector3();
       debug.line(v1, v2);
     });
-    debug.lines();
 
-    var result = MCG.Boolean.union(ps, undefined, true).toPolygonSet();
-    if (result.count() < 1 || !result.elements[0].valid()) console.log(result, "NO RESULT GEOMETRY");
-    result.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 0.1, axis);
-    });
+    for (var i=1; i<60; i++) {
+      if (i!=10) continue;
+      var offset = layer.base.offset(-0.1 * i);
+      offset.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3();
+        var v2 = p2.toVector3();
+        debug.line(v1, v2, 1, false, .175, axis);
+      });
+
+      var union = MCG.Boolean.union(offset, undefined, true);
+      union.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3();
+        var v2 = p2.toVector3();
+        debug.line(v1, v2, 1, false, 0.2, axis);
+      });
+    }
 
     debug.lines();
   }
@@ -326,9 +330,8 @@ Slicer.prototype.makeLayers = function() {
   var segmentSets = this.buildLayerSegmentSets();
 
   for (var i=0; i<segmentSets.length; i++) {
-    //if (i!=3425) continue;
     // create layer from the contours
-    if (i==3425) {
+    if (i==64) {
       if (0) {
         segmentSets[i].forEachPointPair(function(p1, p2) {
             var v1 = p1.toVector3();

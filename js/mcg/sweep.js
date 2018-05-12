@@ -65,6 +65,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var printEvents = dbg;
       var drawEvents = false;
+      var incr = 0.1;
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -73,23 +74,10 @@ Object.assign(MCG.Sweep, (function() {
 
         if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
 
-        var it;
-
-        it = status.findIter(ev);
-        if (!it) {
-          eventPrint(ev, "it", true);
-          statusPrint(true);
-          console.log("failed to find inserted event");
-          break;
-        }
+        var it = status.findIter(ev);
+        if (!it) console.log("failed to find inserted event", ev.id, ev.twin.id);
         var dn = it.prev();
-        it = status.findIter(ev);
-        if (!it) {
-          eventPrint(ev, "it", true);
-          statusPrint(true);
-          console.log("failed to find inserted event");
-          break;
-        }
+        it.next();
         var up = it.next();
 
         ev.setDepthFromBelow(dn);
@@ -99,22 +87,36 @@ Object.assign(MCG.Sweep, (function() {
 
         //if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
+        statusPrintShort();
 
         handleAdjacentEvents(up, ev);
         handleAdjacentEvents(ev, dn);
       }
       else {
         var tev = ev.twin;
+
+        var dn = null, up = null;
+
+        if (tev.contributing) {
+          var it = status.findIter(tev);
+          if (!it) console.log("failed to find twin event", tev.id, ev.id);
+          dn = it.prev();
+          it.next();
+          up = it.next();
+        }
+
         var rem = status.remove(tev);
 
         eventPrint(ev);
 
-        if (!rem && printEvents && tev.contributing) {
-          console.log("remove nonexistent event", tev.id, ev.id, statusString());
-          debug.point(ev.p.toVector3(), 0.225, axis);
-          debug.point(tev.p.toVector3(), 0.225, axis);
+        if (!rem && tev.contributing) {
+          if (printEvents) {
+            console.log("remove nonexistent event", tev.id, ev.id, statusString());
+            debug.point(ev.p.toVector3(), 0.225, axis);
+            debug.point(tev.p.toVector3(), 0.225, axis);
 
-          statusPrint();
+            statusPrint();
+          }
         }
 
         if (eventValid(tev)) {
@@ -124,23 +126,19 @@ Object.assign(MCG.Sweep, (function() {
           resultSet.addPointPair(pf, ps);
         }
         else if (printEvents) {
-          debug.line(ev.p.toVector3(), tev.p.toVector3(), 1, false, 0.1875, context.axis);
+          //debug.line(ev.p.toVector3(), tev.p.toVector3(), 1, false, 0.1875, context.axis);
         }
+
+        handleIntersectingEvents(up, dn);
 
         eventDraw(ev, o);
       }
 
-      statusDraw(o+0.6);
-      if (drawEvents) o += 1;
+      statusDraw(o+incr*6);
+      if (drawEvents) o += incr*10;
     }
 
     debug.lines();
-
-    resultSet.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3();
-        var v2 = p2.toVector3();
-        //debug.oneline(v1, v2, 0.2, "z");
-    });
 
     return resultSet;
 
@@ -172,7 +170,7 @@ Object.assign(MCG.Sweep, (function() {
     // if an event pair's left-right events are in the incorrect order (this can
     // occur when splitting events), recreate the event pair
     function handleSwappedEventPair(ev) {
-      var correct = ev.vertical() ? ev.p.vcompare(ev.twin.p) < 0 : ev.p.vcompare(ev.twin.p) < 0;
+      var correct = (ev.vertical() ? ev.p.vcompare(ev.twin.p) : ev.p.vcompare(ev.twin.p)) < 0;
 
       if (correct) return;
 
@@ -230,8 +228,8 @@ Object.assign(MCG.Sweep, (function() {
       eventPrint(a, "a ");
       eventPrint(b, "b ");
 
-      eventDraw(a, o+0.1);
-      eventDraw(b, o+0.2);
+      eventDraw(a, o+incr*1);
+      eventDraw(b, o+incr*2);
 
       var pa = a.p, pb = b.p;
       var ta = a.twin, tb = b.twin;
@@ -274,7 +272,7 @@ Object.assign(MCG.Sweep, (function() {
         if (rm) status.insert(lf);
       }
 
-      if (lcomp !== 0) eventDraw(lf, o+0.3);
+      if (lcomp !== 0) eventDraw(lf, o+incr*3);
 
       // right split left event
       var rsplit = null;
@@ -291,7 +289,7 @@ Object.assign(MCG.Sweep, (function() {
         //if (rm) status.insert(rst);
       }
 
-      if (rcomp !== 0) eventDraw(rs.twin, o+0.3);
+      if (rcomp !== 0) eventDraw(rs.twin, o+incr*3);
 
       // redundant left events; invalidate one and set the other to represent
       // the depths and weights of both
@@ -316,12 +314,14 @@ Object.assign(MCG.Sweep, (function() {
       eventPrint(lval, "lv");
       eventPrint(linv, "li");
 
-      eventDraw(linv, o+0.4);
-      eventDraw(lval, o+0.5);
+      eventDraw(linv, o+incr*4);
+      eventDraw(lval, o+incr*5);
     }
 
     // handle a possible intersection between a pair of events
     function handleIntersectingEvents(a, b) {
+      if (a === null || b === null) return null;
+
       var flags = MCG.Math.IntersectionFlags;
       var intersect = a.intersects(b);
 
@@ -347,8 +347,8 @@ Object.assign(MCG.Sweep, (function() {
       }
 
       if (pi !== null) {
-        eventDraw(a, o+0.1, undefined);
-        eventDraw(b, o+0.1, undefined);
+        eventDraw(a, o+incr*1, undefined);
+        eventDraw(b, o+incr*1, undefined);
 
         var va = a.vertical(), vb = b.vertical();
 
@@ -390,10 +390,10 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(b, "b ");
         eventPrint(ita, "ia");
         eventPrint(itb, "ib");
-        eventDraw(a, o+0.2, 0x999999);
-        eventDraw(b, o+0.2, 0x999999);
-        eventDraw(ita, o+0.3, 0x666666);
-        eventDraw(itb, o+0.3, 0x666666);
+        eventDraw(a, o+incr*2, 0x999999);
+        eventDraw(b, o+incr*2, 0x999999);
+        eventDraw(ita, o+incr*3, 0x666666);
+        eventDraw(itb, o+incr*3, 0x666666);
 
       }
     }
@@ -431,7 +431,7 @@ Object.assign(MCG.Sweep, (function() {
       var da = e.depthBelow + e.weight;
       var db = e.depthBelow;
 
-      return (da === 0 && db > 0) || (da > 0 && db === 0);
+      return (da < 1 && db > 0) || (da > 0 && db < 1);
     }
 
     function statusString() {
@@ -474,12 +474,12 @@ Object.assign(MCG.Sweep, (function() {
       else console.log(e.toString(pref));
     }
 
-    function eventDraw(e, incr, color, force) {
+    function eventDraw(e, offset, color, force) {
       if (!e || (!force && !drawEvents)) return;
 
-      incr = incr || 0;
+      offset = offset || 0;
       color = color || eventColor(e);
-      debug.oneline(e.p.toVector3(), e.twin.p.toVector3(), incr, axis, color);
+      debug.oneline(e.p.toVector3(), e.twin.p.toVector3(), offset, axis, color);
     }
 
     function eventColor(e) {
@@ -491,14 +491,14 @@ Object.assign(MCG.Sweep, (function() {
       else return 0x6666ff;
     }
 
-    function statusDraw(incr, force) {
-      incr = incr || 0;
+    function statusDraw(offset, force) {
+      offset = offset || 0;
       var it = status.iterator();
       var e;
-      var o = 0;
+      var ooo = 0;
       while ((e = it.next()) !== null) {
-        if (e.contributing) eventDraw(e, incr+o, 0x444444, force);
-        o += 0.02;
+        if (e.contributing) eventDraw(e, offset+ooo, 0x444444, force);
+        ooo += 0.02;
       }
     }
   }

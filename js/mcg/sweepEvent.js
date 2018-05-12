@@ -297,7 +297,7 @@ Object.assign(MCG.Sweep, (function() {
       var ppa = a.parent.p, ppat = a.twin.parent.p;
       var ppb = b.parent.p, ppbt = b.twin.parent.p;
 
-      return collinear(ppa, ppat, ppb) && collinear(ppa, ppat, ppbt);
+      return collinear(pa, pat, pb) && collinear(pa, pat, pbt);
     },
 
     endpointsCoincident: function(other) {
