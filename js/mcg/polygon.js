@@ -10,6 +10,11 @@ MCG.Polygon = (function() {
     this.bisectors = null;
     this.angles = null;
 
+    this.area = 0;
+
+    this.max = new MCG.Vector(context).setScalar(-Infinity);
+    this.min = new MCG.Vector(context).setScalar(Infinity);
+
     // construct the polygon
 
     if (!sourcePoints) return this;
@@ -31,6 +36,7 @@ MCG.Polygon = (function() {
       // else, just add the new point
       else {
         points.push(spt);
+        this.updateBounds(spt);
       }
     }
 
@@ -41,6 +47,14 @@ MCG.Polygon = (function() {
       var ct = this.count();
       if (collinear(points[ct-2], points[ct-1], points[0])) points.splice(--ct, 1);
       if (collinear(points[ct-1], points[0], points[1])) points.splice(0, 1);
+
+      ct = this.count();
+
+      var area = MCG.Math.area;
+
+      for (var i = 1; i < ct - 1; i++) {
+        this.area += area(points[0], points[i], points[i+1]);
+      }
     }
 
     return this;
@@ -95,9 +109,24 @@ MCG.Polygon = (function() {
       }
     },
 
+    updateBounds: function(pt) {
+      this.max.max(pt);
+      this.min.min(pt);
+    },
+
+    size: function() {
+      return this.min.vectorTo(this.max);
+    },
+
     valid: function() {
       if (this.closed) return this.count() >= 3;
       else return this.count() > 1;
+    },
+
+    invalidate: function() {
+      this.points = [];
+
+      return this;
     },
 
     clone: function() {
@@ -147,6 +176,14 @@ MCG.Polygon = (function() {
     // floating-point-space units)
     offset: function(dist) {
       var clone = this.clone();
+
+      var size = this.size();
+      var minsize = Math.min(size.h, size.v) / this.context.p;
+
+      if (dist <= -minsize / 2) {
+        clone.invalidate();
+        return clone;
+      }
 
       this.computeBisectors();
 

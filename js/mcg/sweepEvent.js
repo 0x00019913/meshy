@@ -109,37 +109,6 @@ Object.assign(MCG.Sweep, (function() {
       return a.id - b.id;
     },
 
-    // return vertical axis comparison for two left events at the later event's
-    // horizontal coordinate
-    vcompare: function(other) {
-      var a = this, b = other;
-      var pa = a.p, pb = b.p;
-      var pah = pa.h, pbh = pb.h;
-
-      var pav = pa.v, pbv = pb.v;
-
-      // if events horizontally coincident, just test the vertical coordinate
-      if (pah === pbh) return pav - pbv;
-
-      var patv = a.twin.p.v, pbtv = b.twin.p.v;
-
-      // if no horizontal overlap, decide by which is higher/lower
-      if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
-      if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
-
-      var f = pah < pbh ? a : b;
-      var s = pah < pbh ? b : a;
-
-      var h = Math.max(pah, pbh);
-      var ft = f.twin;
-
-      var interp = f.p.v + (ft.p.v-f.p.v) * (h-f.p.h) / (ft.p.h-f.p.h);
-      var result = s.p.v - interp;
-      if (pah < pbh) result *= -1;
-
-      return Math.sign(result);
-    },
-
     // return left-right comparison for two events (right goes first)
     lrcompare: function(other) {
       if (!this.isLeft && other.isLeft) return -1;
@@ -274,6 +243,43 @@ Object.assign(MCG.Sweep, (function() {
       this.depthBelow = depthBelow;
     },
 
+    // return vertical axis comparison for two left events at the later event's
+    // horizontal coordinate
+    vcompare: function(other) {
+      var a = this, b = other;
+      var pa = a.p, pb = b.p;
+      var pah = pa.h, pbh = pb.h;
+
+      var pav = pa.v, pbv = pb.v;
+
+      // if events horizontally coincident, just test the vertical coordinate
+      if (pah === pbh) return pav - pbv;
+
+      var patv = a.twin.p.v, pbtv = b.twin.p.v;
+
+      // if no horizontal overlap, decide by which is higher/lower
+      if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
+      if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
+
+      var f = pah < pbh ? a : b;
+      var s = pah < pbh ? b : a;
+
+      var h = Math.max(pah, pbh);
+
+      var result = Math.sign(s.p.v - f.interpolate(h));
+      if (pah < pbh) result *= -1;
+
+      return result;
+    },
+
+    // interpolate a (non-vertical) left event's segment to a given horizontal
+    // coordinate
+    interpolate: function(h) {
+      var pa = this.p, pat = this.twin.p;
+
+      return pa.v + (pat.v - pa.v) * (h - pa.h) / (pat.h - pa.h);
+    },
+
     collinear: function(other) {
       var a = this, b = other;
 
@@ -293,9 +299,6 @@ Object.assign(MCG.Sweep, (function() {
       if (a.vertical() && b.vertical()) return true;
 
       var collinear = MCG.Math.collinear;
-
-      var ppa = a.parent.p, ppat = a.twin.parent.p;
-      var ppb = b.parent.p, ppbt = b.twin.parent.p;
 
       return collinear(pa, pat, pb) && collinear(pa, pat, pbt);
     },

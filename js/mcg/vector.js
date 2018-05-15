@@ -57,6 +57,13 @@ MCG.Vector = (function() {
       return this;
     },
 
+    setScalar: function(s) {
+      this.h = s;
+      this.v = s;
+
+      return this;
+    },
+
     copy: function(other) {
       this.h = other.h;
       this.v = other.v;
@@ -141,7 +148,7 @@ MCG.Vector = (function() {
     // floating-point space)
     normalize: function() {
       if (this.h === 0 && this.v === 0) return this;
-      
+
       var length = this.context.p;
       return this.setLength(length);
     },
@@ -172,6 +179,20 @@ MCG.Vector = (function() {
 
     vectorTo: function(other) {
       return other.clone().sub(this);
+    },
+
+    max: function(other) {
+      this.h = Math.max(this.h, other.h);
+      this.v = Math.max(this.v, other.v);
+
+      return this;
+    },
+
+    min: function(other) {
+      this.h = Math.min(this.h, other.h);
+      this.v = Math.min(this.v, other.v);
+
+      return this;
     },
 
     hcompare: function(other) {

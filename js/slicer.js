@@ -260,23 +260,23 @@ Slicer.prototype.setPreviewSlice = function() {
     layer.base.forEachPoint(function(p, b) {
       var v1 = p.toVector3();
       var v2 = p.clone().addScaledVector(b, -0.25).toVector3();
-      debug.line(v1, v2);
+      //debug.line(v1, v2);
     });
 
-    for (var i=1; i<60; i++) {
-      if (i!=10) continue;
-      var offset = layer.base.offset(-0.1 * i);
+    for (var i=1; i<3; i++) {
+      if (i!=2) continue;
+      var offset = layer.base.offset(-0.025 * i);
       offset.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3();
         var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, .175, axis);
+        debug.line(v1, v2, 1, false, 0.1, axis);
       });
 
       var union = MCG.Boolean.union(offset, undefined, true);
       union.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3();
         var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, 0.2, axis);
+        debug.line(v1, v2, 1, false, 0, axis);
       });
     }
 

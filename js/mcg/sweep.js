@@ -74,11 +74,7 @@ Object.assign(MCG.Sweep, (function() {
 
         if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
 
-        var it = status.findIter(ev);
-        if (!it) console.log("failed to find inserted event", ev.id, ev.twin.id);
-        var dn = it.prev();
-        it.next();
-        var up = it.next();
+        var [up, dn] = eventGetAdjacent(ev);
 
         ev.setDepthFromBelow(dn);
 
@@ -95,19 +91,13 @@ Object.assign(MCG.Sweep, (function() {
       else {
         var tev = ev.twin;
 
-        var dn = null, up = null;
+        eventPrint(ev);
 
-        if (tev.contributing) {
-          var it = status.findIter(tev);
-          if (!it) console.log("failed to find twin event", tev.id, ev.id);
-          dn = it.prev();
-          it.next();
-          up = it.next();
-        }
+        var up = null, dn = null;
+
+        if (tev.contributing) [up, dn] = eventGetAdjacent(tev);
 
         var rem = status.remove(tev);
-
-        eventPrint(ev);
 
         if (!rem && tev.contributing) {
           if (printEvents) {
@@ -129,7 +119,7 @@ Object.assign(MCG.Sweep, (function() {
           //debug.line(ev.p.toVector3(), tev.p.toVector3(), 1, false, 0.1875, context.axis);
         }
 
-        handleIntersectingEvents(up, dn);
+        handleAdjacentEvents(up, dn);
 
         eventDraw(ev, o);
       }
@@ -145,6 +135,8 @@ Object.assign(MCG.Sweep, (function() {
 
     // create an event pair for a p1-p2 segment
     function addPointPair(p1, p2) {
+      if (MCG.Math.coincident(p1, p2)) return null;
+
       // determine direction: if dir, p1 is left and p2 is right; reverse if !dir
       var vertical = p1.h === p2.h;
       var dir = vertical ? (p1.v < p2.v) : (p1.h < p2.h);
@@ -170,21 +162,68 @@ Object.assign(MCG.Sweep, (function() {
     // if an event pair's left-right events are in the incorrect order (this can
     // occur when splitting events), recreate the event pair
     function handleSwappedEventPair(ev) {
-      var correct = (ev.vertical() ? ev.p.vcompare(ev.twin.p) : ev.p.vcompare(ev.twin.p)) < 0;
+      var tev = ev.twin;
+
+      var correct = (ev.vertical() ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p)) < 0;
 
       if (correct) return;
 
-      eventInvalidate(ev);
+      console.log("REPLACE EVENT");
+      eventPrint(ev, undefined, true);
 
-      var tev = ev.twin;
+      eventInvalidate(ev);
 
       var p1 = ev.weight > 0 ? ev.p : tev.p;
       var p2 = ev.weight > 0 ? tev.p : ev.p;
 
       var el = addPointPair(p1, p2);
 
+      if (el === null) return null;
+
       // assign weight and reverse sign if event pair points were flipped
       el.weight = ev.p === el.p ? ev.weight : -ev.weight;
+    }
+
+    function eventGetAdjacent(ev) {
+      var it = status.findIter(ev);
+
+      if (!it) {
+        console.log("failed to find event in status", ev.id, ev.twin.id);
+        statusPrint();
+
+        statusRebuild();
+
+        it = status.findIter(ev);
+
+        if (!it) {
+          if (printEvents) {
+            debug.point(ev.p.toVector3(), 0.2, context.axis);
+            debug.lines();
+          }
+          console.log("rebuilt: ");
+          statusPrint();
+        }
+      }
+
+      var prev = it.prev();
+      it.next();
+      var next = it.next();
+
+      return [next, prev];
+    }
+
+    function statusRebuild() {
+      var iter = status.iterator();
+      var statusEvents = [];
+      var e;
+
+      while ((e = iter.next()) !== null) statusEvents.push(e);
+
+      status.clear();
+
+      for (var ei = 0; ei < statusEvents.length; ei++) {
+        status.insert(statusEvents[ei]);
+      }
     }
 
     function queue(e) {
@@ -459,7 +498,7 @@ Object.assign(MCG.Sweep, (function() {
       var iter = status.iterator(), e, p = null;
       while ((e = iter.prev()) !== null) {
         if (p) {
-          console.log(p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p));
+          console.log(p.linecompare(e), p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p), p.interpolate(e.p.h), e.interpolate(p.p.h));
         }
         eventPrint(e, "N ", force);
         p = e;
