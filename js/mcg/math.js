@@ -47,7 +47,7 @@ Object.assign(MCG.Math, (function() {
     // grid, so the integer coords may not be collinear even if their original
     // float coords were within a reasonable epsilon).
 
-    if (Math.abs(tarea) < maxdist * Math.SQRT2) return 0;
+    if (Math.abs(tarea) < maxdist / Math.SQRT2) return 0;
     else return Math.sign(tarea);
   }
 
@@ -82,14 +82,24 @@ Object.assign(MCG.Math, (function() {
   }
 
   // signifies special types of intersection between a0-a1 and b0-b1 segments
-  var IntersectionFlags = {
-    none: 0,            // no intersection
-    intermediate: 1,    // intersection excludes endpoints
-    a0: 2,              // intersection point is a0
-    a1: 4,              // intersectoin point is a1
-    b0: 8,              // intersection point is b0
-    b1: 16              // intersection point is b1
-  };
+  var IntersectionFlags = (function() {
+    var a0 = 2, a1 = 4;
+    var b0 = 8, b1 = 16;
+    var a0b0 = a0 | b0;
+    var a1b1 = a1 | b1;
+
+    return {
+      none: 0,                // no intersection
+      intermediate: 1,        // intersection excludes endpoints
+      a0: a0,                 // intersection point is a0
+      a1: a1,                 // intersection point is a1
+      b0: b0,                 // intersection point is b0
+      b1: b1,                 // intersection point is b1
+      a0b0: a0b0,             // intersection point is start of both segments
+      a1b1: a1b1,             // intersection point is end of both segments
+      collinear: a0b0 | a1b1  // a and b are collinear
+    };
+  })();
 
   // intersection predicate: return true if a-b segment intersects c-d
   // segment; returns

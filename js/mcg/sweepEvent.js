@@ -261,12 +261,16 @@ Object.assign(MCG.Sweep, (function() {
       if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
       if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
 
+      // first and second events by horizontal coordinate
       var f = pah < pbh ? a : b;
       var s = pah < pbh ? b : a;
+      var ps = s.p;
 
-      var h = Math.max(pah, pbh);
+      var v = f.interpolate(ps.h).v;
 
-      var result = Math.sign(s.p.v - f.interpolate(h));
+      var result = Math.sign(ps.v - v);
+
+      // flip result if necessary
       if (pah < pbh) result *= -1;
 
       return result;
@@ -275,9 +279,12 @@ Object.assign(MCG.Sweep, (function() {
     // interpolate a (non-vertical) left event's segment to a given horizontal
     // coordinate
     interpolate: function(h) {
+      var context = this.p.context;
       var pa = this.p, pat = this.twin.p;
 
-      return pa.v + (pat.v - pa.v) * (h - pa.h) / (pat.h - pa.h);
+      var v = pa.v + (pat.v - pa.v) * (h - pa.h) / (pat.h - pa.h);
+
+      return new MCG.Vector(context, h, v);
     },
 
     collinear: function(other) {

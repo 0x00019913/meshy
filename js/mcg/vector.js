@@ -7,8 +7,8 @@ MCG.Vector = (function() {
   function Vector(context, h, v) {
     this.context = context || new MCG.Context();
 
-    this.h = h || 0;
-    this.v = v || 0;
+    this.h = Math.round(h || 0);
+    this.v = Math.round(v || 0);
 
     this.type = MCG.Types.vector;
   }

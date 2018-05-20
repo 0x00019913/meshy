@@ -1,5 +1,9 @@
 Object.assign(MCG.Sweep, (function() {
 
+  var printEvents = false;
+  var drawEvents = false;
+  var incr = 0;
+
   function sweep(src0, src1, dbg) {
     if (!src0) return null;
 
@@ -27,52 +31,25 @@ Object.assign(MCG.Sweep, (function() {
       function(a, b) { return a.linecompare(b); }
     );
 
-    var a = null, b = null;
-    while (events.length>0) {
-      break;
-      var ev = events.dequeue();
-      eventPrint(ev, "ev", dbg);
-      if (ev.id==6) a = ev;
-      if (ev.id==14) b = ev;
-    }
-
-    if (dbg && a && b) {
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
-
-      var hcomp = pa.hcompare(pb);
-      var vcomp = pa.vcompare(pb);
-      var lrcomp = a.lrcompare(b);
-      var scomp = a.scompare(b);
-      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
-      var pcomp = a.parent.p[pcompare](b.parent.p);
-      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
-
-      eventPrint(a, "a ", dbg);
-      console.log(hcomp, vcomp, lrcomp, scomp, pcomp, ptcomp, Math.sign(pa.vcompare(pat)), Math.sign(pb.vcompare(pbt)), a.collinear(b));
-      eventPrint(b, "b ", dbg);
-    }
-
     var o = 1.0;
     var ct = 0, lim = Infinity;
     while (events.length > 0) {
       if (ct++ > lim) {
-        console.log("exceeded event limit", lim);
+        //throw "exceeded event limit " + lim;
+        console.log("exceeded event limit " + lim);
         break;
       }
 
-      var ev = events.dequeue();
+      var ev = dequeue();
 
-      var printEvents = dbg;
-      var drawEvents = false;
-      var incr = 0.1;
+      printEvents = dbg && inRange(ev.p.h, -55300, -54900);
+      drawEvents = false;
+      incr = 0.1;
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
 
-        var ins = status.insert(ev);
-
-        if (!ins && printEvents) console.log("insert already existing event", ev.id, ev.twin.id, statusString());
+        var ins = insert(ev);
 
         var [up, dn] = eventGetAdjacent(ev);
 
@@ -83,10 +60,13 @@ Object.assign(MCG.Sweep, (function() {
 
         //if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
-        statusPrintShort();
 
-        handleAdjacentEvents(up, ev);
-        handleAdjacentEvents(ev, dn);
+        if (ev.id==380) {
+          statusPrint();
+        }
+
+        handleEventIntersection(up, ev);
+        handleEventIntersection(ev, dn);
       }
       else {
         var tev = ev.twin;
@@ -97,32 +77,14 @@ Object.assign(MCG.Sweep, (function() {
 
         if (tev.contributing) [up, dn] = eventGetAdjacent(tev);
 
-        var rem = status.remove(tev);
+        handleRightEvent(ev);
 
-        if (!rem && tev.contributing) {
-          if (printEvents) {
-            console.log("remove nonexistent event", tev.id, ev.id, statusString());
-            debug.point(ev.p.toVector3(), 0.225, axis);
-            debug.point(tev.p.toVector3(), 0.225, axis);
-
-            statusPrint();
-          }
-        }
-
-        if (eventValid(tev)) {
-          var pf = tev.weight < 0 ? ev.p : tev.p;
-          var ps = tev.weight < 0 ? tev.p : ev.p;
-
-          resultSet.addPointPair(pf, ps);
-        }
-        else if (printEvents) {
-          //debug.line(ev.p.toVector3(), tev.p.toVector3(), 1, false, 0.1875, context.axis);
-        }
-
-        handleAdjacentEvents(up, dn);
+        handleEventIntersection(up, dn);
 
         eventDraw(ev, o);
       }
+
+      statusPrintShort();
 
       statusDraw(o+incr*6);
       if (drawEvents) o += incr*10;
@@ -166,12 +128,14 @@ Object.assign(MCG.Sweep, (function() {
 
       var correct = (ev.vertical() ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p)) < 0;
 
-      if (correct) return;
+      if (correct) return ev;
 
-      console.log("REPLACE EVENT");
-      eventPrint(ev, undefined, true);
+      if (printEvents) {
+        console.log("handled swapped pair:");
+        eventPrint(ev);
+      }
 
-      eventInvalidate(ev);
+      var rm = eventInvalidate(ev);
 
       var p1 = ev.weight > 0 ? ev.p : tev.p;
       var p2 = ev.weight > 0 ? tev.p : ev.p;
@@ -182,68 +146,271 @@ Object.assign(MCG.Sweep, (function() {
 
       // assign weight and reverse sign if event pair points were flipped
       el.weight = ev.p === el.p ? ev.weight : -ev.weight;
+
+      if (rm) insert(el);
+
+      return el;
     }
 
     function eventGetAdjacent(ev) {
       var it = status.findIter(ev);
 
       if (!it) {
-        console.log("failed to find event in status", ev.id, ev.twin.id);
-        statusPrint();
-
-        statusRebuild();
-
-        it = status.findIter(ev);
-
-        if (!it) {
-          if (printEvents) {
-            debug.point(ev.p.toVector3(), 0.2, context.axis);
-            debug.lines();
+        var present = false;
+        var iter = status.iterator();
+        var e;
+        while ((e=iter.next()) !== null) {
+          if (e==ev) {
+            present = true;
+            break;
           }
-          console.log("rebuilt: ");
+        }
+        if (present) {
+          console.log("failed to find event in status", ev.id, ev.twin.id);
           statusPrint();
         }
       }
 
-      var prev = it.prev();
-      it.next();
-      var next = it.next();
+      var prev = null, next = null;
+      if (it) {
+        prev = it.prev();
+        it.next();
+        next = it.next();
+      }
 
       return [next, prev];
     }
 
-    function statusRebuild() {
-      var iter = status.iterator();
-      var statusEvents = [];
-      var e;
-
-      while ((e = iter.next()) !== null) statusEvents.push(e);
-
-      status.clear();
-
-      for (var ei = 0; ei < statusEvents.length; ei++) {
-        status.insert(statusEvents[ei]);
-      }
+    function queue(e) {
+      return events.queue(e);
     }
 
-    function queue(e) {
-      events.queue(e);
+    function dequeue(e) {
+      return events.dequeue();
     }
 
     function requeue(e) {
-      status.remove(e);
+      remove(e);
       queue(e);
     }
 
-    // handle (possibly collinear) intersection between a pair of left events
-    function handleAdjacentEvents(a, b) {
-      if (a === null || b === null) return null;
+    function insert(e) {
+      var result = status.insert(e);
 
-      if (a.collinear(b)) {
-        return handleCollinearEvents(a, b);
+      if (!result && printEvents) {
+        console.log("insert already existing event", e.id, e.twin.id, statusString());
+      }
+
+      return result;
+    }
+
+    function remove(e) {
+      result = status.remove(e);
+
+      if (!result && e.contributing && printEvents) {
+        console.log("remove nonexistent event", e.id, e.twin.id, statusString());
+      }
+
+      return result;
+    }
+
+    function handleRightEvent(e) {
+      var te = e.twin;
+
+      remove(te);
+
+      if (eventValid(te)) {
+        var pf = te.weight < 0 ? e.p : te.p;
+        var ps = te.weight < 0 ? te.p : e.p;
+
+        resultSet.addPointPair(pf, ps);
       }
       else {
-        return handleIntersectingEvents(a, b);
+        //debug.line(e.p.toVector3(), te.p.toVector3(), 1, false, 0.05, context.axis);
+      }
+    }
+
+    // handle a possible intersection between a pair of events
+    function handleEventIntersection(a, b) {
+      if (a === null || b === null) return null;
+
+      var flags = MCG.Math.IntersectionFlags;
+      var intersect = a.intersects(b);
+
+      var pa = a.p, pb = b.p;
+      var ta = a.twin, tb = b.twin;
+      var pta = ta.p, ptb = tb.p;
+
+      // if collinear, need to do special handling
+      if (intersect === flags.collinear) {
+        // verify that the event pairs actually overlap
+        if (a.horizontal() && b.horizontal()) {
+          if (Math.max(pa.h, pta.h) <= Math.min(pb.h, ptb.h)) return null;
+          if (Math.max(pb.h, ptb.h) <= Math.min(pa.h, pta.h)) return null;
+        }
+        else {
+          if (Math.max(pa.v, pta.v) <= Math.min(pb.v, ptb.v)) return null;
+          if (Math.max(pb.v, ptb.v) <= Math.min(pa.v, pta.v)) return null;
+        }
+
+        if (printEvents) console.log("collinear");
+
+        eventPrint(a, "a ");
+        eventPrint(b, "b ");
+
+        // if one is vertical, both are close enough to vertical
+        var vertical = a.vertical() || b.vertical();
+
+        // compare bounds for left events and right events
+        var lcomp = vertical ? pa.vcompare(pb) : pa.hcompare(pb);
+        var rcomp = vertical ? pta.vcompare(ptb) : pta.hcompare(ptb);
+
+        // there will be up to two split points, one on the left, another on the
+        // right
+
+        // first and second left events
+        var lf = lcomp > 0 ? b : a;
+        var ls = lcomp > 0 ? a : b;
+        // point at which lf will be split
+        var pl = lcomp > 0 ? pa : pb;
+
+        // first and second right events
+        var rf = rcomp > 0 ? tb : ta;
+        var rs = rcomp > 0 ? ta : tb;
+        // point at which rs's twin will be split
+        var pr = rcomp > 0 ? ptb : pta;
+
+        // left split left event
+        var lsplit = null;
+        if (lcomp !== 0) {
+          var rm = remove(lf);
+          lsplit = eventSplit(lf, pl);
+          eventPrint(lf, "lf");
+          eventPrint(ls, "ls");
+          eventPrint(lf.twin, "lr");
+          eventPrint(lsplit, "ll");
+          if (rm) insert(lf);
+        }
+
+        if (lcomp !== 0) eventDraw(lf, o+incr*3);
+
+        // right split left event
+        var rsplit = null;
+        if (rcomp !== 0) {
+          eventPrint(rf, "rf");
+          eventPrint(rs, "rs");
+          var rst = rs.twin;
+          //var rm = remove(rst);
+          rsplit = eventSplit(rst, pr);
+          eventPrint(rst.twin, "rr");
+          eventPrint(rsplit, "rl");
+          //if (rm) insert(rst);
+        }
+
+        if (rcomp !== 0) eventDraw(rs.twin, o+incr*3);
+
+        // redundant left events; invalidate one and set the other to represent
+        // the depths and weights of both
+
+        var lval, linv;
+        if (lsplit) {
+          lval = lsplit;
+          linv = ls;
+        }
+        else {
+          lval = a;
+          linv = b;
+        }
+
+        eventInvalidate(linv);
+
+        lval.depthBelow = linv.depthBelow;
+        lval.weight += linv.weight;
+
+        if (lval.weight === 0) eventInvalidate(lval);
+
+        eventPrint(lval, "lv");
+        eventPrint(linv, "li");
+
+        eventDraw(linv, o+incr*4);
+        eventDraw(lval, o+incr*5);
+      }
+      // else, not collinear but intersecting at at most one point
+      else {
+        // intersection point
+        var pi = null;
+
+        // only admit intersections on one endpoint of one segment or some
+        // non-endpoint on both segments
+        if (intersect === flags.intermediate) pi = a.intersection(b);
+        else if (intersect === flags.a0) pi = pa;
+        else if (intersect === flags.a1) pi = pta;
+        else if (intersect === flags.b0) pi = pb;
+        else if (intersect === flags.b1) pi = ptb;
+
+        if (pi && printEvents) {
+          console.log("intersection (", pi.h, pi.v, ")", intersect);
+
+          eventPrint(a, "sa");
+          eventPrint(b, "sb");
+        }
+
+        if (pi !== null) {
+          //debug.point(pi.toVector3(), 0.0001, axis);
+
+          eventDraw(a, o+incr*1, undefined);
+          eventDraw(b, o+incr*1, undefined);
+
+          var va = a.vertical(), vb = b.vertical();
+
+          var coincident = MCG.Math.coincident;
+          var ita = null, itb = null;
+
+          var ca = coincident(pa, pi), cta = coincident(pta, pi);
+          var cb = coincident(pb, pi), ctb = coincident(ptb, pi);
+
+          remove(a);
+          remove(b);
+
+          // if one event is split at the other's start, both events will end up
+          // in the status structure while having only one point of vertical
+          // overlap; requeue the second event so that the first half of the
+          // split event can leave first
+          if (ca) queue(a);
+          if (cb) queue(b);
+
+          if (!(ca || cta)) {
+            ita = eventSplit(a, pi);
+
+            // if vertical status changed for either segment, it's possible that
+            // the left and right events swapped
+            a = handleSwappedEventPair(a);
+            ita = handleSwappedEventPair(ita);
+            //if (a.vertical() !== va) handleSwappedEventPair(a);
+            //if (ita.vertical() !== va) handleSwappedEventPair(ita);
+          }
+          if (!(cb || ctb)) {
+            itb = eventSplit(b, pi);
+
+            b = handleSwappedEventPair(b);
+            itb = handleSwappedEventPair(itb);
+            //if (b.vertical() !== vb) handleSwappedEventPair(b);
+            //if (itb.vertical() !== vb) handleSwappedEventPair(itb);
+          }
+
+          insert(a);
+          insert(b);
+
+          eventPrint(a, "a ");
+          eventPrint(b, "b ");
+          eventPrint(ita, "ia");
+          eventPrint(itb, "ib");
+          eventDraw(a, o+incr*2, 0x999999);
+          eventDraw(b, o+incr*2, 0x999999);
+          eventDraw(ita, o+incr*3, 0x666666);
+          eventDraw(itb, o+incr*3, 0x666666);
+
+        }
       }
     }
 
@@ -300,15 +467,13 @@ Object.assign(MCG.Sweep, (function() {
       // left split left event
       var lsplit = null;
       if (lcomp !== 0) {
-        var rm = status.remove(lf);
+        var rm = remove(lf);
         lsplit = eventSplit(lf, pl);
         eventPrint(lf, "lf");
         eventPrint(ls, "ls");
-        queue(lf.twin);
-        queue(lsplit);
         eventPrint(lf.twin, "lr");
         eventPrint(lsplit, "ll");
-        if (rm) status.insert(lf);
+        if (rm) insert(lf);
       }
 
       if (lcomp !== 0) eventDraw(lf, o+incr*3);
@@ -319,13 +484,11 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(rf, "rf");
         eventPrint(rs, "rs");
         var rst = rs.twin;
-        //var rm = status.remove(rst);
+        //var rm = remove(rst);
         rsplit = eventSplit(rst, pr);
-        queue(rsplit);
-        queue(rst.twin);
         eventPrint(rst.twin, "rr");
         eventPrint(rsplit, "rl");
-        //if (rm) status.insert(rst);
+        //if (rm) insert(rst);
       }
 
       if (rcomp !== 0) eventDraw(rs.twin, o+incr*3);
@@ -357,90 +520,10 @@ Object.assign(MCG.Sweep, (function() {
       eventDraw(lval, o+incr*5);
     }
 
-    // handle a possible intersection between a pair of events
-    function handleIntersectingEvents(a, b) {
-      if (a === null || b === null) return null;
-
-      var flags = MCG.Math.IntersectionFlags;
-      var intersect = a.intersects(b);
-
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
-
-      // intersection point
-      var pi;
-
-      if (intersect === flags.intermediate) pi = a.intersection(b);
-      else if (intersect === flags.a0) pi = pa;
-      else if (intersect === flags.a1) pi = pat;
-      else if (intersect === flags.b0) pi = pb;
-      else if (intersect === flags.b1) pi = pbt;
-      // if no intersection or intersection at two endpoints
-      else pi = null;
-
-      if (pi && printEvents) {
-        console.log("intersection (", pi.h, pi.v, ")", intersect);
-
-        eventPrint(a, "sa");
-        eventPrint(b, "sb");
-      }
-
-      if (pi !== null) {
-        eventDraw(a, o+incr*1, undefined);
-        eventDraw(b, o+incr*1, undefined);
-
-        var va = a.vertical(), vb = b.vertical();
-
-        var coincident = MCG.Math.coincident;
-        var ita = null, itb = null;
-
-        // if one event is split at the other's start, both events will end up
-        // in the status structure while having only one point of vertical
-        // overlap; remove the second event and requeue it so that the split
-        // event can leave first
-        var ca = coincident(a.p, pi) || coincident(a.twin.p, pi);
-        var cb = coincident(b.p, pi) || coincident(b.twin.p, pi);
-
-        if (ca) requeue(a);
-        if (cb) requeue(b);
-
-        if (!ca) {
-          ita = eventSplit(a, pi);
-
-          queue(a.twin);
-          queue(ita);
-
-          // if vertical status changed for either segment, it's possible that
-          // the left and right events swapped
-          if (a.vertical() !== va) handleSwappedEventPair(a);
-          if (ita.vertical() !== va) handleSwappedEventPair(ita);
-        }
-        if (!cb) {
-          itb = eventSplit(b, pi);
-
-          queue(b.twin);
-          queue(itb);
-
-          if (b.vertical() !== vb) handleSwappedEventPair(b);
-          if (itb.vertical() !== vb) handleSwappedEventPair(itb);
-        }
-
-        eventPrint(a, "a ");
-        eventPrint(b, "b ");
-        eventPrint(ita, "ia");
-        eventPrint(itb, "ib");
-        eventDraw(a, o+incr*2, 0x999999);
-        eventDraw(b, o+incr*2, 0x999999);
-        eventDraw(ita, o+incr*3, 0x666666);
-        eventDraw(itb, o+incr*3, 0x666666);
-
-      }
-    }
-
     function eventInvalidate(e) {
       e.setNoncontributing();
 
-      status.remove(e);
+      return remove(e);
     }
 
     // given the left endpoint e of an event pair, split it at vertex pi
@@ -454,6 +537,9 @@ Object.assign(MCG.Sweep, (function() {
 
       e.twin = ei;
       te.twin = ite;
+
+      queue(ei);
+      queue(ite);
 
       return ite;
     }
@@ -498,7 +584,10 @@ Object.assign(MCG.Sweep, (function() {
       var iter = status.iterator(), e, p = null;
       while ((e = iter.prev()) !== null) {
         if (p) {
-          console.log(p.linecompare(e), p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p), p.interpolate(e.p.h), e.interpolate(p.p.h));
+          var f = p.p.h < e.p.h ? p : e;
+          var s = p.p.h < e.p.h ? e : p;
+          var ps = s.p;
+          console.log(p.linecompare(e), p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p), f.interpolate(ps.h).v, ps.v);
         }
         eventPrint(e, "N ", force);
         p = e;
