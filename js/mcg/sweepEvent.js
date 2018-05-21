@@ -64,18 +64,11 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      // further comparisons based on parent extents
-
-      // parent comparison function
-      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
-
-      var pcomp = a.parent.p[pcompare](b.parent.p);
+      // comparison based on parent extents
+      var pcomp = a.pcompare(b);
       if (pcomp !== 0) return pcomp;
 
-      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
-      if (ptcomp !== 0) return ptcomp;
-
-      return a.id - b.id;
+      return Math.sign(a.id - b.id);
     },
 
     // comparison for two left events along a vertical line passing through both
@@ -84,6 +77,7 @@ Object.assign(MCG.Sweep, (function() {
     linecompare: function(other) {
       var a = this, b = other;
 
+      // in case events are the same
       if (a.id === b.id) return 0;
 
       // primary sorting on vertical coordinate at the start of the later event
@@ -95,18 +89,11 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      // further comparisons based on parent extents
-
-      // parent comparison function
-      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
-
-      var pcomp = a.parent.p[pcompare](b.parent.p);
+      // comparison based on parent extents
+      var pcomp = a.pcompare(b);
       if (pcomp !== 0) return pcomp;
 
-      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
-      if (ptcomp !== 0) return ptcomp;
-
-      return a.id - b.id;
+      return Math.sign(a.id - b.id);
     },
 
     // return left-right comparison for two events (right goes first)
@@ -162,6 +149,23 @@ Object.assign(MCG.Sweep, (function() {
 
         return Math.sign(sa - sb);
       }
+    },
+
+    // returns comparison between two left/two right events based on their
+    // parent extents
+    pcompare: function(other) {
+      var a = this, b = other;
+
+      // parent comparison function
+      var pcompare = a.vertical() || b.vertical() ? "vcompare" : "hcompare";
+
+      var pcomp = a.parent.p[pcompare](b.parent.p);
+      if (pcomp !== 0) return pcomp;
+
+      var ptcomp = a.twin.parent.p[pcompare](b.twin.parent.p);
+      if (ptcomp !== 0) return ptcomp;
+
+      return 0;
     },
 
     toString: function(pref) {
@@ -253,7 +257,7 @@ Object.assign(MCG.Sweep, (function() {
       var pav = pa.v, pbv = pb.v;
 
       // if events horizontally coincident, just test the vertical coordinate
-      if (pah === pbh) return pav - pbv;
+      if (pah === pbh) return Math.sign(pav - pbv);
 
       var patv = a.twin.p.v, pbtv = b.twin.p.v;
 

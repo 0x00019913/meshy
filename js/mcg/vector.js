@@ -196,11 +196,11 @@ MCG.Vector = (function() {
     },
 
     hcompare: function(other) {
-      return this.h - other.h;
+      return Math.sign(this.h - other.h);
     },
 
     vcompare: function(other) {
-      return this.v - other.v;
+      return Math.sign(this.v - other.v);
     }
 
   });
