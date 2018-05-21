@@ -137,8 +137,8 @@ Object.assign(MCG.Sweep, (function() {
 
       if (correct) return ev;
 
-      console.log("handled swapped pair");
       if (printEvents) {
+        console.log("handled swapped pair");
         eventPrint(ev);
       }
 
@@ -266,8 +266,8 @@ Object.assign(MCG.Sweep, (function() {
           if (Math.max(pb.v, ptb.v) <= Math.min(pa.v, pta.v)) return null;
         }
 
-        // Overlap may look like this (or one may be entirely contained in
-        // the other or one or both endpoints may be coincident):
+        // Collinear intersection may look like this (or one may be entirely
+        // contained in the other or one or both endpoints may be coincident):
         //
         // p |----x----------| p.t
         // q      |----------y----| q.t
@@ -339,15 +339,8 @@ Object.assign(MCG.Sweep, (function() {
         // redundant left events; invalidate one and set the other to represent
         // the depths and weights of both
 
-        var lval, linv;
-        if (lsplit) {
-          lval = lsplit;
-          linv = ls;
-        }
-        else {
-          lval = a;
-          linv = b;
-        }
+        var lval = lsplit && ls === b ? lsplit : a;
+        var linv = lsplit && ls === a ? lsplit : b;
 
         eventInvalidate(linv);
 
@@ -356,7 +349,7 @@ Object.assign(MCG.Sweep, (function() {
 
         if (lval.weight === 0) eventInvalidate(lval);
 
-        if (lcomp !== 0) insert(lf);
+        //if (lcomp !== 0) insert(lf);
         if (lval.contributing) insert(lval);
 
         eventPrint(lval, "lv");

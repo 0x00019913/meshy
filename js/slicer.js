@@ -251,32 +251,40 @@ Slicer.prototype.setPreviewSlice = function() {
     layer.base.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 0, axis);
+      //debug.line(v1, v2, 1, false, 0, axis);
     });
 
     debug.lines();
 
-    return;
-
     for (var i=2; i<3; i++) {
-      var offset = layer.base.offset(-0.025 * i);
-      offset.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3();
-        var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, 0, axis);
-      });
+      var offset = layer.base.offset(-0.02 * i);
 
-      var union = MCG.Boolean.union(offset, undefined, true);
-      union.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3();
-        var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, 0.1, axis);
-      });
-      union.toPolygonSet().forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3();
-        var v2 = p2.toVector3();
-        debug.line(v1, v2, 1, false, 0.2, axis);
-      });
+      if (1) {
+        offset.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0, axis);
+        });
+
+        var union = MCG.Boolean.union(offset, undefined, true);
+        union.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.1, axis);
+        });
+        union.toPolygonSet().forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.2, axis);
+        });
+      }
+      else {
+        MCG.Boolean.union(offset).toPolygonSet().forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0, axis);
+        });
+      }
     }
 
     debug.lines();

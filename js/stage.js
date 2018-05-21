@@ -727,7 +727,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 150;
+  this.currentSlice = 75;
   this.setSlice();
 
   this.filename = this.model.filename;
