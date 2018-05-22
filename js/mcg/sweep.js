@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 0, 0.7*p) && ev.p.v < .1*p;
+      printEvents = dbg;// && inRange(ev.p.h, 0, 0.7*p) && ev.p.v < .1*p;
       drawEvents = false;
       incr = 0.1;
 
@@ -132,30 +132,25 @@ Object.assign(MCG.Sweep, (function() {
     // occur when splitting events), recreate the event pair
     function handleSwappedEventPair(ev) {
       var tev = ev.twin;
+      var vertical = ev.vertical();
 
-      var compare = ev.vertical() ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p);
-
+      var compare = vertical ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p);
       if (compare < 0) return ev;
 
+      console.log("handled swapped pair");
       if (printEvents) {
-        console.log("handled swapped pair");
         eventPrint(ev);
       }
 
       var rm = eventInvalidate(ev);
 
-      //var p1 = ev.weight > 0 ? ev.p : tev.p;
-      //var p2 = ev.weight > 0 ? tev.p : ev.p;
-
       var el = createPointPair(tev.p, ev.p);
 
       if (el === null) return null;
 
-      var vertical = el.vertical();
-
-      // assign weight and reverse sign if nonvertical
-      el.weight = vertical ? ev.weight : -ev.weight;
-      el.depthBelow = vertical ? ev.depthBelow : ev.depthBelow + ev.weight;
+      // assign weight and depth
+      el.weight = -ev.weight;
+      el.depthBelow = vertical ? (ev.depthBelow + ev.weight) : ev.depthBelow;
 
       queue(el.twin);
 
