@@ -112,6 +112,7 @@ MCG.DirectedAdjacencyMap = (function() {
 
       // if complete loop, return that
       if (current === start) return loop;
+      //else debug.point(current.pt.toVector3(), 0.05, this.context.axis);
     }
 
     // failed to find a loop

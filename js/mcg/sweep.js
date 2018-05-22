@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg;
+      printEvents = dbg && inRange(ev.p.h, 0, 0.7*p) && ev.p.v < .1*p;
       drawEvents = false;
       incr = 0.1;
 
@@ -61,8 +61,8 @@ Object.assign(MCG.Sweep, (function() {
         //if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
 
-        handleEventIntersection(up, ev);
         handleEventIntersection(ev, dn);
+        handleEventIntersection(up, ev);
       }
       else {
         var tev = ev.twin;
@@ -133,9 +133,9 @@ Object.assign(MCG.Sweep, (function() {
     function handleSwappedEventPair(ev) {
       var tev = ev.twin;
 
-      var correct = (ev.vertical() ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p)) < 0;
+      var compare = ev.vertical() ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p);
 
-      if (correct) return ev;
+      if (compare < 0) return ev;
 
       if (printEvents) {
         console.log("handled swapped pair");
@@ -144,20 +144,24 @@ Object.assign(MCG.Sweep, (function() {
 
       var rm = eventInvalidate(ev);
 
-      var p1 = ev.weight > 0 ? ev.p : tev.p;
-      var p2 = ev.weight > 0 ? tev.p : ev.p;
+      //var p1 = ev.weight > 0 ? ev.p : tev.p;
+      //var p2 = ev.weight > 0 ? tev.p : ev.p;
 
-      var el = createPointPair(p1, p2);
+      var el = createPointPair(tev.p, ev.p);
 
       if (el === null) return null;
 
-      // assign weight and reverse sign if event pair points were flipped
-      el.weight = -ev.weight;
+      var vertical = el.vertical();
+
+      // assign weight and reverse sign if nonvertical
+      el.weight = vertical ? ev.weight : -ev.weight;
+      el.depthBelow = vertical ? ev.depthBelow : ev.depthBelow + ev.weight;
 
       queue(el.twin);
 
-      if (rm) insert(el);
-      else queue(el);
+      if (!el.vertical()) {
+        if (rm) insert(el);
+      }
 
       return el;
     }
@@ -246,6 +250,7 @@ Object.assign(MCG.Sweep, (function() {
     // handle a possible intersection between a pair of events
     function handleEventIntersection(a, b) {
       if (a === null || b === null) return null;
+      if (!a.contributing || !b.contributing) return null;
 
       var flags = MCG.Math.IntersectionFlags;
       var intersection = a.intersects(b);
@@ -257,7 +262,7 @@ Object.assign(MCG.Sweep, (function() {
       // if collinear, need to do special handling
       if (intersection === flags.collinear) {
         // verify that the event pairs actually overlap
-        if (a.horizontal() && b.horizontal()) {
+        if (a.horizontal() || b.horizontal()) {
           if (Math.max(pa.h, pta.h) <= Math.min(pb.h, ptb.h)) return null;
           if (Math.max(pb.h, ptb.h) <= Math.min(pa.h, pta.h)) return null;
         }
@@ -339,6 +344,7 @@ Object.assign(MCG.Sweep, (function() {
         // redundant left events; invalidate one and set the other to represent
         // the depths and weights of both
 
+        // valid event is the one above the other
         var lval = lsplit && ls === b ? lsplit : a;
         var linv = lsplit && ls === a ? lsplit : b;
 
@@ -349,7 +355,11 @@ Object.assign(MCG.Sweep, (function() {
 
         if (lval.weight === 0) eventInvalidate(lval);
 
-        //if (lcomp !== 0) insert(lf);
+        // note that lf isn't inserted back; this is because the scanline is at
+        // least at lval's start point, which is either at the end of lf (if
+        // split) or at the start of both lf and ls, and one of them is lval
+
+        // insert valid segment if it's contributing
         if (lval.contributing) insert(lval);
 
         eventPrint(lval, "lv");
@@ -379,8 +389,6 @@ Object.assign(MCG.Sweep, (function() {
         }
 
         if (pi !== null) {
-          //debug.point(pi.toVector3(), 0.0001, axis);
-
           eventDraw(a, o+incr*1, undefined);
           eventDraw(b, o+incr*1, undefined);
 
@@ -405,24 +413,20 @@ Object.assign(MCG.Sweep, (function() {
           if (!(ca || cta)) {
             ita = eventSplit(a, pi);
 
-            queue(ita);
-
             // if vertical status changed for either segment, it's possible that
             // the left and right events swapped
             a = handleSwappedEventPair(a);
             ita = handleSwappedEventPair(ita);
-            //if (a.vertical() !== va) handleSwappedEventPair(a);
-            //if (ita.vertical() !== va) handleSwappedEventPair(ita);
+
+            queue(ita);
           }
           if (!(cb || ctb)) {
             itb = eventSplit(b, pi);
 
-            queue(itb);
-
             b = handleSwappedEventPair(b);
             itb = handleSwappedEventPair(itb);
-            //if (b.vertical() !== vb) handleSwappedEventPair(b);
-            //if (itb.vertical() !== vb) handleSwappedEventPair(itb);
+
+            queue(itb);
           }
 
           if (rma) insert(a);

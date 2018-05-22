@@ -259,7 +259,7 @@ Slicer.prototype.setPreviewSlice = function() {
     for (var i=2; i<3; i++) {
       var offset = layer.base.offset(-0.02 * i);
 
-      if (1) {
+      if (0) {
         offset.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
