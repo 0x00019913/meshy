@@ -64,134 +64,134 @@ Stage = function() {
 // initializes floor.
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
-  this.gui.add(this, "import");
+  this.gui.add(this, "import").name("Import");
 
   var exportFolder = this.gui.addFolder("Export");
   this.filename = "meshy";
-  this.filenameController = exportFolder.add(this, "filename");
-  exportFolder.add(this, "exportOBJ");
-  exportFolder.add(this, "exportSTL");
-  exportFolder.add(this, "exportSTLascii");
+  this.filenameController = exportFolder.add(this, "filename").name("Filename");
+  exportFolder.add(this, "exportOBJ").name("Export OBJ");
+  exportFolder.add(this, "exportSTL").name("Export STL");
+  exportFolder.add(this, "exportSTLascii").name("Export ASCII STL");
 
   var settingsFolder = this.gui.addFolder("Settings");
 
-  settingsFolder.add(this, "isLittleEndian");
-  settingsFolder.add(this, "vertexPrecision").onChange(this.setVertexPrecision.bind(this));
+  settingsFolder.add(this, "isLittleEndian").name("Little endian");
+  settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this));
 
   var displayFolder = this.gui.addFolder("Display");
-  displayFolder.add(this, "toggleFloor");
-  displayFolder.add(this, "toggleAxisWidget");
-  displayFolder.add(this, "toggleCOM");
-  displayFolder.add(this, "toggleWireframe");
-  displayFolder.add(this, "cameraToModel");
+  displayFolder.add(this, "toggleFloor").name("Toggle floor");
+  displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget");
+  displayFolder.add(this, "toggleCOM").name("Toggle center of mass");
+  displayFolder.add(this, "toggleWireframe").name("Toggle wireframe");
+  displayFolder.add(this, "cameraToModel").name("Camera to model");
   this.meshColor = "#662828"; // todo: reset to 0xffffff
   this.meshColorController =
-    displayFolder.addColor(this, "meshColor").onChange(this.setMeshColor.bind(this));
+    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshColor.bind(this));
 
   var transformFolder = this.gui.addFolder("Transform");
 
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
-  translateFolder.add(this, "xTranslation");
-  translateFolder.add(this, "translateX");
+  translateFolder.add(this, "xTranslation").name("x translation");
+  translateFolder.add(this, "translateX").name("Translate on x");
   this.yTranslation = 0;
-  translateFolder.add(this, "yTranslation");
-  translateFolder.add(this, "translateY");
+  translateFolder.add(this, "yTranslation").name("y translation");
+  translateFolder.add(this, "translateY").name("Translate on y");
   this.zTranslation = 0;
-  translateFolder.add(this, "zTranslation");
-  translateFolder.add(this, "translateZ");
+  translateFolder.add(this, "zTranslation").name("z translation");
+  translateFolder.add(this, "translateZ").name("Translate on z");
 
   var rotateFolder = transformFolder.addFolder("Rotate");
   this.xRotation = 0;
-  rotateFolder.add(this, "xRotation");
-  rotateFolder.add(this, "rotateX");
+  rotateFolder.add(this, "xRotation").name("x rotation");
+  rotateFolder.add(this, "rotateX").name("Rotate about x");
   this.yRotation = 0;
-  rotateFolder.add(this, "yRotation");
-  rotateFolder.add(this, "rotateY");
+  rotateFolder.add(this, "yRotation").name("y rotation");
+  rotateFolder.add(this, "rotateY").name("Rotate about y");
   this.zRotation = 0;
-  rotateFolder.add(this, "zRotation");
-  rotateFolder.add(this, "rotateZ");
+  rotateFolder.add(this, "zRotation").name("z rotation");
+  rotateFolder.add(this, "rotateZ").name("Rotate about z");
 
   var scaleFolder = transformFolder.addFolder("Scale");
 
   var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
   this.xScale = 1;
-  scaleByFactorFolder.add(this, "xScale", 0);
-  scaleByFactorFolder.add(this, "scaleX");
+  scaleByFactorFolder.add(this, "xScale", 0).name("x scale");
+  scaleByFactorFolder.add(this, "scaleX").name("Scale on x");
   this.yScale = 1;
-  scaleByFactorFolder.add(this, "yScale", 0);
-  scaleByFactorFolder.add(this, "scaleY");
+  scaleByFactorFolder.add(this, "yScale", 0).name("y scale");
+  scaleByFactorFolder.add(this, "scaleY").name("Scale on y");
   this.zScale = 1;
-  scaleByFactorFolder.add(this, "zScale", 0);
-  scaleByFactorFolder.add(this, "scaleZ");
+  scaleByFactorFolder.add(this, "zScale", 0).name("z scale");
+  scaleByFactorFolder.add(this, "scaleZ").name("Scale on z");
   this.allScale = 1;
-  scaleByFactorFolder.add(this, "allScale", 0);
-  scaleByFactorFolder.add(this, "scaleAll");
+  scaleByFactorFolder.add(this, "allScale", 0).name("all scale");
+  scaleByFactorFolder.add(this, "scaleAll").name("Scale on all axes");
 
   var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
   this.scaleOnAllAxes = true;
-  scaleToSizeFolder.add(this, "scaleOnAllAxes");
+  scaleToSizeFolder.add(this, "scaleOnAllAxes").name("Scale on all axes");
   this.newXSize = 1;
-  scaleToSizeFolder.add(this, "newXSize", 0);
-  scaleToSizeFolder.add(this, "scaleToXSize");
+  scaleToSizeFolder.add(this, "newXSize", 0).name("New x size");
+  scaleToSizeFolder.add(this, "scaleToXSize").name("Scale to x size");
   this.newYSize = 1;
-  scaleToSizeFolder.add(this, "newYSize", 0);
-  scaleToSizeFolder.add(this, "scaleToYSize");
+  scaleToSizeFolder.add(this, "newYSize", 0).name("New y size");
+  scaleToSizeFolder.add(this, "scaleToYSize").name("Scale to y size");
   this.newZSize = 1;
-  scaleToSizeFolder.add(this, "newZSize", 0);
-  scaleToSizeFolder.add(this, "scaleToZSize");
+  scaleToSizeFolder.add(this, "newZSize", 0).name("New z size");
+  scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size");
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
 
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size");
-  ringSizeFolder.add(this, "mCircle");
+  ringSizeFolder.add(this, "mCircle").name("Mark circle");
   this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes);
-  ringSizeFolder.add(this, "scaleToRingSize");
-  ringSizeFolder.add(this, "mDeactivate");
+  ringSizeFolder.add(this, "newRingSize", ringSizes).name("New ring size");
+  ringSizeFolder.add(this, "scaleToRingSize").name("Scale to ring size");
+  ringSizeFolder.add(this, "mDeactivate").name("End measurement");
 
   var mirrorFolder = transformFolder.addFolder("Mirror");
-  mirrorFolder.add(this, "mirrorX");
-  mirrorFolder.add(this, "mirrorY");
-  mirrorFolder.add(this, "mirrorZ");
+  mirrorFolder.add(this, "mirrorX").name("Mirror on x");
+  mirrorFolder.add(this, "mirrorY").name("Mirror on y");
+  mirrorFolder.add(this, "mirrorZ").name("Mirror on z");
 
   var floorFolder = transformFolder.addFolder("Floor");
-  floorFolder.add(this, "floorX");
-  floorFolder.add(this, "floorY");
-  floorFolder.add(this, "floorZ");
+  floorFolder.add(this, "floorX").name("Floor to x");
+  floorFolder.add(this, "floorY").name("Floor to y");
+  floorFolder.add(this, "floorZ").name("Floor to z");
 
   var centerFolder = transformFolder.addFolder("Center");
-  centerFolder.add(this, "centerAll");
-  centerFolder.add(this, "centerX");
-  centerFolder.add(this, "centerY");
-  centerFolder.add(this, "centerZ");
+  centerFolder.add(this, "centerAll").name("Center on all");
+  centerFolder.add(this, "centerX").name("Center on x");
+  centerFolder.add(this, "centerY").name("Center on y");
+  centerFolder.add(this, "centerZ").name("Center on z");
 
-  transformFolder.add(this, "flipNormals");
+  transformFolder.add(this, "flipNormals").name("Flip normals");
 
   var calculationFolder = this.gui.addFolder("Calculate");
-  calculationFolder.add(this, "calcSurfaceArea");
-  calculationFolder.add(this, "calcVolume");
-  calculationFolder.add(this, "calcCenterOfMass");
+  calculationFolder.add(this, "calcSurfaceArea").name("Surface area");
+  calculationFolder.add(this, "calcVolume").name("Volume");
+  calculationFolder.add(this, "calcCenterOfMass").name("Center of mass");
 
   var measurementFolder = this.gui.addFolder("Measure");
-  measurementFolder.add(this, "mLength");
-  measurementFolder.add(this, "mAngle");
-  measurementFolder.add(this, "mCircle");
-  measurementFolder.add(this, "mCrossSectionX");
-  measurementFolder.add(this, "mCrossSectionY");
-  measurementFolder.add(this, "mCrossSectionZ");
-  measurementFolder.add(this, "mDeactivate");
+  measurementFolder.add(this, "mLength").name("Length");
+  measurementFolder.add(this, "mAngle").name("Angle");
+  measurementFolder.add(this, "mCircle").name("Circle");
+  measurementFolder.add(this, "mCrossSectionX").name("Cross-section x");
+  measurementFolder.add(this, "mCrossSectionY").name("Cross-section y");
+  measurementFolder.add(this, "mCrossSectionZ").name("Cross-section z");
+  measurementFolder.add(this, "mDeactivate").name("End measurement");
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness");
   this.thicknessThreshold = 0.1;
-  thicknessFolder.add(this, "thicknessThreshold", 0);
-  thicknessFolder.add(this, "viewThickness");
-  thicknessFolder.add(this, "clearThicknessView");
+  thicknessFolder.add(this, "thicknessThreshold", 0).name("Threshold");
+  thicknessFolder.add(this, "viewThickness").name("View thickness");
+  thicknessFolder.add(this, "clearThicknessView").name("Clear thickness view");
 
   var repairFolder = this.gui.addFolder("Repair (beta)");
-  repairFolder.add(this, "generatePatch");
-  repairFolder.add(this, "acceptPatch");
-  repairFolder.add(this, "cancelPatch");
+  repairFolder.add(this, "generatePatch").name("Generate patch");
+  repairFolder.add(this, "acceptPatch").name("Accept patch");
+  repairFolder.add(this, "cancelPatch").name("Cancel patch");
 
   this.verticalResolution = .05;//todo: back to 0.1
   this.planarResolution = 0.1;
@@ -203,9 +203,9 @@ Stage.prototype.generateUI = function() {
   this.sliceNumWalls = 2;
   this.buildSupportSliceFolderInactive();
 
-  this.gui.add(this, "undo");
-  this.gui.add(this, "redo");
-  this.gui.add(this, "delete");
+  this.gui.add(this, "undo").name("Undo");
+  this.gui.add(this, "redo").name("Redo");
+  this.gui.add(this, "delete").name("Delete");
 
   this.infoBox = new InfoBox();
   this.infoBox.add("Polycount", this, ["model","count"]);
@@ -359,25 +359,25 @@ Stage.prototype.removeSupports = function() {
 // build support & slicing folder when slice mode is off
 Stage.prototype.buildSupportSliceFolderInactive = function() {
   this.clearFolder(this.supportSliceFolder);
-  this.supportSliceFolder.add(this, "verticalResolution", .0001, 1);
-  this.supportSliceFolder.add(this, "planarResolution", .0001, 1);
-  this.supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]);
+  this.supportSliceFolder.add(this, "verticalResolution", .0001, 1).name("Vertical resolution");
+  this.supportSliceFolder.add(this, "planarResolution", .0001, 1).name("Planar resolution");
+  this.supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis");
   this.supportFolder = this.supportSliceFolder.addFolder("Supports");
   this.buildSupportFolder();
   this.sliceFolder = this.supportSliceFolder.addFolder("Slice");
   this.buildSliceFolderInactive();
 }
 Stage.prototype.buildSupportFolder = function() {
-  this.supportFolder.add(this, "supportAngle", 0, 90);
-  this.supportFolder.add(this, "supportSpacingFactor", 1, 20);
-  this.supportFolder.add(this, "supportRadius", 0.0001, 1);
-  this.supportFolder.add(this, "generateSupports");
-  this.supportFolder.add(this, "removeSupports");
+  this.supportFolder.add(this, "supportAngle", 0, 90).name("Angle");
+  this.supportFolder.add(this, "supportSpacingFactor", 1, 20).name("Spacing factor");
+  this.supportFolder.add(this, "supportRadius", 0.0001, 1).name("Radius");
+  this.supportFolder.add(this, "generateSupports").name("Generate supports");
+  this.supportFolder.add(this, "removeSupports").name("Remove supports");
 }
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceFolder.add(this, "activateSliceMode");
+  this.sliceFolder.add(this, "activateSliceMode").name("Activate slice mode");
 }
 // build the Slice folder for when slice mode is on
 // NB: the resulting elements go under the Supports & Slicing folder b/c
@@ -394,20 +394,20 @@ Stage.prototype.buildSliceFolderActive = function() {
       this,
       "currentSlice",
       0, numSlices
-    ).step(1).onChange(this.setSlice.bind(this));
+    ).name("Slice").step(1).onChange(this.setSlice.bind(this));
     this.sliceMode = this.model.getSliceMode();
     folder.add(
       this,
       "sliceMode",
       { "preview": SlicerModes.preview, "layer": SlicerModes.layer }
-    ).onChange(this.setSliceMode.bind(this));
+    ).name("Mode").onChange(this.setSliceMode.bind(this));
 
     this.sliceSettingsFolder = folder.addFolder("Layer Settings");
-    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).step(1);
-    this.sliceSettingsFolder.add(this, "recalculateLayers");
+    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).name("Wall count").step(1);
+    this.sliceSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
   }
 
-  this.supportSliceFolder.add(this, "deactivateSliceMode");
+  this.supportSliceFolder.add(this, "deactivateSliceMode").name("Deactivate slice mode");
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
@@ -445,9 +445,9 @@ Stage.prototype.buildScaleToMeasurementFolder = function() {
   if (this.scalableMeasurements && this.scalableMeasurements.length>0) {
     this.measurementToScale = this.scalableMeasurements[0];
     this.newMeasurementValue = 1;
-    this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements);
-    this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0);
-    this.scaleToMeasurementFolder.add(this, "scaleToMeasurement");
+    this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements).name("Measurement to scale");
+    this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0).name("New value");
+    this.scaleToMeasurementFolder.add(this, "scaleToMeasurement").name("Scale to measurement");
   }
 }
 Stage.prototype.clearFolder = function(folder) {
