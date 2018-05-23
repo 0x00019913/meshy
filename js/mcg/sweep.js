@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg;// && inRange(ev.p.h, 0, 0.7*p) && ev.p.v < .1*p;
+      printEvents = dbg && ev.p.h > 5*p && ev.p.v > 6.1*p;
       drawEvents = false;
       incr = 0.1;
 
@@ -137,8 +137,8 @@ Object.assign(MCG.Sweep, (function() {
       var compare = vertical ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p);
       if (compare < 0) return ev;
 
-      console.log("handled swapped pair");
       if (printEvents) {
+        console.log("handled swapped pair");
         eventPrint(ev);
       }
 
@@ -150,7 +150,7 @@ Object.assign(MCG.Sweep, (function() {
 
       // assign weight and depth
       el.weight = -ev.weight;
-      el.depthBelow = vertical ? (ev.depthBelow + ev.weight) : ev.depthBelow;
+      el.depthBelow = ev.depthBelow + ev.weight;
 
       queue(el.twin);
 
@@ -253,6 +253,13 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pb = b.p;
       var ta = a.twin, tb = b.twin;
       var pta = ta.p, ptb = tb.p;
+
+      if (printEvents) {
+        var lc = MCG.Math.leftCompare;
+        var labc = lc(pa, pta, pb), labd = lc(pa, pta, ptb);
+        var lcda = lc(pb, ptb, pa), lcdb = lc(pb, ptb, pta);
+        console.log(intersection, labc, labd, lcda, lcdb);
+      }
 
       // if collinear, need to do special handling
       if (intersection === flags.collinear) {

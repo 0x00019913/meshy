@@ -257,9 +257,9 @@ Slicer.prototype.setPreviewSlice = function() {
     debug.lines();
 
     for (var i=2; i<3; i++) {
-      var offset = layer.base.offset(-0.02 * i);
+      var offset = layer.base.offset(-0.021 * i);
 
-      if (0) {
+      if (1) {
         offset.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
@@ -518,11 +518,17 @@ function Layer(segmentSet) {
 Layer.prototype.computeContours = function(lineWidth, numWalls) {
   var base = this.base;
 
+  //todo: remove
+  numWalls = 1;
+
   var contours = [];
-  contours.push(base);
+  if (1) {
+    contours.push(this.base);
+    this.contours = contours;
+    return;
+  }
 
   for (var w = 0; w < numWalls; w++) {
-    break;
     var offsetSegments = MCG.Boolean.union(base.offset((w + 0.5) * -lineWidth));
     contours.push(offsetSegments.toPolygonSet());
   }
