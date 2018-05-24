@@ -11,7 +11,7 @@ MCG.Types = {
   polygon: 12,
   segment: 13,
 
-  abstractSet: 21,
+  abstractGeometrySet: 21,
   polygonSet: 22,
   segmentSet: 23,
 

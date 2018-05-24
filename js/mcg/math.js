@@ -28,6 +28,21 @@ Object.assign(MCG.Math, (function() {
     return bc.cross(ba) / 2;
   }
 
+  // distance from point p to line subtended by a-b segment
+  function distanceToLine(a, b, p) {
+    var ab = b.vectorTo(a);
+    var ap = p.vectorTo(a);
+
+    var dot = ab.dot(ap);
+
+    if (dot === 0) return ab.length();
+
+    var ablensq = ab.lengthSq();
+    var proj = ab.multiplyScalar(dot / ablensq);
+
+    return proj.distanceTo(ap);
+  }
+
   // leftness predicates - these account for the fuzziness introduced by
   // vertices' snapping to the integer grid
 
@@ -143,6 +158,7 @@ Object.assign(MCG.Math, (function() {
 
     // numerator
     var n;
+
     // calculate pa
     n = a0.h * (b1.v - b0.v) + b0.h * (a0.v - b1.v) + b1.h * (b0.v - a0.v);
     var pa = n / d;

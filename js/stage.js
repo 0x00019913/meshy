@@ -194,7 +194,7 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "cancelPatch").name("Cancel patch");
 
   this.verticalResolution = .05;//todo: back to 0.1
-  this.planarResolution = 0.1;
+  this.planarResolution = 0.05;
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
   this.supportAngle = 45;

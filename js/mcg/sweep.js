@@ -61,6 +61,8 @@ Object.assign(MCG.Sweep, (function() {
         //if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
 
+        if (ev.id==180) statusPrint();
+
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
       }
@@ -254,13 +256,6 @@ Object.assign(MCG.Sweep, (function() {
       var ta = a.twin, tb = b.twin;
       var pta = ta.p, ptb = tb.p;
 
-      if (printEvents) {
-        var lc = MCG.Math.leftCompare;
-        var labc = lc(pa, pta, pb), labd = lc(pa, pta, ptb);
-        var lcda = lc(pb, ptb, pa), lcdb = lc(pb, ptb, pta);
-        console.log(intersection, labc, labd, lcda, lcdb);
-      }
-
       // if collinear, need to do special handling
       if (intersection === flags.collinear) {
         // verify that the event pairs actually overlap
@@ -371,7 +366,9 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(lval, o+incr*5);
       }
       // else, not collinear but intersecting at at most one point
-      else {
+      else if (intersection !== flags.none) {
+        var coincident = MCG.Math.coincident;
+
         // intersection point
         var pi = null;
 
@@ -380,8 +377,8 @@ Object.assign(MCG.Sweep, (function() {
         if (intersection === flags.intermediate) pi = a.intersection(b);
         else if (intersection === flags.a0) pi = pa;
         else if (intersection === flags.a1) pi = pta;
-        else if (intersection === flags.b0) pi = pb;
         else if (intersection === flags.b1) pi = ptb;
+        else if (intersection === flags.b0) pi = pb;
 
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);
@@ -395,8 +392,6 @@ Object.assign(MCG.Sweep, (function() {
           eventDraw(b, o+incr*1, undefined);
 
           var va = a.vertical(), vb = b.vertical();
-
-          var coincident = MCG.Math.coincident;
           var ita = null, itb = null;
 
           var ca = coincident(pa, pi), cta = coincident(pta, pi);
@@ -513,7 +508,15 @@ Object.assign(MCG.Sweep, (function() {
           var f = p.p.h < e.p.h ? p : e;
           var s = p.p.h < e.p.h ? e : p;
           var ps = s.p;
-          console.log(p.linecompare(e), e.linecompare(p), p.vcompare(e), e.vcompare(p), p.scompare(e), e.scompare(p), f.interpolate(ps.h).v, ps.v);
+          var pp = p.parent, ep = e.parent;
+          console.log(
+            p.linecompare(e), e.linecompare(p),
+            p.vcompare(e), e.vcompare(p),
+            p.scompare(e), e.scompare(p),
+            pp.vcompare(ep), ep.vcompare(pp),
+            pp.scompare(ep), ep.scompare(pp),
+            f.interpolate(ps.h).v, ps.v
+          );
         }
         eventPrint(e, "N ", force);
         p = e;

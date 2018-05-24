@@ -48,13 +48,7 @@ MCG.Polygon = (function() {
       if (collinear(points[ct-2], points[ct-1], points[0])) points.splice(--ct, 1);
       if (collinear(points[ct-1], points[0], points[1])) points.splice(0, 1);
 
-      ct = this.count();
-
-      var area = MCG.Math.area;
-
-      for (var i = 1; i < ct - 1; i++) {
-        this.area += area(points[0], points[i], points[i+1]);
-      }
+      this.calculateArea();
     }
 
     return this;
@@ -118,6 +112,18 @@ MCG.Polygon = (function() {
       return this.min.vectorTo(this.max);
     },
 
+    calculateArea: function() {
+      this.area = 0;
+
+      var area = MCG.Math.area;
+      var points = this.points;
+      var ct = this.count();
+
+      for (var i = 1; i < ct - 1; i++) {
+        this.area += area(points[0], points[i], points[i+1]);
+      }
+    },
+
     valid: function() {
       if (this.closed) return this.count() >= 3;
       else return this.count() > 1;
@@ -129,8 +135,12 @@ MCG.Polygon = (function() {
       return this;
     },
 
+    createNew: function() {
+      return new this.constructor(this.context, undefined, this.open);
+    },
+
     clone: function() {
-      var clone = new this.constructor();
+      var clone = this.createNew();
 
       Object.assign(clone, this);
 
@@ -144,6 +154,14 @@ MCG.Polygon = (function() {
       }
 
       return clone;
+    },
+
+    fromPoints: function(points) {
+      this.points = points;
+
+      this.calculateArea();
+
+      return this;
     },
 
     // compute bisectors and angles between each edge pair and its bisector
@@ -200,11 +218,32 @@ MCG.Polygon = (function() {
         var d = dist / Math.sin(angles[i]);
 
         cpoints[i].addScaledVector(b, d);
-
-        //debug.line(points[i].toVector3(), cpoints[i].toVector3());
       }
 
       return clone;
+    },
+
+    decimate: function(tol) {
+      var points = this.points;
+      var ct = this.count();
+      var tol2 = tol * tol;
+
+      var resultPoints = [];
+
+      var ref = points[0];
+
+      for (var si = 0; si < ct; si++) {
+        var spt = points[si];
+
+        // if distance is >= tolerance, include the point and set it as
+        // reference point
+        if (ref.distanceToSq(spt) >= tol2) {
+          resultPoints.push(spt);
+          ref = spt;
+        }
+      }
+
+      return this.fromPoints(resultPoints);
     }
 
   });

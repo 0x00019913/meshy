@@ -89,6 +89,14 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
+      /*var ap = a.parent, bp = b.parent;
+
+      var pvcomp = ap.vcompare(bp);
+      if (pvcomp !== 0) return pvcomp;
+
+      var pscomp = ap.scompare(bp);
+      if (pscomp !== 0) return pscomp;*/
+
       // comparison based on parent extents
       var pcomp = a.pcompare(b);
       if (pcomp !== 0) return pcomp;

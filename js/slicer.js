@@ -367,6 +367,7 @@ Slicer.prototype.makeLayers = function() {
       else continue;
     }
     var layer = new Layer(segmentSets[i]);
+    //if (layer.base.elements.length>0) layer.base.elements[0].decimate();
 
     layers[i] = layer;
   }
@@ -523,7 +524,7 @@ Layer.prototype.computeContours = function(lineWidth, numWalls) {
 
   var contours = [];
   if (1) {
-    contours.push(this.base);
+    contours.push(this.base.clone().decimate(lineWidth));
     this.contours = contours;
     return;
   }
