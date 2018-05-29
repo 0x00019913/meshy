@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && ev.p.h > 5*p && ev.p.v > 6.1*p;
+      printEvents = dbg && inRange(ev.p.h, 1*p, 3*p) && inRange(ev.p.v, 15*p, 16*p);
       drawEvents = false;
       incr = 0.1;
 
@@ -58,10 +58,10 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
 
-        //if (up) eventPrint(up, "up");
+        if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
 
-        if (ev.id==180) statusPrint();
+        if (!statusValid()) statusPrint();
 
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
@@ -255,6 +255,22 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pb = b.p;
       var ta = a.twin, tb = b.twin;
       var pta = ta.p, ptb = tb.p;
+      if (printEvents) {
+        var lc = MCG.Math.leftCompare;
+        var dl = MCG.Math.distanceToLine;
+        var labc = lc(pa, pta, pb), labd = lc(pa, pta, ptb);
+        var lcda = lc(pb, ptb, pa), lcdb = lc(pb, ptb, pta);
+        var dabc = dl(pa, pta, pb), dabd = dl(pa, pta, ptb);
+        var dcda = dl(pb, ptb, pa), dcdb = dl(pb, ptb, pta);
+        console.log(intersection, labc, labd, lcda, lcdb, dabc, dabd, dcda, dcdb);
+        var u = pa, v = pta, p = pb;
+        var uv = u.vectorTo(v);
+        var up = u.vectorTo(p);
+        var uvlensq = uv.lengthSq();
+        var dot = uv.dot(up);
+        //console.log(uv, up, uvlensq, dot);
+        var proj = uv.multiplyScalar(dot / uvlensq);
+      }
 
       // if collinear, need to do special handling
       if (intersection === flags.collinear) {
@@ -397,6 +413,8 @@ Object.assign(MCG.Sweep, (function() {
           var ca = coincident(pa, pi), cta = coincident(pta, pi);
           var cb = coincident(pb, pi), ctb = coincident(ptb, pi);
 
+          // remove a and b from status so that they don't end up in the wrong
+          // order
           var rma = remove(a);
           var rmb = remove(b);
 
@@ -513,6 +531,8 @@ Object.assign(MCG.Sweep, (function() {
             p.linecompare(e), e.linecompare(p),
             p.vcompare(e), e.vcompare(p),
             p.scompare(e), e.scompare(p),
+            MCG.Math.leftCompare(p.p, p.twin.p, e.p), MCG.Math.leftCompare(p.p, p.twin.p, e.twin.p),
+            MCG.Math.leftCompare(e.p, e.twin.p, p.p), MCG.Math.leftCompare(e.p, e.twin.p, p.twin.p),
             pp.vcompare(ep), ep.vcompare(pp),
             pp.scompare(ep), ep.scompare(pp),
             f.interpolate(ps.h).v, ps.v
@@ -521,6 +541,20 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(e, "N ", force);
         p = e;
       }
+    }
+
+    function statusValid() {
+      var iter = status.iterator(), e, p = null;
+      while ((e = iter.prev()) !== null) {
+        if (p) {
+          var cpe = p.linecompare(e);
+          var cep = e.linecompare(p);
+          if (cpe === cep || cpe === 0 || cep === 0) return false;
+        }
+        p = e;
+      }
+
+      return true;
     }
 
     function eventPrint(e, pref, force) {

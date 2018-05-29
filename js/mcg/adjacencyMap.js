@@ -46,7 +46,8 @@ MCG.DirectedAdjacencyMap = (function() {
   DirectedAdjacencyMap.prototype.nodeSelectors = {
     noPredecessors: function(node) { return node.predcount === 0; },
     oneNeighbor: function(node) { return node.count === 1; },
-    neighbors: function(node) { return node.count > 0; }
+    neighbors: function(node) { return node.count > 0; },
+    noNeighbors: function(node) { return node.count === 0; }
   }
 
   DirectedAdjacencyMap.prototype.getKeyWithNoPredecessors = function() {
@@ -65,20 +66,20 @@ MCG.DirectedAdjacencyMap = (function() {
     return this.getKey(this.nodeSelectors.neighbors);
   }
 
+  DirectedAdjacencyMap.prototype.getKeyWithNoNeighbors = function() {
+    return this.getKey(this.nodeSelectors.noNeighbors);
+  }
+
   // get the key to a node that satisfies selector sel
   DirectedAdjacencyMap.prototype.getKey = function(sel) {
-    var res = null;
     var m = this.map;
     if (sel === undefined) sel = this.nodeSelectors.oneNeighbor;
 
     for (var key in m) {
-      if (sel(m[key])) {
-        res = key;
-        break;
-      }
+      if (sel(m[key])) return key;
     }
 
-    return res;
+    return null;
   }
 
   // return a closed loop of points

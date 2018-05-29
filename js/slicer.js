@@ -19,7 +19,7 @@ function Slicer(sourceVertices, sourceFaces, params) {
   this.mode = SlicerModes.preview;
   this.axis = "z";
   this.sliceHeight = 0.5;
-  this.lineWidth = this.sliceHeight;
+  this.resolution = this.sliceHeight;
   this.numWalls = 2;
 
   this.precision = 5;
@@ -29,7 +29,7 @@ function Slicer(sourceVertices, sourceFaces, params) {
     if (params.hasOwnProperty("mode")) this.mode = params.mode;
     if (params.hasOwnProperty("axis")) this.axis = params.axis;
     if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
-    if (params.hasOwnProperty("lineWidth")) this.lineWidth = params.lineWidth;
+    if (params.hasOwnProperty("resolution")) this.resolution = params.resolution;
     if (params.hasOwnProperty("numWalls")) this.numWalls = params.numWalls;
     if (params.hasOwnProperty("precision")) this.precision = params.precision;
   }
@@ -107,8 +107,8 @@ Slicer.prototype.unreadyPreviewGeometry = function() {
 Slicer.prototype.unreadyLayerGeometry = function() {
   this.layerGeometryReady = false;
 }
-Slicer.prototype.setLineWidth = function(lineWidth) {
-  this.lineWidth = lineWidth;
+Slicer.prototype.setResolution = function(resolution) {
+  this.resolution = resolution;
 }
 Slicer.prototype.setNumWalls = function(numWalls) {
   this.numWalls = numWalls;
@@ -251,35 +251,62 @@ Slicer.prototype.setPreviewSlice = function() {
     layer.base.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
-      //debug.line(v1, v2, 1, false, 0, axis);
+      debug.line(v1, v2, 1, false, 0, axis);
     });
 
     debug.lines();
 
-    for (var i=2; i<3; i++) {
-      var offset = layer.base.offset(-0.021 * i);
+    /*var b = layer.source.clone().decimate(this.resolution);
+    var u = MCG.Boolean.union(b, undefined, true);
+
+    b.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2, 1, false, 0, axis);
+    });
+
+    u.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2, 1, false, 0.1, axis);
+    });
+
+    u.toPolygonSet().forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3();
+      var v2 = p2.toVector3();
+      debug.line(v1, v2, 1, false, 0.2, axis);
+    });
+
+    debug.lines();
+
+    return;*/
+
+    for (var i=1; i<2; i++) {
+      var offset = layer.base.offset(-0.075 * i);
 
       if (1) {
         offset.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
-          debug.line(v1, v2, 1, false, 0, axis);
+          debug.line(v1, v2, 1, false, 0.1, axis);
         });
 
         var union = MCG.Boolean.union(offset, undefined, true);
+
         union.forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3();
-          var v2 = p2.toVector3();
-          debug.line(v1, v2, 1, false, 0.1, axis);
-        });
-        union.toPolygonSet().forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
           debug.line(v1, v2, 1, false, 0.2, axis);
         });
+        union.toPolygonSet().forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.3, axis);
+        });
       }
       else {
-        MCG.Boolean.union(offset).toPolygonSet().forEachPointPair(function(p1, p2) {
+        MCG.Boolean.union(offset).toPolygonSet().decimate(this.resolution)
+        .forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
           debug.line(v1, v2, 1, false, 0, axis);
@@ -322,9 +349,10 @@ Slicer.prototype.makeLayerGeometry = function() {
     var layer = layers[l];
     if (layer === undefined) continue;
 
-    layer.computeContours(this.lineWidth, this.numWalls);
+    layer.computeContours(this.resolution, this.numWalls);
     layer.writeToVerts(layerVertices);
   }
+
   debug.lines();
 
   this.layerVertices = layerVertices;
@@ -341,7 +369,7 @@ Slicer.prototype.makeLayers = function() {
     //console.log(i);
     // create layer from the contours
     if (0) {
-      if (i==232) {
+      if (i==97) {
         var segmentSet = segmentSets[i];
 
         segmentSet.toPolygonSet().forEachPointPair(function(p1, p2) {
@@ -350,7 +378,18 @@ Slicer.prototype.makeLayers = function() {
           debug.line(v1, v2, 1, false, 0.01, segmentSet.context.axis);
         });
 
-        var union = MCG.Boolean.union(segmentSet.toPolygonSet(), undefined, true);
+        var pset = segmentSet.toPolygonSet();
+        var o = 0.3;
+        pset.forEachSegmentPair(function(p1, p2, p3) {
+          console.log(MCG.Math.collinear(p1, p2, p3),
+          MCG.Math.distanceToLine(p1, p3, p2),
+          Math.SQRT2);
+          o += 0.1;
+          debug.line(p1.toVector3(), p2.toVector3(), 1, false, o, segmentSet.context.axis);
+          debug.line(p2.toVector3(), p3.toVector3(), 1, false, o, segmentSet.context.axis);
+        });
+
+        var union = MCG.Boolean.union(segmentSet.toPolygonSet(), undefined, false);
 
         union.forEachPointPair(function(p1, p2) {
             var v1 = p1.toVector3();
@@ -366,8 +405,7 @@ Slicer.prototype.makeLayers = function() {
       }
       else continue;
     }
-    var layer = new Layer(segmentSets[i]);
-    //if (layer.base.elements.length>0) layer.base.elements[0].decimate();
+    var layer = new Layer(segmentSets[i], this.resolution);
 
     layers[i] = layer;
   }
@@ -504,10 +542,16 @@ Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
 
 
 // contains a single slice of the mesh
-function Layer(segmentSet) {
-  // base polygon set; use this to generate offsets
-  var polygonSet = segmentSet.toPolygonSet();
-  this.base = MCG.Boolean.union(polygonSet).toPolygonSet();
+function Layer(segmentSet, resolution) {
+  // source polygon set
+  this.source = segmentSet.toPolygonSet();
+
+  // store resolution
+  this.resolution = resolution;
+
+  // base contour, decimated and unified from source
+  var sourceDecimated = this.source.clone().decimate(resolution);
+  this.base = MCG.Boolean.union(sourceDecimated).toPolygonSet();
 
   // internal contours
   this.contours = [];
@@ -516,22 +560,23 @@ function Layer(segmentSet) {
   this.infill = [];
 }
 
-Layer.prototype.computeContours = function(lineWidth, numWalls) {
+Layer.prototype.computeContours = function(resolution, numWalls) {
   var base = this.base;
 
   //todo: remove
-  numWalls = 1;
+  numWalls = 2;
 
   var contours = [];
-  if (1) {
-    contours.push(this.base.clone().decimate(lineWidth));
+  if (0) {
+    contours.push(this.base);
     this.contours = contours;
     return;
   }
 
   for (var w = 0; w < numWalls; w++) {
-    var offsetSegments = MCG.Boolean.union(base.offset((w + 0.5) * -lineWidth));
-    contours.push(offsetSegments.toPolygonSet());
+    var offset = base.offset((w + 0.5) * -resolution);
+    var union = MCG.Boolean.union(offset);
+    contours.push(union.toPolygonSet());
   }
 
   this.contours = contours;

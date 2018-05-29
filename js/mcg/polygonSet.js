@@ -14,25 +14,25 @@ MCG.PolygonSet = (function() {
 
     forEachPoint: function(f) {
       this.forEach(function(polygon) {
-        polygon.forEach(f);
+        if (polygon.valid()) polygon.forEach(f);
       });
     },
 
     forEachPointPair: function(f) {
       this.forEach(function(polygon) {
-        polygon.forEachPointPair(f);
+        if (polygon.valid()) polygon.forEachPointPair(f);
       });
     },
 
     forEachSegmentPair: function(f) {
       this.forEach(function(polygon) {
-        polygon.forEachSegmentPair(f);
+        if (polygon.valid()) polygon.forEachSegmentPair(f);
       });
     },
 
     computeBisectors: function() {
       this.forEach(function(polygon) {
-        polygon.computeBisectors();
+        if (polygon.valid()) polygon.computeBisectors();
       });
     },
 
@@ -51,7 +51,22 @@ MCG.PolygonSet = (function() {
         polygon.decimate(tol);
       });
 
+      // remove invalid polygons
+      this.filter(function(polygon) {
+        return polygon.valid();
+      });
+
       return this;
+    },
+
+    pointCount: function() {
+      var count = 0;
+
+      this.forEach(function(polygon) {
+        count += polygon.count();
+      });
+
+      return count;
     }
 
   });

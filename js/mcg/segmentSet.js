@@ -26,13 +26,8 @@ MCG.SegmentSet = (function() {
       }
     },
 
-    toPolygonSet: function() {
-      var context = this.context;
-
-      var pset = new MCG.PolygonSet(context);
-
-      var p = this.context.p;
-      var adjacencyMap = new MCG.DirectedAdjacencyMap(context);
+    makeAdjacencyMap: function() {
+      var adjacencyMap = new MCG.DirectedAdjacencyMap(this.context);
 
       var segments = this.elements;
       var ns = segments.length;
@@ -41,6 +36,16 @@ MCG.SegmentSet = (function() {
         adjacencyMap.addSegment(segments[si]);
       }
 
+      return adjacencyMap;
+    },
+
+    toPolygonSet: function() {
+      var context = this.context;
+
+      var pset = new MCG.PolygonSet(context);
+
+      var adjacencyMap = this.makeAdjacencyMap();
+
       var loops = adjacencyMap.getLoops();
       for (var li = 0; li < loops.length; li++) {
         var polygon = new MCG.Polygon(context, loops[li]);
@@ -48,6 +53,10 @@ MCG.SegmentSet = (function() {
       }
 
       return pset;
+    },
+
+    pointCount: function() {
+      return this.count() * 2;
     }
 
   });

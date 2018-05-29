@@ -403,7 +403,7 @@ Stage.prototype.buildSliceFolderActive = function() {
     ).name("Mode").onChange(this.setSliceMode.bind(this));
 
     this.sliceSettingsFolder = folder.addFolder("Layer Settings");
-    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).name("Wall count").step(1);
+    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
     this.sliceSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
   }
 
@@ -417,7 +417,7 @@ Stage.prototype.activateSliceMode = function() {
     this.model.activateSliceMode({
       axis: this.upAxis,
       sliceHeight: this.verticalResolution,
-      lineWidth: this.planarResolution,
+      resolution: this.planarResolution,
       numWalls: this.sliceNumWalls
     });
     this.buildSliceFolderActive();
@@ -436,7 +436,7 @@ Stage.prototype.setSlice = function() {
 }
 Stage.prototype.recalculateLayers = function() {
   if (this.model) {
-    this.model.recalculateLayers(this.printLineWidth, this.sliceNumWalls);
+    this.model.recalculateLayers(this.planarResolution, this.sliceNumWalls);
   }
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
@@ -727,7 +727,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 87;
+  this.currentSlice = 63;
   this.setSlice();
 
   this.filename = this.model.filename;

@@ -1,5 +1,16 @@
 Object.assign(MCG.Math, (function() {
 
+  // float to integer
+  function ftoi(f, p) {
+    return Math.round(f * p);
+  }
+
+  // integer to float
+  function itof(i, p) {
+    return i / p;
+  }
+
+  // true if two points are coincident
   function coincident(a, b) {
     return a.h === b.h && a.v === b.v;
   }
@@ -8,6 +19,14 @@ Object.assign(MCG.Math, (function() {
   function area(a, b, c) {
     var cross = (c.h-b.h) * (a.v-b.v) - (c.v-b.v) * (a.h-b.h);
     return cross / 2;
+  }
+
+  // area of a-b-c triangle using normalized a-b and a-c edges
+  function narea(a, b, c) {
+    var bc = b.vectorTo(c).normalize();
+    var ba = b.vectorTo(a).normalize();
+
+    return bc.cross(ba) / 2;
   }
 
   // area of a-b-c triangle in floating-point space
@@ -20,34 +39,30 @@ Object.assign(MCG.Math, (function() {
     return cross / 2;
   }
 
-  // area of a-b-c triangle using normalized a-b and a-c edges
-  function narea(a, b, c) {
-    var bc = b.vectorTo(c).normalize();
-    var ba = b.vectorTo(a).normalize();
-
-    return bc.cross(ba) / 2;
-  }
-
-  // distance from point p to line subtended by a-b segment
-  function distanceToLine(a, b, p) {
+  // distance squared from point p to line subtended by a-b segment
+  function distanceToLineSq(a, b, p) {
     var ab = b.vectorTo(a);
     var ap = p.vectorTo(a);
 
     var dot = ab.dot(ap);
 
-    if (dot === 0) return ab.length();
+    if (dot === 0) return ap.lengthSq();
 
     var ablensq = ab.lengthSq();
     var proj = ab.multiplyScalar(dot / ablensq);
 
-    return proj.distanceTo(ap);
+    return proj.distanceToSq(ap);
   }
 
-  // leftness predicates - these account for the fuzziness introduced by
-  // vertices' snapping to the integer grid
+  function distanceToLine(a, b, p) {
+    return Math.sqrt(distanceToLineSq(a, b, p));
+  }
 
   // returns 0 if c collinear with a-b, 1 if c left of a-b, else -1
   function leftCompare(a, b, c) {
+    if (distanceToLineSq(a, b, c) <= 2) return 0;
+    else return Math.sign(area(a, b, c));
+
     var abdistsq = a.distanceToSq(b);
     var bcdistsq = b.distanceToSq(c);
     var cadistsq = c.distanceToSq(a);
@@ -66,34 +81,8 @@ Object.assign(MCG.Math, (function() {
     else return Math.sign(tarea);
   }
 
-  function collinear(a, b, c) {
-    return leftCompare(a, b, c) === 0;
-  }
-
-  function left(a, b, c) {
-    return leftCompare(a, b, c) > 0;
-  }
-
-  function leftOn(a, b, c) {
-    return leftCompare(a, b, c) >= 0;
-  }
-
-  // strict predicates - exact comparisons of area
-
   function leftCompareStrict(a, b, c) {
     return Math.sign(area(a, b, c));
-  }
-
-  function collinearStrict(a, b, c) {
-    return leftCompareStrict(a, b, c) === 0;
-  }
-
-  function leftStrict(a, b, c) {
-    return leftCompareStrict(a, b, c) > 0;
-  }
-
-  function leftOnStrict(a, b, c) {
-    return leftCompareStrict(a, b, c) >= 0;
   }
 
   // signifies special types of intersection between a0-a1 and b0-b1 segments
@@ -102,79 +91,23 @@ Object.assign(MCG.Math, (function() {
     var b0 = 8, b1 = 16;
     var a0b0 = a0 | b0;
     var a1b1 = a1 | b1;
+    var a01 = a0 | a1;
+    var b01 = b0 | b1;
 
     return {
       none: 0,                // no intersection
       intermediate: 1,        // intersection excludes endpoints
-      a0: a0,                 // intersection point is a0
-      a1: a1,                 // intersection point is a1
-      b0: b0,                 // intersection point is b0
-      b1: b1,                 // intersection point is b1
+      a0: a0,                 // a0 is on b0-b1
+      a1: a1,                 // a1 is on b0-b1
+      b0: b0,                 // b0 is on a0-a1
+      b1: b1,                 // b1 is on a0-a1
+      a01: a01,               // a0 and a1 are on b0-b1
+      b01: b01,               // b0 and b1 are on a0-a1
       a0b0: a0b0,             // intersection point is start of both segments
       a1b1: a1b1,             // intersection point is end of both segments
       collinear: a0b0 | a1b1  // a and b are collinear
     };
   })();
-
-  // intersection predicate: return true if a-b segment intersects c-d
-  // segment; returns
-  function intersect(a, b, c, d) {
-    // leftness checks for the endpoint of one segment against the other segment
-    var labc = leftCompare(a, b, c), labd = leftCompare(a, b, d);
-    var lcda = leftCompare(c, d, a), lcdb = leftCompare(c, d, b);
-
-    var result = IntersectionFlags.none;
-
-    // a-b segment is between endpoints of c-d segment
-    var abBtwn = labc !== labd || labc === 0;
-    // c-d segment is between endpoints of a-b segment
-    var cdBtwn = lcda !== lcdb || lcda === 0;
-
-    // check if one endpoint lies on the other segment
-
-    // c lies on a-b and between a-b
-    if (labc === 0 && cdBtwn) result |= IntersectionFlags.b0;
-    if (labd === 0 && cdBtwn) result |= IntersectionFlags.b1;
-    if (lcda === 0 && abBtwn) result |= IntersectionFlags.a0;
-    if (lcdb === 0 && abBtwn) result |= IntersectionFlags.a1;
-
-    // possible intersection on intermediate points
-    if (result === IntersectionFlags.none) {
-      if (abBtwn && cdBtwn) {
-        result = IntersectionFlags.intermediate;
-      }
-    }
-
-    return result;
-  }
-
-  // calculate intersection point of a0-a1 segment and b0-b1 segment
-  function intersection(a0, a1, b0, b1) {
-    // denominator
-    var d = a0.h * (b1.v - b0.v) + a1.h * (b0.v - b1.v) +
-            b1.h * (a1.v - a0.v) + b0.h * (a0.v - a1.v);
-    // if denominator is 0, segments are parallel
-    if (d === 0) return null;
-
-    // numerator
-    var n;
-
-    // calculate pa
-    n = a0.h * (b1.v - b0.v) + b0.h * (a0.v - b1.v) + b1.h * (b0.v - a0.v);
-    var pa = n / d;
-    // calculate pb
-    //n = a0.h * (a1.v - b0.v) + a1.h * (b0.v - a0.v) + b0.h * (a0.v - a1.v);
-    //pb = n / d;
-
-    return a0.clone().addScaledVector(a0.vectorTo(a1), pa);
-  }
-
-  function parallel(a, ae, b, be) {
-    var da = a.vectorTo(ae);
-    var db = b.vectorTo(be);
-
-    return da.h * db.v === db.h * da.v;
-  }
 
   // create a normalized vector that is orthogonal to and right of a-b segment
   function orthogonalRightVector(a, b) {
@@ -188,33 +121,152 @@ Object.assign(MCG.Math, (function() {
     return d.normalize();
   }
 
-  // the bisector of a-b and b-c segments, looking right of both segments
-  function bisector(a, b, c) {
-    var abr = orthogonalRightVector(a, b);
-    var bcr = orthogonalRightVector(b, c);
-
-    return abr.add(bcr).normalize();
-  }
-
   return {
+
+    ftoi: ftoi,
+    itof: itof,
+
     coincident: coincident,
+
     area: area,
     farea: farea,
     narea: narea,
+
+    distanceToLineSq: distanceToLineSq,
+    distanceToLine: distanceToLine,
+
+    // leftness predicates - these account for the fuzziness introduced by
+    // vertices' snapping to the integer grid
+
     leftCompare: leftCompare,
-    collinear: collinear,
-    left: left,
-    leftOn: leftOn,
+
+    collinear: function(a, b, c) {
+      return leftCompare(a, c, b) === 0;
+    },
+
+    left: function(a, b, c) {
+      return leftCompare(a, b, c) > 0;
+    },
+
+    leftOn: function(a, b, c) {
+      return leftCompare(a, b, c) >= 0;
+    },
+
+    // strict predicates - exact comparisons of area
+
     leftCompareStrict: leftCompareStrict,
-    collinearStrict: collinearStrict,
-    leftStrict: leftStrict,
-    leftOnStrict: leftOnStrict,
+
+    collinearStrict: function(a, b, c) {
+      return leftCompareStrict(a, b, c) === 0;
+    },
+
+    leftStrict: function(a, b, c) {
+      return leftCompareStrict(a, b, c) > 0;
+    },
+
+    leftOnStrict: function(a, b, c) {
+      return leftCompareStrict(a, b, c) >= 0;
+    },
+
     IntersectionFlags: IntersectionFlags,
-    intersect: intersect,
-    intersection: intersection,
-    parallel: parallel,
+
+    // intersection predicate: return true if a-b segment intersects c-d
+    // segment; returns
+    intersect: function(a, b, c, d) {
+      var flags = IntersectionFlags;
+
+      // leftness checks for the endpoint of one segment against the other segment
+      var labc = leftCompare(a, b, c), labd = leftCompare(a, b, d);
+      var lcda = leftCompare(c, d, a), lcdb = leftCompare(c, d, b);
+
+      var result = flags.none;
+
+      // a-b segment is between endpoints of c-d segment
+      var abBtwn = labc !== labd || labc === 0;
+      // c-d segment is between endpoints of a-b segment
+      var cdBtwn = lcda !== lcdb || lcda === 0;
+
+      // check if one endpoint lies on the other segment
+
+      // c lies on a-b and between a-b
+      if (labc === 0 && cdBtwn) result |= flags.b0;
+      if (labd === 0 && cdBtwn) result |= flags.b1;
+      if (lcda === 0 && abBtwn) result |= flags.a0;
+      if (lcdb === 0 && abBtwn) result |= flags.a1;
+
+      if (result & flags.a0 && result & flags.a1) return flags.collinear;
+      if (result & flags.b0 && result & flags.b1) return flags.collinear;
+
+      // if both segments only have a starting point on the other segment,
+      // process this as an intersection at one of the starting points; the
+      // endpoint between the endpoints of the other segment is used
+      if (result & flags.a0 && result & flags.b0 && !coincident(a, c)) {
+        var ab = a.vectorTo(b);
+        var ac = a.vectorTo(c);
+
+        // if ab parallel to ac, c is within the bounds of the two segments and
+        // a is the outlyer; if antiparallel, a is within the bounds
+        return ab.dot(ac) > 0 ? flags.b0 : flags.a0;
+      }
+
+      // analogously for end points
+      if (result & flags.a1 && result & flags.b1 && !coincident(b, d)) {
+        var db = d.vectorTo(b);
+        var dc = d.vectorTo(c);
+
+        return db.dot(dc) > 0 ? flags.a1 : flags.b1;
+      }
+
+      // possible intersection on intermediate points
+      if (result === flags.none) {
+        if (abBtwn && cdBtwn) {
+          result = flags.intermediate;
+        }
+      }
+
+      return result;
+    },
+
+    // calculate intersection point of a0-a1 segment and b0-b1 segment
+    intersection: function(a0, a1, b0, b1) {
+      // denominator
+      var d = a0.h * (b1.v - b0.v) + a1.h * (b0.v - b1.v) +
+              b1.h * (a1.v - a0.v) + b0.h * (a0.v - a1.v);
+      // if denominator is 0, segments are parallel
+      if (d === 0) return null;
+
+      // numerator
+      var n;
+
+      // calculate pa
+      n = a0.h * (b1.v - b0.v) + b0.h * (a0.v - b1.v) + b1.h * (b0.v - a0.v);
+      var pa = n / d;
+      if (pa < 0 || pa > 1) return null;
+      // calculate pb
+      n = a0.h * (a1.v - b0.v) + a1.h * (b0.v - a0.v) + b0.h * (a0.v - a1.v);
+      pb = n / d;
+      if (pb < 0 || pb > 1) return null;
+
+      return a0.clone().addScaledVector(a0.vectorTo(a1), pa);
+    },
+
+    parallel: function(a, ae, b, be) {
+      var da = a.vectorTo(ae);
+      var db = b.vectorTo(be);
+
+      return da.h * db.v === db.h * da.v;
+    },
+
     orthogonalRightVector: orthogonalRightVector,
-    bisector: bisector
+
+    // the bisector of a-b and b-c segments, looking right of both segments
+    bisector: function(a, b, c) {
+      var abr = orthogonalRightVector(a, b);
+      var bcr = orthogonalRightVector(b, c);
+
+      return abr.add(bcr).normalize();
+    }
+
   };
 
 })());

@@ -40,6 +40,10 @@ MCG.Segment = (function() {
     return !!(this.p1 && this.p2);
   }
 
+  Segment.prototype.clone = function() {
+    return new this.constructor(this.context, this.p1, this.p2);
+  }
+
   return Segment;
 
 })();

@@ -17,23 +17,26 @@ MCG.Vector = (function() {
 
     fromVector3: function(v3) {
       var p = this.context.p;
+      var ftoi = MCG.Math.ftoi;
 
-      this.h = numHash(v3[this.context.ah], p);
-      this.v = numHash(v3[this.context.av], p);
+      this.h = ftoi(v3[this.context.ah], p);
+      this.v = ftoi(v3[this.context.av], p);
 
       return this;
     },
 
-    toVector3: function(constructor) {
-      constructor = constructor || THREE.Vector3;
+    toVector3: function(c) {
+      // Vector3 constructor, THREE.js constructor by default
+      c = c || THREE.Vector3;
 
       var context = this.context;
       var p = context.p;
+      var itof = MCG.Math.itof;
 
-      var res = new constructor();
+      var res = new c();
       res[context.axis] = context.d;
-      res[context.ah] = this.h / p;
-      res[context.av] = this.v / p;
+      res[context.ah] = itof(this.h, p);
+      res[context.av] = itof(this.v, p);
 
       return res;
     },
@@ -81,11 +84,11 @@ MCG.Vector = (function() {
     },
 
     sh: function() {
-      return this.h / this.context.p;
+      return MCG.Math.itof(this.h, this.context.p);
     },
 
     sv: function() {
-      return this.v / this.context.p;
+      return MCG.Math.itof(this.v, this.context.p);
     },
 
     add: function(other) {

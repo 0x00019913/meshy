@@ -1979,7 +1979,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = SlicerModes.layer; // todo: switch back to preview
+  this.sliceMode = SlicerModes.preview; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
@@ -2028,10 +2028,10 @@ Model.prototype.setSlice = function(slice) {
   this.setSliceMeshGeometry();
 }
 
-Model.prototype.recalculateLayers = function(lineWidth, numWalls) {
+Model.prototype.recalculateLayers = function(resolution, numWalls) {
   if (!this.slicer) return;
 
-  this.slicer.setLineWidth(lineWidth);
+  this.slicer.setResolution(resolution);
   this.slicer.setNumWalls(numWalls);
   this.slicer.unreadyLayerGeometry();
 

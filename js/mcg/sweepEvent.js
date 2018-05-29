@@ -126,17 +126,33 @@ Object.assign(MCG.Sweep, (function() {
       else if (!va && vb) return -1;
       else if (va && !vb) return 1;
 
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
+      var pa = a.p, pta = a.twin.p;
+      var pb = b.p, ptb = b.twin.p;
 
-      var lc = MCG.Math.leftCompare(pb, pbt, pa);
-      var lct = MCG.Math.leftCompare(pb, pbt, pat);
+      var leftCompare = MCG.Math.leftCompare;
+
+      var lta = leftCompare(pb, ptb, pta);
+      var ltb = leftCompare(pa, pta, ptb);
+
+      if (lta === -1 || ltb === 1) return -1;
+      if (lta === 1 || ltb === -1) return 1;
+
+      var la = leftCompare(pb, ptb, pa);
+      var lb = leftCompare(pa, pta, pb);
+
+      if (la === 1 || lb === -1) return -1;
+      if (la === -1 || lb === 1) return 1;
+
+      return 0;
+
+      var lc = MCG.Math.leftCompare(pb, ptb, pa);
+      var lct = MCG.Math.leftCompare(pb, ptb, pta);
 
       // if a on b-b.t and a.t on b-b.t, the two segments have the same slope
       if (lc === 0 && lct === 0) {
         // it's possible that events testing as parallel are actually
         // antiparallel, so one has the greater slope
-        var cva = Math.sign(pa.vcompare(pat)), cvb = Math.sign(pb.vcompare(pbt));
+        var cva = Math.sign(pa.vcompare(pta)), cvb = Math.sign(pb.vcompare(ptb));
         if (cva > cvb) return -1;
         else if (cva < cvb) return 1;
 
@@ -150,10 +166,10 @@ Object.assign(MCG.Sweep, (function() {
       // should never happen (lines don't intersect), but do a literal slope
       // test just in case
       else {
-        var ah = pa.h, ath = pat.h;
-        var bh = pb.h, bth = pbt.h;
-        var sa = ah === ath ? Infinity : (pat.v - pa.v) / (ath - ah);
-        var sb = bh === bth ? Infinity : (pbt.v - pb.v) / (bth - bh);
+        var ah = pa.h, ath = pta.h;
+        var bh = pb.h, bth = ptb.h;
+        var sa = ah === ath ? Infinity : (pta.v - pa.v) / (ath - ah);
+        var sb = bh === bth ? Infinity : (ptb.v - pb.v) / (bth - bh);
 
         return Math.sign(sa - sb);
       }
@@ -176,13 +192,20 @@ Object.assign(MCG.Sweep, (function() {
       return 0;
     },
 
-    toString: function(pref) {
+    toString: function(pref, fullslope) {
       pref = (pref || "--");
 
       var src = this.isLeft ? this : this.twin;
       var d = 4;
       var diff = src.p.vectorTo(src.twin.p);
       var slope = src.vertical() ? Infinity : diff.v/diff.h;
+      var cslope = slope===Infinity
+        ? "v"
+        : (Math.sign(slope)==1
+          ? "+"
+          : (Math.sign(slope)==-1
+            ? "-"
+            : 0));
 
       var data =
         [this.isLeft ? "L " : "R ", this.id, this.twin.id,
@@ -190,7 +213,7 @@ Object.assign(MCG.Sweep, (function() {
           this.p.v, ')',
           '(', this.twin.p.h,
           this.twin.p.v, ')',
-          slope===Infinity ? "v" : (Math.sign(slope)==1 ? "+" : (Math.sign(slope)==-1 ? "-" : 0)),
+          fullslope ? slope.toFixed(5) : cslope,
           this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weight,
           "d", src.depthBelow, src.depthBelow + src.weight,
@@ -201,7 +224,7 @@ Object.assign(MCG.Sweep, (function() {
           d+3, 1,
           2, d+3,
           d+3, 1,
-          2,
+          fullslope ? 7 : 2,
           9,
           2, 2,
           2, 2, 2,

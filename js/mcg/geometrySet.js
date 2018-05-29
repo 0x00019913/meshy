@@ -27,6 +27,29 @@ MCG.GeometrySet = (function() {
       for (var i = 0; i < ct; i++) {
         f(elements[i]);
       }
+    },
+
+    filter: function(valid) {
+      var result = [];
+
+      this.forEach(function(element) {
+        if (valid(element)) result.push(element);
+      });
+
+      this.elements = result;
+
+      return this;
+    },
+
+    clone: function() {
+      var clone = new this.constructor(this.context);
+      var elements = clone.elements;
+
+      this.forEach(function(element) {
+        elements.push(element.clone());
+      });
+
+      return clone;
     }
 
   });

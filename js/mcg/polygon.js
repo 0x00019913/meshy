@@ -108,8 +108,17 @@ MCG.Polygon = (function() {
       this.min.min(pt);
     },
 
-    size: function() {
-      return this.min.vectorTo(this.max);
+    calculateBounds: function() {
+      var context = this.context;
+
+      this.max = new MCG.Vector(context).setScalar(-Infinity);
+      this.min = new MCG.Vector(context).setScalar(Infinity);
+
+      var _this = this;
+
+      this.forEach(function(p) {
+        _this.updateBounds(p);
+      });
     },
 
     calculateArea: function() {
@@ -124,6 +133,10 @@ MCG.Polygon = (function() {
       }
     },
 
+    size: function() {
+      return this.min.vectorTo(this.max);
+    },
+
     valid: function() {
       if (this.closed) return this.count() >= 3;
       else return this.count() > 1;
@@ -136,7 +149,7 @@ MCG.Polygon = (function() {
     },
 
     createNew: function() {
-      return new this.constructor(this.context, undefined, this.open);
+      return new this.constructor(this.context, undefined, this.closed);
     },
 
     clone: function() {
@@ -160,6 +173,7 @@ MCG.Polygon = (function() {
       this.points = points;
 
       this.calculateArea();
+      this.calculateBounds();
 
       return this;
     },
@@ -193,57 +207,198 @@ MCG.Polygon = (function() {
     // offset everything in the polygon set by a given distance (given in
     // floating-point-space units)
     offset: function(dist) {
-      var clone = this.clone();
+      var result = this.createNew();
+
+      if (!this.valid()) return result;
 
       var size = this.size();
       var minsize = Math.min(size.h, size.v) / this.context.p;
 
-      if (dist <= -minsize / 2) {
-        clone.invalidate();
-        return clone;
-      }
+      if (dist <= -minsize / 2) return result;
 
       this.computeBisectors();
 
       var bisectors = this.bisectors;
       var angles = this.angles;
       var points = this.points;
-      var cpoints = clone.points;
+      var rpoints = [];
       var ct = this.count();
+
+      var pi = Math.PI;
+      var pi2 = pi / 2;
+      var orthogonalRightVector = MCG.Math.orthogonalRightVector;
+      var coincident = MCG.Math.coincident;
+
+      // 30-degree lower threshold and 150-degree upper threshold for capping
+      // the offset off a spike or ignoring the offset inside a cusp
+      var tcaplow = pi / 6;
+      var tcaphigh = pi - tcaplow;
 
       for (var i = 0; i < ct; i++) {
-        // shift along bisector s.t. every segment in the clone will be the same
-        // distance (dist) from its original
         var b = bisectors[i];
-        var d = dist / Math.sin(angles[i]);
+        var pti = points[i];
+        // angle between the offset vector and the neighboring segments (because
+        // the angles array stores the angle relative to the outward-facing
+        // bisector, which may be antiparallel to the offset vector)
+        var a = dist > 0 ? angles[i] : (pi - angles[i]);
+        var d = dist / Math.sin(a);
+        var displacement = pti.clone().addScaledVector(b, d);
 
-        cpoints[i].addScaledVector(b, d);
+        // if shifting out from a point, cap the resulting spike with a
+        // segment whose center is dist away from the current point
+        if (a > tcaphigh) {
+          // half-angle between displacement and vector orthogonal to segment
+          var ha = (a - pi2) / 2;
+
+          // half-length of the cap to the spike
+          var hl = dist * Math.tan(ha);
+
+          // orthogonal vector from the end of the displacement vector
+          var ov = orthogonalRightVector(pti, displacement);
+
+          // midpoint of the cap
+          var mv = pti.clone().addScaledVector(b, dist);
+
+          // endpoints of the cap segment
+          var p0 = mv.clone().addScaledVector(ov, -hl);
+          var p1 = mv.clone().addScaledVector(ov, hl);
+
+          if (coincident(p0, p1)) rpoints.push(displacement);
+          else {
+            rpoints.push(dist > 0 ? p0 : p1);
+            rpoints.push(dist > 0 ? p1 : p0);
+          }
+        }
+        // if shift is "inside a cusp", just shift along bisector s.t. the
+        // resulting segments will be displaced by dist
+        else if (a > tcaplow) {
+          rpoints.push(displacement);
+        }
+        // else, cusp is too narrow, so just don't offset
       }
 
-      return clone;
+      result.fromPoints(rpoints);
+
+      return result;
     },
 
-    decimate: function(tol) {
-      var points = this.points;
-      var ct = this.count();
-      var tol2 = tol * tol;
+    // reduce vertex count
+    // source: http://geomalgorithms.com/a16-_decimate-1.html
+    // NB: this mutates the polygon
+    decimate: function(ftol) {
+      var tol = MCG.Math.ftoi(ftol, this.context.p);
 
-      var resultPoints = [];
+      // source points
+      var spts = this.points;
 
-      var ref = points[0];
+      // first, decimate by vertex reduction
+      var vrpts = decimateVR(spts, tol);
 
-      for (var si = 0; si < ct; si++) {
-        var spt = points[si];
+      // remove collinear segments
+      //var cpts = decimateCollinear(vrpts, tol);
 
-        // if distance is >= tolerance, include the point and set it as
-        // reference point
-        if (ref.distanceToSq(spt) >= tol2) {
-          resultPoints.push(spt);
-          ref = spt;
+      // then decimate by Douglas-Peucker algorithm
+      //var dppts = decimateDP(vrpts, tol);
+
+      this.fromPoints(vrpts);
+
+      if (Math.abs(this.area) < tol * tol) this.invalidate();
+
+      return this;
+
+      function decimateVR(pts, tol) {
+        var ct = pts.length;
+        var tolsq = tol * tol;
+
+        // index of the reference point
+        var refidx = 0;
+
+        // result points
+        var rpts = [];
+        rpts.push(pts[0]);
+
+        for (var si = 1; si < ct; si++) {
+          var spt = pts[si];
+
+          // if distance is < tolerance, ignore the point
+          if (pts[refidx].distanceToSq(spt) < tolsq) continue;
+
+          // else, include it and set it as the new reference point
+          rpts.push(spt);
+          refidx = si;
         }
+
+        return rpts;
       }
 
-      return this.fromPoints(resultPoints);
+      function decimateCollinear(pts, tol) {
+        var ct = pts.length;
+        var ct1 = ct - 1;
+        var tolsq = tol * tol;
+
+        // result points
+        var rpoints = [];
+
+        var narea = MCG.Math.narea;
+
+        for (var si = 0; si < ct; si++) {
+          var pt0 = si === 0 ? pts[ct1] : pts[si-1];
+          var pt1 = pts[si];
+          var pt2 = si === ct1 ? pts[0] : pts[si+1];
+
+          if (narea(pt0, pt1, pt2) < tolsq) rpoints.push(pt1);
+        }
+
+        return rpoints;
+      }
+
+      function decimateDP(pts, tol) {
+        var ct = pts.length;
+
+        // marker array
+        var mk = new Array(ct);
+        mk[0] = mk[ct-1] = true;
+
+        // build the mk array
+        decimateDPRecursive(pts, mk, tol, 0, ct-1);
+
+        // result points
+        var rpts = [];
+
+        // if a point is marked, include it in the result
+        for (var i = 0; i < ct; i++) {
+          if (mk[i]) rpts.push(pts[i]);
+        }
+
+        return rpts;
+      }
+
+      // recursive Douglas-Peucker procedure
+      function decimateDPRecursive(pts, mk, tol, i, j) {
+        if (i >= j-1) return;
+
+        var tolsq = tol * tol;
+        var maxdistsq = 0;
+        var idx = -1;
+
+        var distanceToLineSq = MCG.Math.distanceToLineSq;
+        var pti = pts[i], ptj = pts[j];
+
+        for (var k = i+1; k < j; k++) {
+          var distsq = distanceToLineSq(pti, ptj, pts[k]);
+          if (distsq > maxdistsq) {
+            maxdistsq = distsq;
+            idx = k;
+          }
+        }
+
+        if (distsq > tolsq) {
+          mk[idx] = true;
+
+          decimateDPRecursive(pts, mk, tol, i, idx);
+          decimateDPRecursive(pts, mk, tol, idx, j);
+        }
+      }
     }
 
   });
