@@ -255,6 +255,7 @@ Slicer.prototype.setPreviewSlice = function() {
     });
 
     debug.lines();
+    return;
 
     /*var b = layer.source.clone().decimate(this.resolution);
     var u = MCG.Boolean.union(b, undefined, true);
@@ -369,38 +370,29 @@ Slicer.prototype.makeLayers = function() {
     //console.log(i);
     // create layer from the contours
     if (0) {
-      if (i==97) {
-        var segmentSet = segmentSets[i];
+      if (i==217) {
+        var polygonSet = segmentSets[i].toPolygonSet().decimate(this.resolution);
+        var base = MCG.Boolean.union(polygonSet).toPolygonSet();
 
-        segmentSet.toPolygonSet().forEachPointPair(function(p1, p2) {
+        base.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
           var v2 = p2.toVector3();
-          debug.line(v1, v2, 1, false, 0.01, segmentSet.context.axis);
+          debug.line(v1, v2, 1, false, 0.01, base.context.axis);
         });
 
-        var pset = segmentSet.toPolygonSet();
-        var o = 0.3;
-        pset.forEachSegmentPair(function(p1, p2, p3) {
-          console.log(MCG.Math.collinear(p1, p2, p3),
-          MCG.Math.distanceToLine(p1, p3, p2),
-          Math.SQRT2);
-          o += 0.1;
-          debug.line(p1.toVector3(), p2.toVector3(), 1, false, o, segmentSet.context.axis);
-          debug.line(p2.toVector3(), p3.toVector3(), 1, false, o, segmentSet.context.axis);
+        var offset = base.offset(-0.075).decimate(this.resolution);//.elements[13];
+        var offsetUnion = MCG.Boolean.union(offset, undefined, false);
+
+        offset.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.05, base.context.axis);
         });
 
-        var union = MCG.Boolean.union(segmentSet.toPolygonSet(), undefined, false);
-
-        union.forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3();
-            var v2 = p2.toVector3();
-            debug.line(v1, v2, 1, false, 0.1, "z");
-        });
-
-        union.toPolygonSet().forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3();
-            var v2 = p2.toVector3();
-            debug.line(v1, v2, 1, false, 0.11, "z");
+        offsetUnion.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3();
+          var v2 = p2.toVector3();
+          debug.line(v1, v2, 1, false, 0.1, base.context.axis);
         });
       }
       else continue;
@@ -563,18 +555,15 @@ function Layer(segmentSet, resolution) {
 Layer.prototype.computeContours = function(resolution, numWalls) {
   var base = this.base;
 
-  //todo: remove
-  numWalls = 2;
-
   var contours = [];
-  if (0) {
+  if (1) {
     contours.push(this.base);
     this.contours = contours;
     return;
   }
 
   for (var w = 0; w < numWalls; w++) {
-    var offset = base.offset((w + 0.5) * -resolution);
+    var offset = base.offset((w + 0.5) * -resolution).decimate(resolution);
     var union = MCG.Boolean.union(offset);
     contours.push(union.toPolygonSet());
   }

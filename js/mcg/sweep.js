@@ -32,7 +32,7 @@ Object.assign(MCG.Sweep, (function() {
     );
 
     var o = 1.0;
-    var ct = 0, lim = Infinity;
+    var ct = 0, lim = 10000;
     while (events.length > 0) {
       if (ct++ > lim) {
         //throw "exceeded event limit " + lim;
@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 1*p, 3*p) && inRange(ev.p.v, 15*p, 16*p);
+      printEvents = dbg;// && inRange(ev.p.h, 1*p, 3*p) && inRange(ev.p.v, 15*p, 16*p);
       drawEvents = false;
       incr = 0.1;
 

@@ -37,7 +37,9 @@ MCG.Segment = (function() {
   }
 
   Segment.prototype.valid = function() {
-    return !!(this.p1 && this.p2);
+    if (!(this.p1 && this.p2)) return false;
+
+    return !MCG.Math.coincident(this.p1, this.p2);
   }
 
   Segment.prototype.clone = function() {
