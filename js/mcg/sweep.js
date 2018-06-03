@@ -32,7 +32,7 @@ Object.assign(MCG.Sweep, (function() {
     );
 
     var o = 1.0;
-    var ct = 0, lim = 10000;
+    var ct = 0, lim = dbg ? 50 : 10000;
     while (events.length > 0) {
       if (ct++ > lim) {
         //throw "exceeded event limit " + lim;
@@ -391,10 +391,10 @@ Object.assign(MCG.Sweep, (function() {
         // only admit intersections on one endpoint of one segment or some
         // non-endpoint on both segments
         if (intersection === flags.intermediate) pi = a.intersection(b);
-        else if (intersection === flags.a0) pi = pa;
-        else if (intersection === flags.a1) pi = pta;
-        else if (intersection === flags.b1) pi = ptb;
-        else if (intersection === flags.b0) pi = pb;
+        else if (intersection === flags.a0 && a.isParent()) pi = pa;
+        else if (intersection === flags.a1 && ta.isParent()) pi = pta;
+        else if (intersection === flags.b0 && b.isParent()) pi = pb;
+        else if (intersection === flags.b1 && tb.isParent()) pi = ptb;
 
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);

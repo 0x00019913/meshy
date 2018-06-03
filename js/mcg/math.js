@@ -1,13 +1,13 @@
 Object.assign(MCG.Math, (function() {
 
   // float to integer
-  function ftoi(f, p) {
-    return Math.round(f * p);
+  function ftoi(f, context) {
+    return Math.round(f * context.p);
   }
 
   // integer to float
-  function itof(i, p) {
-    return i / p;
+  function itof(i, context) {
+    return i / context.p;
   }
 
   // true if two points are coincident
@@ -101,10 +101,10 @@ Object.assign(MCG.Math, (function() {
       a1: a1,                 // a1 is on b0-b1
       b0: b0,                 // b0 is on a0-a1
       b1: b1,                 // b1 is on a0-a1
-      a01: a01,               // a0 and a1 are on b0-b1
-      b01: b01,               // b0 and b1 are on a0-a1
-      a0b0: a0b0,             // intersection point is start of both segments
-      a1b1: a1b1,             // intersection point is end of both segments
+      a: a01,                 // a0 and a1 are on b0-b1
+      b: b01,                 // b0 and b1 are on a0-a1
+      start: a0b0,            // intersection point is start of both segments
+      end: a1b1,              // intersection point is end of both segments
       collinear: a0b0 | a1b1  // a and b are collinear
     };
   })();
@@ -141,6 +141,7 @@ Object.assign(MCG.Math, (function() {
     leftCompare: leftCompare,
 
     collinear: function(a, b, c) {
+      // consecutive vertices a, b, c are collinear if b is on a-c segment
       return leftCompare(a, c, b) === 0;
     },
 
@@ -194,13 +195,47 @@ Object.assign(MCG.Math, (function() {
       if (lcda === 0 && abBtwn) result |= flags.a0;
       if (lcdb === 0 && abBtwn) result |= flags.a1;
 
+      // if one segment registers as collinear with the other, say both segments
+      // are collinear
       if (result & flags.a0 && result & flags.a1) return flags.collinear;
       if (result & flags.b0 && result & flags.b1) return flags.collinear;
 
-      // if both segments only have a starting point on the other segment,
-      // process this as an intersection at one of the starting points; the
-      // endpoint between the endpoints of the other segment is used
-      if (result & flags.a0 && result & flags.b0 && !coincident(a, c)) {
+      // if both segments have only a starting point on the other segment,
+      // 1. either they actually intersect at the starting point, or
+      // 2. it's some sort of invalid intersection, in which case correct the
+      // result to indicate that the intersection happens on only one of the
+      // starting points
+      var sinv = result & flags.a0 && result & flags.b0 && !coincident(a, c);
+      // analogously for end points
+      var einv = result & flags.a1 && result & flags.b1 && !coincident(b, d);
+
+      if (sinv || einv) {
+        var ab = a.vectorTo(b);
+        var cd = c.vectorTo(d);
+
+        if (sinv) {
+          var ac = a.vectorTo(c);
+          var acdotab = ac.dot(ab);
+          var cadotcd = -ac.dot(cd);
+
+          if (acdotab < 0 && cadotcd < 0) return flags.none;
+          else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
+          else if (acdotab < 0 && cadotcd >= 0) return flags.a0;
+          else return flags.start;
+        }
+        if (einv) {
+          var bd = b.vectorTo(d);
+          var bddotab = bd.dot(ab);
+          var dbdotcd = -bd.dot(cd);
+
+          if (bddotab < 0 && dbdotcd < 0) return flags.none;
+          else if (bddotab >= 0 && dbdotcd < 0) return flags.b1;
+          else if (bddotab < 0 && dbdotcd >= 0) return flags.a1;
+          else return flags.start;
+        }
+      }
+
+      /*if (sinv) {
         var ab = a.vectorTo(b);
         var ac = a.vectorTo(c);
 
@@ -210,12 +245,12 @@ Object.assign(MCG.Math, (function() {
       }
 
       // analogously for end points
-      if (result & flags.a1 && result & flags.b1 && !coincident(b, d)) {
+      if (einv) {
         var db = d.vectorTo(b);
         var dc = d.vectorTo(c);
 
         return db.dot(dc) > 0 ? flags.a1 : flags.b1;
-      }
+      }*/
 
       // possible intersection on intermediate points
       if (result === flags.none) {
@@ -248,13 +283,6 @@ Object.assign(MCG.Math, (function() {
       if (pb < 0 || pb > 1) return null;
 
       return a0.clone().addScaledVector(a0.vectorTo(a1), pa);
-    },
-
-    parallel: function(a, ae, b, be) {
-      var da = a.vectorTo(ae);
-      var db = b.vectorTo(be);
-
-      return da.h * db.v === db.h * da.v;
     },
 
     orthogonalRightVector: orthogonalRightVector,

@@ -29,6 +29,10 @@ Object.assign(MCG.Sweep, (function() {
       return e;
     },
 
+    isParent: function() {
+      return this === this.parent;
+    },
+
     vertical: function() {
       return this.p.h === this.twin.p.h;
     },

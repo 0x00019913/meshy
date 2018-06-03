@@ -1,10 +1,10 @@
 MCG.Polygon = (function() {
 
-  function Polygon(context, sourcePoints, open) {
+  function Polygon(context, sourcePoints, params) {
     this.context = context;
 
     // closed by default
-    this.closed = !open;
+    this.closed = !(params && params.open);
 
     this.points = [];
     this.bisectors = null;
@@ -204,15 +204,16 @@ MCG.Polygon = (function() {
       }
     },
 
-    // offset everything in the polygon set by a given distance (given in
-    // floating-point-space units)
-    offset: function(dist) {
+    // offset every point in the polygon by a given distance (positive for
+    // outward, negative for inward, given in floating-point-space units)
+    offset: function(fdist, ftol) {
       var result = this.createNew();
 
       if (!this.valid()) return result;
 
       var size = this.size();
-      var minsize = Math.min(size.h, size.v) / this.context.p;
+      var minsize = Math.min(size.h, size.v);
+      var dist = MCG.Math.ftoi(fdist, this.context);
 
       if (dist <= -minsize / 2) return result;
 
@@ -240,37 +241,37 @@ MCG.Polygon = (function() {
         // angle between the offset vector and the neighboring segments (because
         // the angles array stores the angle relative to the outward-facing
         // bisector, which may be antiparallel to the offset vector)
-        var a = dist > 0 ? angles[i] : (pi - angles[i]);
-        var d = dist / Math.sin(a);
+        var a = fdist > 0 ? angles[i] : (pi - angles[i]);
+        var d = fdist / Math.sin(a);
         var displacement = pti.clone().addScaledVector(b, d);
 
         // if shifting out from a point, cap the resulting spike with a
-        // segment whose center is dist away from the current point
+        // segment whose center is fdist away from the current point
         if (a > tcaphigh) {
           // half-angle between displacement and vector orthogonal to segment
           var ha = (a - pi2) / 2;
 
-          // half-length of the cap to the spike
-          var hl = dist * Math.tan(ha);
+          // half-length of the cap for the spike
+          var hl = fdist * Math.tan(ha);
 
           // orthogonal vector from the end of the displacement vector
           var ov = orthogonalRightVector(pti, displacement);
 
           // midpoint of the cap
-          var mv = pti.clone().addScaledVector(b, dist);
+          var mc = pti.clone().addScaledVector(b, fdist);
 
           // endpoints of the cap segment
-          var p0 = mv.clone().addScaledVector(ov, -hl);
-          var p1 = mv.clone().addScaledVector(ov, hl);
+          var p0 = mc.clone().addScaledVector(ov, -hl);
+          var p1 = mc.clone().addScaledVector(ov, hl);
 
           if (coincident(p0, p1)) rpoints.push(displacement);
           else {
-            rpoints.push(dist > 0 ? p0 : p1);
-            rpoints.push(dist > 0 ? p1 : p0);
+            rpoints.push(fdist > 0 ? p0 : p1);
+            rpoints.push(fdist > 0 ? p1 : p0);
           }
         }
         // if shift is "inside a cusp", just shift along bisector s.t. the
-        // resulting segments will be displaced by dist
+        // resulting segments will be displaced by fdist
         else if (a > tcaplow) {
           rpoints.push(displacement);
         }
@@ -286,19 +287,13 @@ MCG.Polygon = (function() {
     // source: http://geomalgorithms.com/a16-_decimate-1.html
     // NB: this mutates the polygon
     decimate: function(ftol) {
-      var tol = MCG.Math.ftoi(ftol, this.context.p);
+      var tol = MCG.Math.ftoi(ftol, this.context);
 
       // source points
       var spts = this.points;
 
       // first, decimate by vertex reduction
       var vrpts = decimateVR(spts, tol);
-
-      // remove collinear segments
-      //var cpts = decimateCollinear(vrpts, tol);
-
-      // then decimate by Douglas-Peucker algorithm
-      //var dppts = decimateDP(vrpts, tol);
 
       this.fromPoints(vrpts);
 

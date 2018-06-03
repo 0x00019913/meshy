@@ -16,11 +16,11 @@ MCG.Vector = (function() {
   Object.assign(Vector.prototype, {
 
     fromVector3: function(v3) {
-      var p = this.context.p;
+      var context = this.context;
       var ftoi = MCG.Math.ftoi;
 
-      this.h = ftoi(v3[this.context.ah], p);
-      this.v = ftoi(v3[this.context.av], p);
+      this.h = ftoi(v3[this.context.ah], context);
+      this.v = ftoi(v3[this.context.av], context);
 
       return this;
     },
@@ -30,13 +30,12 @@ MCG.Vector = (function() {
       c = c || THREE.Vector3;
 
       var context = this.context;
-      var p = context.p;
       var itof = MCG.Math.itof;
 
       var res = new c();
       res[context.axis] = context.d;
-      res[context.ah] = itof(this.h, p);
-      res[context.av] = itof(this.v, p);
+      res[context.ah] = itof(this.h, context);
+      res[context.av] = itof(this.v, context);
 
       return res;
     },
@@ -84,11 +83,11 @@ MCG.Vector = (function() {
     },
 
     sh: function() {
-      return MCG.Math.itof(this.h, this.context.p);
+      return MCG.Math.itof(this.h, this.context);
     },
 
     sv: function() {
-      return MCG.Math.itof(this.v, this.context.p);
+      return MCG.Math.itof(this.v, this.context);
     },
 
     add: function(other) {

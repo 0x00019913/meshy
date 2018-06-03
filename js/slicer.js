@@ -255,7 +255,6 @@ Slicer.prototype.setPreviewSlice = function() {
     });
 
     debug.lines();
-    return;
 
     /*var b = layer.source.clone().decimate(this.resolution);
     var u = MCG.Boolean.union(b, undefined, true);
@@ -283,7 +282,7 @@ Slicer.prototype.setPreviewSlice = function() {
     return;*/
 
     for (var i=1; i<2; i++) {
-      var offset = layer.base.offset(-0.075 * i);
+      var offset = layer.base.offset(-0.075 * i);//.elements[53];
 
       if (1) {
         offset.forEachPointPair(function(p1, p2) {
@@ -292,7 +291,7 @@ Slicer.prototype.setPreviewSlice = function() {
           debug.line(v1, v2, 1, false, 0.1, axis);
         });
 
-        var union = MCG.Boolean.union(offset, undefined, true);
+        var union = MCG.Boolean.union(offset, undefined, false);
 
         union.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3();
@@ -556,14 +555,15 @@ Layer.prototype.computeContours = function(resolution, numWalls) {
   var base = this.base;
 
   var contours = [];
-  if (1) {
+  if (0) {
     contours.push(this.base);
     this.contours = contours;
     return;
   }
 
   for (var w = 0; w < numWalls; w++) {
-    var offset = base.offset((w + 0.5) * -resolution).decimate(resolution);
+    // todo: don't decimate
+    var offset = base.offset((w + 0.5) * -resolution);//.decimate(resolution);
     var union = MCG.Boolean.union(offset);
     contours.push(union.toPolygonSet());
   }
