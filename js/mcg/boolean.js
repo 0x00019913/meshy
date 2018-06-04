@@ -1,4 +1,4 @@
-MCG.Boolean = (function() {
+Object.assign(MCG.Boolean, (function() {
 
   var Boolean = {
     union: union
@@ -11,4 +11,4 @@ MCG.Boolean = (function() {
 
   return Boolean;
 
-})();
+})());

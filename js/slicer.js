@@ -282,7 +282,12 @@ Slicer.prototype.setPreviewSlice = function() {
     return;*/
 
     for (var i=1; i<2; i++) {
-      var offset = layer.base.offset(-0.075 * i);//.elements[53];
+      var offset = layer.base.offset(-0.075 * i, this.resolution);//.elements[53];
+
+      var ires = MCG.Math.ftoi(this.resolution, offset.context);
+      offset.forEach(function(polygon) {
+        console.log(polygon.area/1e10, ires*ires/1e10);
+      });
 
       if (1) {
         offset.forEachPointPair(function(p1, p2) {
@@ -379,7 +384,7 @@ Slicer.prototype.makeLayers = function() {
           debug.line(v1, v2, 1, false, 0.01, base.context.axis);
         });
 
-        var offset = base.offset(-0.075).decimate(this.resolution);//.elements[13];
+        var offset = base.offset(-0.075, this.resolution);//.decimate(this.resolution);//.elements[13];
         var offsetUnion = MCG.Boolean.union(offset, undefined, false);
 
         offset.forEachPointPair(function(p1, p2) {
@@ -552,8 +557,6 @@ function Layer(segmentSet, resolution) {
 }
 
 Layer.prototype.computeContours = function(resolution, numWalls) {
-  var base = this.base;
-
   var contours = [];
   if (0) {
     contours.push(this.base);
@@ -562,8 +565,7 @@ Layer.prototype.computeContours = function(resolution, numWalls) {
   }
 
   for (var w = 0; w < numWalls; w++) {
-    // todo: don't decimate
-    var offset = base.offset((w + 0.5) * -resolution);//.decimate(resolution);
+    var offset = this.base.offset((w + 0.5) * -resolution, resolution);
     var union = MCG.Boolean.union(offset);
     contours.push(union.toPolygonSet());
   }

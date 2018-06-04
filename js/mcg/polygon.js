@@ -12,8 +12,10 @@ MCG.Polygon = (function() {
 
     this.area = 0;
 
-    this.max = new MCG.Vector(context).setScalar(-Infinity);
-    this.min = new MCG.Vector(context).setScalar(Infinity);
+    this.max = null;
+    this.min = null;
+
+    this.initBounds();
 
     // construct the polygon
 
@@ -103,6 +105,17 @@ MCG.Polygon = (function() {
       }
     },
 
+    initBounds: function() {
+      var context = this.context;
+
+      this.max = new MCG.Vector(context).setScalar(-Infinity);
+      this.min = new MCG.Vector(context).setScalar(Infinity);
+    },
+
+    initArea: function() {
+      this.area = 0;
+    },
+
     updateBounds: function(pt) {
       this.max.max(pt);
       this.min.min(pt);
@@ -144,6 +157,8 @@ MCG.Polygon = (function() {
 
     invalidate: function() {
       this.points = [];
+      this.initArea();
+      this.initBounds();
 
       return this;
     },
@@ -214,6 +229,7 @@ MCG.Polygon = (function() {
       var size = this.size();
       var minsize = Math.min(size.h, size.v);
       var dist = MCG.Math.ftoi(fdist, this.context);
+      var tol = ftol !== undefined ? MCG.Math.ftoi(ftol, this.context): 0;
 
       if (dist <= -minsize / 2) return result;
 
@@ -264,23 +280,49 @@ MCG.Polygon = (function() {
           var p0 = mc.clone().addScaledVector(ov, -hl);
           var p1 = mc.clone().addScaledVector(ov, hl);
 
-          if (coincident(p0, p1)) rpoints.push(displacement);
+          if (coincident(p0, p1)) addPoints(displacement);
           else {
-            rpoints.push(fdist > 0 ? p0 : p1);
-            rpoints.push(fdist > 0 ? p1 : p0);
+            var fpt = fdist > 0 ? p0 : p1;
+            var spt = fdist > 0 ? p1 : p0;
+
+            addPoints(fpt, spt);
           }
         }
         // if shift is "inside a cusp", just shift along bisector s.t. the
-        // resulting segments will be displaced by fdist
+        // resulting segments will be displaced by fdist, but only if the cusp
+        // is wide enough
         else if (a > tcaplow) {
-          rpoints.push(displacement);
+          addPoints(displacement);
         }
         // else, cusp is too narrow, so just don't offset
       }
 
       result.fromPoints(rpoints);
 
+      //console.log(result.area, tol*tol);
+
+      // if result area is too small, invalidate it
+      if (Math.abs(result.area) < tol * tol) result.invalidate();
+
       return result;
+
+      function addPoints() {
+        var rlen = rpoints.length;
+        var arglen = arguments.length;
+        var prevpt = null;
+
+        if (rlen > 0) prevpt = rpoints[rlen-1];
+
+        for (var ai = 0; ai < arglen; ai++) {
+          var apt = arguments[ai];
+
+          if (!prevpt || (prevpt.distanceToSq(apt) > tol)) {
+            rpoints.push(apt);
+            prevpt = apt;
+          }
+
+        }
+      }
     },
 
     // reduce vertex count

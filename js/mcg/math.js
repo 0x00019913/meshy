@@ -2,11 +2,15 @@ Object.assign(MCG.Math, (function() {
 
   // float to integer
   function ftoi(f, context) {
+    if (context === undefined) context = new MCG.Context();
+
     return Math.round(f * context.p);
   }
 
   // integer to float
   function itof(i, context) {
+    if (context === undefined) context = new MCG.Context();
+    
     return i / context.p;
   }
 

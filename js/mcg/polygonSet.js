@@ -36,11 +36,13 @@ MCG.PolygonSet = (function() {
       });
     },
 
-    offset: function(dist) {
+    offset: function(dist, tol) {
       var polygonSet = new this.constructor(this.context);
 
       this.forEach(function(polygon) {
-        polygonSet.add(polygon.offset(dist));
+        var offset = polygon.offset(dist, tol);
+
+        if (offset.valid()) polygonSet.add(offset);
       });
 
       return polygonSet;
