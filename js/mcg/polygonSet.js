@@ -36,6 +36,18 @@ MCG.PolygonSet = (function() {
       });
     },
 
+    foffset: function(fdist, ftol) {
+      var polygonSet = new this.constructor(this.context);
+
+      this.forEach(function(polygon) {
+        var offset = polygon.foffset(fdist, ftol);
+
+        if (offset.valid()) polygonSet.add(offset);
+      });
+
+      return polygonSet;
+    },
+
     offset: function(dist, tol) {
       var polygonSet = new this.constructor(this.context);
 
@@ -46,6 +58,19 @@ MCG.PolygonSet = (function() {
       });
 
       return polygonSet;
+    },
+
+    fdecimate: function(ftol) {
+      this.forEach(function(polygon) {
+        polygon.fdecimate(ftol);
+      });
+
+      // remove invalid polygons
+      this.filter(function(polygon) {
+        return polygon.valid();
+      });
+
+      return this;
     },
 
     decimate: function(tol) {

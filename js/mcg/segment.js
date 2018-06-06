@@ -9,7 +9,9 @@ MCG.Segment = (function() {
     this.type = MCG.Types.segment;
   }
 
-  Segment.prototype.fromVector3Pair = function(v1, v2, normal) {
+  Object.assign(Segment.prototype, {
+
+    fromVector3Pair: function(v1, v2, normal) {
       var context = this.context;
 
       var p1 = new MCG.Vector(context).fromVector3(v1);
@@ -34,17 +36,26 @@ MCG.Segment = (function() {
       }
 
       return this;
-  }
+    },
 
-  Segment.prototype.valid = function() {
-    if (!(this.p1 && this.p2)) return false;
+    valid: function() {
+      if (!(this.p1 && this.p2)) return false;
 
-    return !MCG.Math.coincident(this.p1, this.p2);
-  }
+      return !MCG.Math.coincident(this.p1, this.p2);
+    },
 
-  Segment.prototype.clone = function() {
-    return new this.constructor(this.context, this.p1, this.p2);
-  }
+    clone: function() {
+      return new this.constructor(this.context, this.p1, this.p2);
+    },
+
+    updateBoundsFromThis: function(min, max) {
+      min.min(this.p1);
+      max.max(this.p1);
+      min.min(this.p2);
+      max.max(this.p2);
+    }
+
+  });
 
   return Segment;
 

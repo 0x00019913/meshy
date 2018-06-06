@@ -38,7 +38,6 @@ MCG.Polygon = (function() {
       // else, just add the new point
       else {
         points.push(spt);
-        this.updateBounds(spt);
       }
     }
 
@@ -52,6 +51,10 @@ MCG.Polygon = (function() {
 
       this.calculateArea();
     }
+
+    if (!this.valid()) return this;
+
+    this.calculateBounds();
 
     return this;
   }
@@ -121,6 +124,11 @@ MCG.Polygon = (function() {
       this.min.min(pt);
     },
 
+    updateBoundsFromThis: function(min, max) {
+      min.min(this.min);
+      max.max(this.max);
+    },
+
     calculateBounds: function() {
       var context = this.context;
 
@@ -136,6 +144,8 @@ MCG.Polygon = (function() {
 
     calculateArea: function() {
       this.area = 0;
+
+      if (!this.closed) return;
 
       var area = MCG.Math.area;
       var points = this.points;
@@ -219,17 +229,26 @@ MCG.Polygon = (function() {
       }
     },
 
+    // offset, but the arguments are given in floating-point space
+    foffset: function(fdist, ftol) {
+      var context = this.context;
+      var dist = MCG.Math.ftoi(fdist, context);
+      var tol = ftol !== undefined ? MCG.Math.ftoi(ftol, context): 0;
+
+      return this.offset(dist, tol);
+    },
+
     // offset every point in the polygon by a given distance (positive for
-    // outward, negative for inward, given in floating-point-space units)
-    offset: function(fdist, ftol) {
+    // outward, negative for inward, given in integer-space units)
+    offset: function(dist, tol) {
       var result = this.createNew();
 
       if (!this.valid()) return result;
 
       var size = this.size();
       var minsize = Math.min(size.h, size.v);
-      var dist = MCG.Math.ftoi(fdist, this.context);
-      var tol = ftol !== undefined ? MCG.Math.ftoi(ftol, this.context): 0;
+      var fdist = MCG.Math.itof(dist, this.context);
+      var tol = tol || 0;
 
       if (dist <= -minsize / 2) return result;
 
@@ -271,7 +290,7 @@ MCG.Polygon = (function() {
           var hl = fdist * Math.tan(ha);
 
           // orthogonal vector from the end of the displacement vector
-          var ov = orthogonalRightVector(pti, displacement);
+          var ov = orthogonalRightVector(pti.vectorTo(displacement));
 
           // midpoint of the cap
           var mc = pti.clone().addScaledVector(b, fdist);
@@ -325,11 +344,17 @@ MCG.Polygon = (function() {
       }
     },
 
+    fdecimate: function(ftol) {
+      var tol = MCG.Math.ftoi(ftol, this.context);
+
+      return this.decimate(tol);
+    },
+
     // reduce vertex count
     // source: http://geomalgorithms.com/a16-_decimate-1.html
     // NB: this mutates the polygon
-    decimate: function(ftol) {
-      var tol = MCG.Math.ftoi(ftol, this.context);
+    decimate: function(tol) {
+      if (tol <= 0) return this;
 
       // source points
       var spts = this.points;

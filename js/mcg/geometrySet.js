@@ -5,13 +5,20 @@ MCG.GeometrySet = (function() {
 
     this.elements = [];
 
+    this.min = new MCG.Vector(context).setScalar(Infinity);
+    this.max = new MCG.Vector(context).setScalar(-Infinity);
+
     this.type = MCG.Types.abstractGeometrySet;
   }
 
   Object.assign(GeometrySet.prototype, {
 
     add: function(e) {
-      if (e.valid()) this.elements.push(e);
+      if (e.valid()) {
+        this.elements.push(e);
+
+        e.updateBoundsFromThis(this.min, this.max);
+      }
 
       return this;
     },

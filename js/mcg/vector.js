@@ -19,8 +19,8 @@ MCG.Vector = (function() {
       var context = this.context;
       var ftoi = MCG.Math.ftoi;
 
-      this.h = ftoi(v3[this.context.ah], context);
-      this.v = ftoi(v3[this.context.av], context);
+      this.h = ftoi(v3[context.ah], context);
+      this.v = ftoi(v3[context.av], context);
 
       return this;
     },
@@ -59,9 +59,25 @@ MCG.Vector = (function() {
       return this;
     },
 
+    setUnitVector: function(axis) {
+      var p = this.context.p;
+
+      if (axis === "h") this.set(p, 0);
+      else this.set(0, p);
+
+      return this;
+    },
+
     setScalar: function(s) {
       this.h = s;
       this.v = s;
+
+      return this;
+    },
+
+    negate: function() {
+      this.h *= -1;
+      this.v *= -1;
 
       return this;
     },
@@ -143,7 +159,10 @@ MCG.Vector = (function() {
     },
 
     setLength: function(l) {
-      return this.multiplyScalar(l / this.length());
+      var tl = this.length();
+      if (tl === l) return this;
+
+      return this.multiplyScalar(l / tl);
     },
 
     // normalize the vector to length this.context.p (1 in its original
@@ -203,6 +222,17 @@ MCG.Vector = (function() {
 
     vcompare: function(other) {
       return Math.sign(this.v - other.v);
+    },
+
+    // rotates CCW
+    rotate: function(angle) {
+      var h = this.h, v = this.v;
+      var c = Math.cos(angle), s = Math.sin(angle);
+
+      this.h = c * h - s * v;
+      this.v = s * h + c * v;
+
+      return this;
     }
 
   });

@@ -10,7 +10,7 @@ Object.assign(MCG.Math, (function() {
   // integer to float
   function itof(i, context) {
     if (context === undefined) context = new MCG.Context();
-    
+
     return i / context.p;
   }
 
@@ -113,16 +113,15 @@ Object.assign(MCG.Math, (function() {
     };
   })();
 
-  // create a normalized vector that is orthogonal to and right of a-b segment
-  function orthogonalRightVector(a, b) {
-    var d = a.vectorTo(b);
+  // create a normalized vector that is orthogonal to and right of vector d
+  function orthogonalRightVector(d, len) {
     var h = d.h, v = d.v;
 
     // opposite inverse slope makes an orthogonal vector
-    d.h = v;
-    d.v = -h;
+    var r = d.clone().set(v, -h);
 
-    return d.normalize();
+    if (len !== undefined) return r.setLength(len);
+    else return r.normalize();
   }
 
   return {
@@ -239,23 +238,6 @@ Object.assign(MCG.Math, (function() {
         }
       }
 
-      /*if (sinv) {
-        var ab = a.vectorTo(b);
-        var ac = a.vectorTo(c);
-
-        // if ab parallel to ac, c is within the bounds of the two segments and
-        // a is the outlyer; if antiparallel, a is within the bounds
-        return ab.dot(ac) > 0 ? flags.b0 : flags.a0;
-      }
-
-      // analogously for end points
-      if (einv) {
-        var db = d.vectorTo(b);
-        var dc = d.vectorTo(c);
-
-        return db.dot(dc) > 0 ? flags.a1 : flags.b1;
-      }*/
-
       // possible intersection on intermediate points
       if (result === flags.none) {
         if (abBtwn && cdBtwn) {
@@ -293,10 +275,18 @@ Object.assign(MCG.Math, (function() {
 
     // the bisector of a-b and b-c segments, looking right of both segments
     bisector: function(a, b, c) {
-      var abr = orthogonalRightVector(a, b);
-      var bcr = orthogonalRightVector(b, c);
+      var abr = orthogonalRightVector(a.vectorTo(b));
+      var bcr = orthogonalRightVector(b.vectorTo(c));
 
       return abr.add(bcr).normalize();
+    },
+
+    cycleAxis: function(a) {
+      if (a === "h") return "v";
+      else if (a === "v") return "h";
+      else if (a === "x") return "y";
+      else if (a === "y") return "z";
+      else return "x";
     }
 
   };
