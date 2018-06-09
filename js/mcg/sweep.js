@@ -4,10 +4,10 @@ Object.assign(MCG.Sweep, (function() {
   var drawEvents = false;
   var incr = 0;
 
-  function sweep(src0, src1, dbg) {
-    if (!src0) return null;
+  function sweep(operation, srcA, srcB, dbg) {
+    if (!srcA) return null;
 
-    var context = src0.context;
+    var context = srcA.context;
 
     var axis = context.axis;
     var ah = context.ah;
@@ -16,20 +16,25 @@ Object.assign(MCG.Sweep, (function() {
 
     var efactory = new MCG.Sweep.SweepEventFactory(context);
 
-    var resultSet = new MCG.SegmentSet(context);
+    var result = operation.initResult(context);
 
     // priority queue storing events from left to right
     var events = new PriorityQueue({
       comparator: function(a, b) { return a.sweepcompare(b); }
     });
 
-    src0.forEachPointPair(addPointPair);
-    if (src1 !== undefined) src1.forEachPointPair(addPointPair);
-
     // structure storing the sweep line status
     var status = new RBTree(
       function(a, b) { return a.linecompare(b); }
     );
+
+    // add events for srcA
+    srcA.forEachPointPair(addPointPairA);
+
+    // if available, also add for srcB
+    if (srcB !== undefined) srcB.forEachPointPair(addPointPairB);
+
+    // process events in order
 
     var o = 1.0;
     var ct = 0, lim = dbg ? 50 : 10000;
@@ -90,11 +95,11 @@ Object.assign(MCG.Sweep, (function() {
 
     debug.lines();
 
-    return resultSet;
+    return result;
 
 
     // create an event pair for a p1-p2 segment
-    function createPointPair(p1, p2) {
+    function createPointPair(p1, p2, wA, wB) {
       if (MCG.Math.coincident(p1, p2)) return null;
 
       // determine direction: if dir, p1 is left and p2 is right; reverse if !dir
@@ -107,7 +112,8 @@ Object.assign(MCG.Sweep, (function() {
 
       // weight is +1 if vertical line going up through p1 -> p2 edge transitions
       // from outside polygon to inside, else -1)
-      el.weight = dir ? 1 : -1;
+      el.weightA = dir ? wA : -wA;
+      el.weightB = dir ? wB : -wB;
 
       // link events to each other
       el.twin = er;
@@ -117,8 +123,8 @@ Object.assign(MCG.Sweep, (function() {
     }
 
     // create and queue an event pair for a p1-p2 segment
-    function addPointPair(p1, p2) {
-      var el = createPointPair(p1, p2);
+    function addPointPair(p1, p2, wA, wB) {
+      var el = createPointPair(p1, p2, wA, wB);
 
       if (el === null) return null;
 
@@ -128,6 +134,14 @@ Object.assign(MCG.Sweep, (function() {
       queue(er);
 
       return el;
+    }
+
+    // functions for adding source A and B
+    function addPointPairA(p1, p2) {
+      return addPointPair(p1, p2, 1, 0);
+    }
+    function addPointPairB(p1, p2) {
+      return addPointPair(p1, p2, 0, 1);
     }
 
     // if an event pair's left-right events are in the incorrect order (this can
@@ -151,8 +165,9 @@ Object.assign(MCG.Sweep, (function() {
       if (el === null) return null;
 
       // assign weight and depth
-      el.weight = -ev.weight;
-      el.depthBelow = ev.depthBelow + ev.weight;
+      el.setWeightFrom(ev, true);
+      el.depthBelowA = ev.depthBelowA + ev.weightA;
+      el.depthBelowB = ev.depthBelowB + ev.weightB;
 
       queue(el.twin);
 
@@ -209,23 +224,23 @@ Object.assign(MCG.Sweep, (function() {
     }
 
     function insert(e) {
-      var result = status.insert(e);
+      var ins = status.insert(e);
 
-      if (!result && printEvents) {
+      if (!ins && printEvents) {
         console.log("insert already existing event", e.id, e.twin.id, statusString());
       }
 
-      return result;
+      return ins;
     }
 
     function remove(e) {
-      result = status.remove(e);
+      var rm = status.remove(e);
 
-      if (!result && e.contributing && printEvents) {
+      if (!rm && e.contributing && printEvents) {
         console.log("remove nonexistent event", e.id, e.twin.id, statusString());
       }
 
-      return result;
+      return rm;
     }
 
     function handleRightEvent(e) {
@@ -233,9 +248,16 @@ Object.assign(MCG.Sweep, (function() {
 
       remove(te);
 
-      if (eventValid(te)) {
-        var pf = te.weight < 0 ? e.p : te.p;
-        var ps = te.weight < 0 ? te.p : e.p;
+      operation.handleEvent(te, result);
+
+      return;
+
+      var flags = MCG.Sweep.EventPositionFlags;
+      var pos = te.getPosition();
+
+      if (pos === flags.boundaryA) {
+        var pf = te.weightA < 0 ? e.p : te.p;
+        var ps = te.weightA < 0 ? te.p : e.p;
 
         resultSet.addPointPair(pf, ps);
       }
@@ -363,10 +385,15 @@ Object.assign(MCG.Sweep, (function() {
 
         eventInvalidate(linv);
 
-        lval.depthBelow = linv.depthBelow;
-        lval.weight += linv.weight;
+        lval.setDepthFrom(linv);
+        lval.addWeightFrom(linv);
 
-        if (lval.weight === 0) eventInvalidate(lval);
+        //lval.depthBelowA = linv.depthBelowA;
+        //lval.depthBelowB = linv.depthBelowB;
+        //lval.weightA += linv.weightA;
+        //lval.weightB += linv.weightB;
+
+        if (lval.zeroWeight()) eventInvalidate(lval);
 
         // note that lf isn't inserted back; this is because the scanline is at
         // least at lval's start point, which is either at the end of lf (if
@@ -500,15 +527,15 @@ Object.assign(MCG.Sweep, (function() {
 
     function statusString() {
       var iter = status.iterator();
-      var result = "[ ";
+      var r = "[ ";
       var e;
 
       while ((e = iter.next())!==null) {
-        result += e.id + " ";
+        r += e.id + " ";
       }
-      result += "]";
+      r += "]";
 
-      return result;
+      return r;
     }
 
     function statusPrintShort(force) {

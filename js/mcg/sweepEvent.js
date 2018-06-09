@@ -1,5 +1,22 @@
 Object.assign(MCG.Sweep, (function() {
 
+  // signifies an event's position (inside a polygon or at a boundary or neither)
+  var EventPositionFlags = {
+    none: 0,
+    // inside polygon A
+    insideA: 1,
+    // inside polygon B
+    insideB: 2,
+    // on the border of A (crosses from non-positive to positive or vice versa)
+    boundaryA: 4,
+    // on the border of B
+    boundaryB: 8,
+    // transition from inside A to inside B (or vice versa)
+    fromAtoB: 16
+  };
+
+
+
   function SweepEvent(p, id) {
     // MCG.Vector at which this event is located
     this.p = p;
@@ -219,8 +236,8 @@ Object.assign(MCG.Sweep, (function() {
           this.twin.p.v, ')',
           fullslope ? slope.toFixed(5) : cslope,
           this.p.vectorTo(this.twin.p).length().toFixed(0),
-          "w", src.weight,
-          "d", src.depthBelow, src.depthBelow + src.weight,
+          "w", src.weightA, src.weightB,
+          "d", src.depthBelowA, src.depthBelowB, src.depthBelowA+src.weightA, src.depthBelowB+src.weightB,
           src.contributing ? "t" : "f"];
       var p =
         [1, 4, 4,
@@ -230,8 +247,8 @@ Object.assign(MCG.Sweep, (function() {
           d+3, 1,
           fullslope ? 7 : 2,
           9,
-          2, 2,
           2, 2, 2,
+          2, 2, 2, 2, 2,
           1]
       var r = "";
       for (var d=0; d<data.length; d++) r += lpad(data[d], p[d]);
@@ -264,8 +281,10 @@ Object.assign(MCG.Sweep, (function() {
 
     this.isLeft = true;
 
-    this.depthBelow = 0;
-    this.weight = 0;
+    this.depthBelowA = 0;
+    this.weightA = 0;
+    this.depthBelowB = 0;
+    this.weightB = 0;
 
     this.contributing = true;
   }
@@ -277,9 +296,69 @@ Object.assign(MCG.Sweep, (function() {
     constructor: LeftSweepEvent,
 
     setDepthFromBelow: function(below) {
-      var depthBelow = below !== null ? below.depthBelow + below.weight : 0;
+      this.depthBelowA = below !== null ? below.depthBelowA + below.weightA : 0;
+      this.depthBelowB = below !== null ? below.depthBelowB + below.weightB : 0;
+    },
 
-      this.depthBelow = depthBelow;
+    setDepthFrom: function(other) {
+      this.depthBelowA = other.depthBelowA;
+      this.depthBelowB = other.depthBelowB;
+    },
+
+    setWeightFrom: function(other, negate) {
+      this.weightA = negate ? -other.weightA : other.weightA;
+      this.weightB = negate ? -other.weightB : other.weightB;
+    },
+
+    addWeightFrom: function(other) {
+      this.weightA += other.weightA;
+      this.weightB += other.weightB;
+    },
+
+    zeroWeight: function() {
+      return this.weightA === 0 && this.weightB === 0;
+    },
+
+    // get a status code that indicates the event's position (inside or at the
+    // boundary of one of the polygons)
+    getPosition: function() {
+      var flags = EventPositionFlags;
+
+      if (!this.contributing) return flags.none;
+
+      var wA = this.weightA, wB = this.weightB;
+
+      // depths above and below for A
+      var dbA = this.depthBelowA;
+      var daA = dbA + wA;
+
+      // depths above and below for B
+      var dbB = this.depthBelowB;
+      var daB = dbB + wB;
+
+      var result = flags.none;
+
+      var boundaryA = (daA < 1 && dbA > 0) || (daA > 0 && dbA < 1);
+      var boundaryB = (daB < 1 && dbB > 0) || (daB > 0 && dbB < 1);
+      var signChange = Math.sign(wA) === -Math.sign(wB);
+
+      if (dbA > 0 && daA > 0) result |= flags.insideA;
+      if (dbB > 0 && daB > 0) result |= flags.insideB;
+      if (boundaryA) result |= flags.boundaryA;
+      if (boundaryB) result |= flags.boundaryB;
+      if (boundaryA && boundaryB && signChange) result |= flags.fromAtoB;
+
+      return result;
+    },
+
+    addSegmentToSet: function(s, invert, weight) {
+      var w = weight === undefined ? this.weightA + this.weightB : weight;
+
+      var pf = w < 0 ? this.twin.p : this.p;
+      var ps = w < 0 ? this.p : this.twin.p;
+
+      if (invert) s.addPointPair(ps, pf);
+      else s.addPointPair(pf, ps);
     },
 
     // return vertical axis comparison for two left events at the later event's
@@ -408,7 +487,10 @@ Object.assign(MCG.Sweep, (function() {
 
   });
 
+
+
   return {
+    EventPositionFlags: EventPositionFlags,
     LeftSweepEvent: LeftSweepEvent,
     RightSweepEvent: RightSweepEvent,
     SweepEventFactory: SweepEventFactory

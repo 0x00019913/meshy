@@ -25,14 +25,14 @@ MCG.Vector = (function() {
       return this;
     },
 
-    toVector3: function(c) {
+    toVector3: function(constr, context) {
       // Vector3 constructor, THREE.js constructor by default
-      c = c || THREE.Vector3;
+      constr = constr || THREE.Vector3;
+      context = context || this.context;
 
-      var context = this.context;
       var itof = MCG.Math.itof;
 
-      var res = new c();
+      var res = new constr();
       res[context.axis] = context.d;
       res[context.ah] = itof(this.h, context);
       res[context.av] = itof(this.v, context);
