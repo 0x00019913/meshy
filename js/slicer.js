@@ -152,6 +152,14 @@ Slicer.prototype.setPreviewSlice = function() {
   // array of faces that intersect the slicing plane
   var slicedFaces = [];
 
+  if (!this.gpu) this.gpu = new GPU();
+  var compute = this.gpu.createKernel(function(a) {
+    return a[this.thread.x];
+  }).setOutput([faceBounds.length]);
+
+  var c = compute(faceBounds);
+  //console.log(c);
+
   for (var i = this.sourceFaceCount-1; i >= 0; i--) {
     var bounds = faceBounds[i];
     // if min above slice level, need to hide the face
@@ -251,146 +259,37 @@ Slicer.prototype.setPreviewSlice = function() {
 
   debug.cleanup();
 
-  if (layer && layer.base.count() > 0) {
-    layer.source.forEachPointPair(function(p1, p2) {
+  if (layer && layer.source.count() > 0) {
+    layer.base.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
-      //debug.line(v1, v2, 1, false, 0, axis);
+      debug.line(v1, v2, 1, false, 0, axis);
     });
 
     debug.lines();
-
-    if (layer.source.elements.length<2) return;
-
-    var poly0 = layer.source.elements[0];
-    var poly1 = layer.source.elements[1];
-
-    poly0.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 0.2, axis);
-    });
-
-    poly1.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 0.4, axis);
-    });
-
-    var union = MCG.Boolean.union(poly0, poly1).union;
-
-    union.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 2.0, axis);
-    });
-
-    union.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 2.2, axis);
-    });
 
     var context = layer.base.context;
     var imin = new MCG.Vector(context).fromVector3(this.min);
     var imax = new MCG.Vector(context).fromVector3(this.max);
     var ires = MCG.Math.ftoi(this.resolution, context);
 
-    var infill = MCG.Generate.infillLinear(imin, imax, ires*10, Math.PI / 4, layer.level%2);
-    //var infill = MCG.Generate.infillHex(imin, imax, ires*10, ires, layer.level%2);
+    var infill = MCG.Generate.infillLinear(imin, imax, ires, Math.PI / 4, layer.level%2);
+    //var infill = MCG.Generate.infillHex(imin, imax, ires*5, ires, layer.level%2);
 
-    var infillInside = MCG.Boolean.intersectionOpen(union, infill).intersectionOpen;
+    var foffset = layer.base.foffset(-0.1, this.resolution);
+    var offset = MCG.Boolean.union(foffset, undefined, false).union;
+    offset.forEachPointPair(function(p1, p2) {
+      debug.line(p1.toVector3(), p2.toVector3(), 1, false, 0.0, axis);
+    });
+
+    offset = offset.toPolygonSet();
+
+    var infillInside = MCG.Boolean.intersectionOpen(offset, infill).intersectionOpen;
 
     infillInside.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3();
       var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 2.0, axis);
-    });
-
-    var intersection = MCG.Boolean.intersection(poly0, poly1).intersection;
-
-    intersection.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 3.0, axis);
-    });
-
-    intersection.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 3.2, axis);
-    });
-
-    var diff01 = MCG.Boolean.difference(poly0, poly1).difference;
-
-    diff01.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 4.0, axis);
-    });
-
-    diff01.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 4.2, axis);
-    });
-
-    var diff10 = MCG.Boolean.difference(poly1, poly0).difference;
-
-    diff10.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 5.0, axis);
-    });
-
-    diff10.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 5.2, axis);
-    });
-
-    var fullDiff = MCG.Boolean.fullDifference(poly0, poly1);
-
-    var fintersection = fullDiff.intersection;
-
-    fintersection.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 6.0, axis);
-    });
-
-    fintersection.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 6.2, axis);
-    });
-
-    var fdiff01 = fullDiff.AminusB;
-
-    fdiff01.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 7.0, axis);
-    });
-
-    fdiff01.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 7.2, axis);
-    });
-
-    var fdiff10 = fullDiff.BminusA;
-
-    fdiff10.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 8.0, axis);
-    });
-
-    fdiff10.toPolygonSet().forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3();
-      var v2 = p2.toVector3();
-      debug.line(v1, v2, 1, false, 8.2, axis);
+      debug.line(v1, v2, 1, false, 0, axis);
     });
 
     debug.lines();
@@ -679,22 +578,17 @@ function Layer(segmentSet, resolution, level) {
 
 Layer.prototype.computeContours = function(resolution, numWalls, min, max) {
   var contours = [];
-  if (1) {
+  if (0) {
     contours.push(this.base);
     this.contours = contours;
     return;
   }
-
-  var context = this.context;
-  var imin = new MCG.Vector(context).fromVector3(min);
-  var imax = new MCG.Vector(context).fromVector3(max);
-  var ires = MCG.Math.ftoi(this.resolution, context);
-
-  //var infill = MCG.Generate.infillLinear(imin, imax, ires*10, Math.PI / 6, this.level%2);
-  //var infill = MCG.Generate.infillHex(imin, imax, ires*10, ires, this.level%2);
-  //infill.forEachPointPair(function(p1, p2) {
-  //  debug.line(p1.toVector3(), p2.toVector3());
-  //});
+  if (0) {
+    var offset = MCG.Boolean.union(this.base.foffset(-0.1, resolution)).union;
+    contours.push(offset.toPolygonSet());
+    this.contours = contours;
+    return;
+  }
 
   for (var w = 0; w < numWalls; w++) {
     var offset = this.base.foffset((w + 0.5) * -resolution, resolution);

@@ -37,7 +37,7 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 1.0;
-    var ct = 0, lim = dbg ? 50 : 10000;
+    var ct = 0, lim = dbg ? 5000 : 100000;
     while (events.length > 0) {
       if (ct++ > lim) {
         //throw "exceeded event limit " + lim;
@@ -47,11 +47,12 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg;// && inRange(ev.p.h, 1*p, 3*p) && inRange(ev.p.v, 15*p, 16*p);
+      printEvents = dbg;// && inRange(ev.p.h, 2.0*p, 3.0*p) && inRange(ev.p.v, 22.0*p, 23.2*p);
       drawEvents = false;
       incr = 0.1;
 
       if (ev.isLeft) {
+
         if (!ev.contributing) continue;
 
         var ins = insert(ev);
@@ -249,21 +250,6 @@ Object.assign(MCG.Sweep, (function() {
       remove(te);
 
       operation.handleEvent(te, result);
-
-      return;
-
-      var flags = MCG.Sweep.EventPositionFlags;
-      var pos = te.getPosition();
-
-      if (pos === flags.boundaryA) {
-        var pf = te.weightA < 0 ? e.p : te.p;
-        var ps = te.weightA < 0 ? te.p : e.p;
-
-        resultSet.addPointPair(pf, ps);
-      }
-      else {
-        //debug.line(e.p.toVector3(), te.p.toVector3(), 1, false, 0.05, context.axis);
-      }
     }
 
     // handle a possible intersection between a pair of events
@@ -320,8 +306,6 @@ Object.assign(MCG.Sweep, (function() {
         // 4. adjust right event at y and its twin to represent the combined
         //    weights and depths of it and its redundant segment (xl and xl.twin)
 
-        if (printEvents) console.log("collinear");
-
         eventPrint(a, "a ");
         eventPrint(b, "b ");
 
@@ -329,8 +313,13 @@ Object.assign(MCG.Sweep, (function() {
         var vertical = a.vertical() || b.vertical();
 
         // compare bounds for left events and right events
-        var lcomp = vertical ? pa.vcompare(pb) : pa.hcompare(pb);
-        var rcomp = vertical ? pta.vcompare(ptb) : pta.hcompare(ptb);
+        var hcomp = pa.hcompare(pb), htcomp = pta.hcompare(ptb);
+        var lcomp = hcomp !== 0 ? hcomp : pa.vcompare(pb);
+        var rcomp = htcomp !== 0 ? htcomp : pta.vcompare(ptb);
+        //var lcomp = vertical ? pa.vcompare(pb) : pa.hcompare(pb);
+        //var rcomp = vertical ? pta.vcompare(ptb) : pta.hcompare(ptb);
+
+        if (printEvents) console.log("collinear", lcomp, rcomp);
 
         // there will be up to two split points, one on the left, another on the
         // right
@@ -388,11 +377,6 @@ Object.assign(MCG.Sweep, (function() {
         lval.setDepthFrom(linv);
         lval.addWeightFrom(linv);
 
-        //lval.depthBelowA = linv.depthBelowA;
-        //lval.depthBelowB = linv.depthBelowB;
-        //lval.weightA += linv.weightA;
-        //lval.weightB += linv.weightB;
-
         if (lval.zeroWeight()) eventInvalidate(lval);
 
         // note that lf isn't inserted back; this is because the scanline is at
@@ -418,10 +402,10 @@ Object.assign(MCG.Sweep, (function() {
         // only admit intersections on one endpoint of one segment or some
         // non-endpoint on both segments
         if (intersection === flags.intermediate) pi = a.intersection(b);
-        else if (intersection === flags.a0 && a.isParent()) pi = pa;
-        else if (intersection === flags.a1 && ta.isParent()) pi = pta;
-        else if (intersection === flags.b0 && b.isParent()) pi = pb;
-        else if (intersection === flags.b1 && tb.isParent()) pi = ptb;
+        else if (intersection === flags.a0) pi = a.isParent() ? pa : a.intersection(b);
+        else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
+        else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
+        else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
 
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);
@@ -519,10 +503,9 @@ Object.assign(MCG.Sweep, (function() {
 
       if (!e.contributing) return false;
 
-      var da = e.depthBelow + e.weight;
-      var db = e.depthBelow;
+      var pos = e.getPosition();
 
-      return (da < 1 && db > 0) || (da > 0 && db < 1);
+      return pos & MCG.Sweep.EventPositionFlags.boundaryAB;
     }
 
     function statusString() {

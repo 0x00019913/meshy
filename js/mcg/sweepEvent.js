@@ -214,9 +214,10 @@ Object.assign(MCG.Sweep, (function() {
     },
 
     toString: function(pref, fullslope) {
-      pref = (pref || "--");
-
       var src = this.isLeft ? this : this.twin;
+      var pst = (src.weightA!==0?"A":"-") + (src.weightB!==0?"B":"-");
+      pref = (pref || pst);
+
       var d = 4;
       var diff = src.p.vectorTo(src.twin.p);
       var slope = src.vertical() ? Infinity : diff.v/diff.h;
@@ -237,7 +238,7 @@ Object.assign(MCG.Sweep, (function() {
           fullslope ? slope.toFixed(5) : cslope,
           this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weightA, src.weightB,
-          "d", src.depthBelowA, src.depthBelowB, src.depthBelowA+src.weightA, src.depthBelowB+src.weightB,
+          "d", src.depthBelowA, src.depthBelowA+src.weightA, src.depthBelowB, src.depthBelowB+src.weightB,
           src.contributing ? "t" : "f"];
       var p =
         [1, 4, 4,
@@ -248,7 +249,7 @@ Object.assign(MCG.Sweep, (function() {
           fullslope ? 7 : 2,
           9,
           2, 2, 2,
-          2, 2, 2, 2, 2,
+          2, 4, 4, 4, 4,
           1]
       var r = "";
       for (var d=0; d<data.length; d++) r += lpad(data[d], p[d]);

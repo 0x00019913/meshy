@@ -45,6 +45,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.sliceMode = SlicerModes.preview;
   this.slicer = null; // instance of module responsible for slicing
   this.slicePreviewMesh = null;
+  this.slicePreviewMeshInternal = null;
   this.sliceLayerMesh = null;
 
   // will contain the bounds of distinct components in the geometry (main mesh
@@ -67,7 +68,13 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       vertexColors: THREE.FaceColors
     }),
     slicePreviewMesh: new THREE.MeshStandardMaterial({
-      color: 0x6666ff
+      side: THREE.FrontSide,
+      color: 0x080822,
+      roughness: 1,
+      metalness: 0
+      //color: 0x4444bb,
+      //side: THREE.FrontSide,
+      //roughness: 0.7
     }),
     slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
       transparent: true,
@@ -75,6 +82,12 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     }),
     slicePreviewMeshSliceSurface: new THREE.MeshStandardMaterial({
       color: 0x6666ff
+    }),
+    slicePreviewMeshInternal: new THREE.MeshStandardMaterial({
+      side: THREE.BackSide,
+      color: 0x080822,
+      roughness: 1,
+      metalness: 0
     }),
     sliceLayerMesh: new THREE.LineBasicMaterial({
       color: 0xffffff,
@@ -617,6 +630,7 @@ Model.prototype.toggleWireframe = function() {
   }
   if (this.slicePreviewMesh) {
     this.slicePreviewMesh.material[0].wireframe = this.wireframe;
+    this.slicePreviewMeshInternal.visible = !this.wireframe;
   }
 }
 
@@ -776,6 +790,7 @@ Model.prototype.makeSliceMesh = function() {
 Model.prototype.addSliceMesh = function() {
   if (this.sliceMode==SlicerModes.preview) {
     if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
+    if (this.slicePreviewMeshInternal) this.scene.add(this.slicePreviewMeshInternal);
   }
   else if (this.sliceMode==SlicerModes.layer) {
     if (this.sliceLayerMesh) this.scene.add(this.sliceLayerMesh);
@@ -826,16 +841,22 @@ Model.prototype.makeSlicePreviewMesh = function() {
     // set materialIndex = 0 to make a face visible
     this.materials.slicePreviewMesh,
     // set materialindex = 1 to hide a face
-    this.materials.slicePreviewMeshTransparent,
-    // set materialIndex = 2 for slice surface
-    this.materials.slicePreviewMeshSliceSurface
+    this.materials.slicePreviewMeshTransparent
   ];
-
   var mesh = new THREE.Mesh(geo, faceMaterials);
   mesh.name = "model";
   mesh.frustumCulled = false;
 
+  var faceMaterialsInternal = [
+    this.materials.slicePreviewMeshInternal,
+    this.materials.slicePreviewMeshTransparent
+  ];
+  var meshInternal = new THREE.Mesh(geo, faceMaterialsInternal);
+  meshInternal.name = "model";
+  meshInternal.frustumCulled = false;
+
   this.slicePreviewMesh = mesh;
+  this.slicePreviewMeshInternal = meshInternal;
 }
 
 // Create the slice-mode layer visualization mesh.
@@ -1979,7 +2000,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = SlicerModes.preview; // todo: switch back to preview
+  this.sliceMode = SlicerModes.layer; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
@@ -2023,9 +2044,17 @@ Model.prototype.setSliceMode = function(sliceMode) {
 Model.prototype.setSlice = function(slice) {
   if (!this.slicer) return;
 
-  this.slicer.setSlice(slice);
+  var t
 
+  t = performance.now();
+  this.slicer.setSlice(slice);
+  var e1 = performance.now() - t;
+
+  t = performance.now();
   this.setSliceMeshGeometry();
+  var e2 = performance.now() - t;
+
+  //console.log(e1, e2);
 }
 
 Model.prototype.recalculateLayers = function(resolution, numWalls) {

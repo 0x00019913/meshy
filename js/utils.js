@@ -802,11 +802,18 @@ Timer = function() {
   this.endTime = 0;
   this.running = false;
 }
-Timer.prototype.start = function() { this.startTime = new Date(); this.running = true;}
-Timer.prototype.stop = function() { this.endTime = new Date(); this.running = false;}
+Timer.prototype.start = function() {
+  this.startTime = new Date();
+  this.running = true;
+}
+Timer.prototype.stop = function() {
+  this.endTime = new Date();
+  this.running = false;
+  return this.endTime - this.startTime;
+}
 Timer.prototype.elapsed = function() {
-  if (this.running) return (new Date() - this.startTime)/1000;
-  else return (this.endTime - this.startTime)/1000;
+  if (this.running) return new Date() - this.startTime;
+  else return this.endTime - this.startTime;
 }
 
 
