@@ -24,26 +24,26 @@ function Printout(maxCount) {
 
 // Print white text.
 Printout.prototype.log = function(str) {
-  var entry = this.makeEntry(str);
-  this.printLine(entry);
+  var entry = new PrintoutEntry(str);
+  this.addEntry(entry);
 }
 
 // Print yellow text.
 Printout.prototype.warn = function(str) {
-  var entry = this.makeEntry(str);
-  entry.style.color = "#ffcc00";
-  this.printLine(entry);
+  var entry = new PrintoutEntry(str);
+  entry.setColor("#ffcc00");
+  this.addEntry(entry);
 }
 
 // Print red text.
 Printout.prototype.error = function(str) {
-  var entry = this.makeEntry(str);
-  entry.style.color = "#ff3333";
-  this.printLine(entry);
+  var entry = new PrintoutEntry(str);
+  entry.setColor("#ff3333");
+  this.addEntry(entry);
 }
 
 // Put down a line in the printout.
-Printout.prototype.printLine = function(entry) {
+Printout.prototype.addEntry = function(entry) {
   var children = this.container.children;
   if (this.count>=this.maxCount) {
     this.container.removeChild(children[0]);
@@ -51,7 +51,7 @@ Printout.prototype.printLine = function(entry) {
   else {
     this.count++;
   }
-  this.container.appendChild(entry);
+  this.container.appendChild(entry.element);
 
   var opacity = 1.0;
   var dOpacity = (1.0-this.minOpacity) / this.maxCount;
@@ -59,15 +59,6 @@ Printout.prototype.printLine = function(entry) {
     children[i].style.opacity = opacity;
     opacity -= dOpacity;
   }
-}
-
-// Create and style a span to contain a new line.
-Printout.prototype.makeEntry = function(str) {
-  var entry = document.createElement('span');
-  entry.style.display = "block";
-  entry.style.height = "16px";
-  entry.textContent = str;
-  return entry;
 }
 
 // Style the container.
@@ -84,4 +75,24 @@ Printout.prototype.styleContainer = function() {
   this.container.style.color = "#eee";
   this.container.style.font = "11px Lucida Grande, sans-serif";
   this.container.style.textShadow = "0 -1px 0 #111";
+}
+
+function PrintoutEntry(str) {
+  this.str = str;
+
+  this.element = document.createElement('span');
+  this.element.style.display = "block";
+  this.element.style.height = "16px";
+  this.element.textContent = str;
+}
+
+PrintoutEntry.prototype.setColor = function(color) {
+  this.style.color = color;
+}
+
+PrintoutEntry.prototype.setProgress = function(f) {
+  var p = clamp(f * 100, 0, 100);
+  var prefix = this.str === "" ? "" : this.str + ": ";
+
+  this.element.textContent = prefix + p.toFixed(0) + "%";
 }
