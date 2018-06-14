@@ -69,7 +69,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     }),
     slicePreviewMesh: new THREE.MeshStandardMaterial({
       side: THREE.FrontSide,
-      color: 0x080822,
+      color: 0x0f0f30,
       roughness: 1,
       metalness: 0
       //color: 0x4444bb,
@@ -85,7 +85,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
     }),
     slicePreviewMeshInternal: new THREE.MeshStandardMaterial({
       side: THREE.BackSide,
-      color: 0x080822,
+      color: 0x0f0f30,
       roughness: 1,
       metalness: 0
     }),

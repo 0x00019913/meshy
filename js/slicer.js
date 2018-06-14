@@ -273,8 +273,8 @@ Slicer.prototype.setPreviewSlice = function() {
     var imax = new MCG.Vector(context).fromVector3(this.max);
     var ires = MCG.Math.ftoi(this.resolution, context);
 
-    var infill = MCG.Generate.infillLinear(imin, imax, ires, Math.PI / 4, layer.level%2);
-    //var infill = MCG.Generate.infillHex(imin, imax, ires*5, ires, layer.level%2);
+    //var infill = MCG.Generate.infillLinear(imin, imax, ires, Math.PI / 4, layer.level%2);
+    var infill = MCG.Generate.infillHex(imin, imax, ires*5, ires, layer.level%2);
 
     var foffset = layer.base.foffset(-0.1, this.resolution);
     var offset = MCG.Boolean.union(foffset, undefined, false).union;

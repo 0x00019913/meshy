@@ -165,35 +165,6 @@ Object.assign(MCG.Sweep, (function() {
       if (la === -1 || lb === 1) return 1;
 
       return 0;
-
-      var lc = MCG.Math.leftCompare(pb, ptb, pa);
-      var lct = MCG.Math.leftCompare(pb, ptb, pta);
-
-      // if a on b-b.t and a.t on b-b.t, the two segments have the same slope
-      if (lc === 0 && lct === 0) {
-        // it's possible that events testing as parallel are actually
-        // antiparallel, so one has the greater slope
-        var cva = Math.sign(pa.vcompare(pta)), cvb = Math.sign(pb.vcompare(ptb));
-        if (cva > cvb) return -1;
-        else if (cva < cvb) return 1;
-
-        // segments are parallel
-        return 0;
-      }
-      // else, if a not right of b-b.t and a.t not left of b-b.t, a's slope is less
-      else if (lc != -1 && lct != 1) return -1;
-      // else, if a not left of b-b.t and a.t not right of b-b.t, b's slope is less
-      else if (lc != 1 && lct != -1) return 1;
-      // should never happen (lines don't intersect), but do a literal slope
-      // test just in case
-      else {
-        var ah = pa.h, ath = pta.h;
-        var bh = pb.h, bth = ptb.h;
-        var sa = ah === ath ? Infinity : (pta.v - pa.v) / (ath - ah);
-        var sb = bh === bth ? Infinity : (ptb.v - pb.v) / (bth - bh);
-
-        return Math.sign(sa - sb);
-      }
     },
 
     // returns comparison between two left/two right events based on their

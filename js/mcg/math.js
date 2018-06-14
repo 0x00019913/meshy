@@ -232,8 +232,8 @@ Object.assign(MCG.Math, (function() {
           var dbdotcd = -bd.dot(cd);
 
           if (bddotab < 0 && dbdotcd < 0) return flags.none;
-          else if (bddotab >= 0 && dbdotcd < 0) return flags.b1;
-          else if (bddotab < 0 && dbdotcd >= 0) return flags.a1;
+          else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
+          else if (bddotab < 0 && dbdotcd >= 0) return flags.b1;
           else return flags.start;
         }
       }

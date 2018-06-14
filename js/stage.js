@@ -515,7 +515,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .001, 10000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .001, 1000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
