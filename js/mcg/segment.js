@@ -44,8 +44,11 @@ MCG.Segment = (function() {
       return !MCG.Math.coincident(this.p1, this.p2);
     },
 
-    clone: function() {
-      return new this.constructor(this.context, this.p1, this.p2);
+    clone: function(recursive) {
+      var p1 = recursive ? this.p1.clone() : this.p1;
+      var p2 = recursive ? this.p2.clone() : this.p2;
+      
+      return new this.constructor(this.context, p1, p2);
     },
 
     updateBoundsFromThis: function(min, max) {

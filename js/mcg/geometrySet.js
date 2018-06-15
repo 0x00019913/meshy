@@ -48,12 +48,12 @@ MCG.GeometrySet = (function() {
       return this;
     },
 
-    clone: function() {
+    clone: function(recursive) {
       var clone = new this.constructor(this.context);
       var elements = clone.elements;
 
       this.forEach(function(element) {
-        elements.push(element.clone());
+        elements.push(element.clone(recursive));
       });
 
       return clone;

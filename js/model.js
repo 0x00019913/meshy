@@ -810,8 +810,8 @@ Model.prototype.setSliceMeshGeometry = function() {
     var mesh = this.slicePreviewMesh;
     if (!mesh) return;
 
-    mesh.geometry.vertices = sliceVertices;
-    mesh.geometry.faces = sliceFaces;
+    mesh.geometry.vertices = [];//sliceVertices;
+    mesh.geometry.faces = [];//sliceFaces;
 
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
@@ -2000,7 +2000,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = SlicerModes.layer; // todo: switch back to preview
+  this.sliceMode = SlicerModes.preview; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
@@ -2044,7 +2044,7 @@ Model.prototype.setSliceMode = function(sliceMode) {
 Model.prototype.setSlice = function(slice) {
   if (!this.slicer) return;
 
-  var t
+  var t;
 
   t = performance.now();
   this.slicer.setSlice(slice);

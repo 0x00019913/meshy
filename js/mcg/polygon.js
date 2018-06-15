@@ -177,18 +177,20 @@ MCG.Polygon = (function() {
       return new this.constructor(this.context, undefined, this.closed);
     },
 
-    clone: function() {
+    clone: function(recursive) {
       var clone = this.createNew();
 
       Object.assign(clone, this);
 
-      // make a new array b/c for clone's cloned points
-      clone.points = [];
+      if (recursive) {
+        // make a new array
+        clone.points = [];
 
-      // clone the points
-      var ct = this.count();
-      for (var i = 0; i < ct; i++) {
-        clone.points[i] = this.points[i].clone();
+        // clone the points
+        var ct = this.count();
+        for (var i = 0; i < ct; i++) {
+          clone.points[i] = this.points[i].clone();
+        }
       }
 
       return clone;
