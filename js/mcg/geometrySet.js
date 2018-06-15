@@ -48,6 +48,14 @@ MCG.GeometrySet = (function() {
       return this;
     },
 
+    rotate: function(angle) {
+      this.forEach(function(element) {
+        element.rotate(angle);
+      });
+
+      return this;
+    },
+
     clone: function(recursive) {
       var clone = new this.constructor(this.context);
       var elements = clone.elements;

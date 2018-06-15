@@ -47,8 +47,15 @@ MCG.Segment = (function() {
     clone: function(recursive) {
       var p1 = recursive ? this.p1.clone() : this.p1;
       var p2 = recursive ? this.p2.clone() : this.p2;
-      
+
       return new this.constructor(this.context, p1, p2);
+    },
+
+    rotate: function(angle) {
+      this.p1.rotate(angle);
+      this.p2.rotate(angle);
+
+      return this;
     },
 
     updateBoundsFromThis: function(min, max) {

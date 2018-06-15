@@ -226,11 +226,13 @@ MCG.Vector = (function() {
 
     // rotates CCW
     rotate: function(angle) {
-      var h = this.h, v = this.v;
-      var c = Math.cos(angle), s = Math.sin(angle);
+      var h = this.h;
+      var v = this.v;
+      var c = Math.cos(angle);
+      var s = Math.sin(angle);
 
-      this.h = c * h - s * v;
-      this.v = s * h + c * v;
+      this.setH(c * h - s * v);
+      this.setV(s * h + c * v);
 
       return this;
     }
