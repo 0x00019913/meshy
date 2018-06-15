@@ -8,31 +8,45 @@ Object.assign(MCG.Sweep, (function() {
   }
 
   // makes an object containing the init function and event handler
-  function makeOperation(initResult, handleEvent) {
+  function makeOperation(initStore, handleEvent) {
+    var op = function(params) {
+      return {
+        initStore: function(context, srcA, srcB) {
+          return initStore(context, srcA, srcB, params);
+        },
+        handleEvent: handleEvent
+      };
+    };
+
+    return op;
+  }
+
+
+
+  // operation store initialization functions
+
+  function unionInit(context) {
     return {
-      initResult: initResult,
-      handleEvent: handleEvent
+      result: resultAddSet({}, context, "union")
     };
   }
 
-
-
-  // operation result initialization functions
-
-  function unionInit(context) {
-    return resultAddSet({}, context, "union");
-  }
-
   function intersectionInit(context) {
-    return resultAddSet({}, context, "intersection");
+    return {
+      result: resultAddSet({}, context, "intersection")
+    };
   }
 
   function intersectionOpenInit(context) {
-    return resultAddSet({}, context, "intersectionOpen");
+    return {
+      result: resultAddSet({}, context, "intersectionOpen")
+    }
   }
 
   function differenceInit(context) {
-    return resultAddSet({}, context, "difference")
+    return {
+      result: resultAddSet({}, context, "difference")
+    }
   }
 
   function fullDifferenceInit(context) {
@@ -42,16 +56,32 @@ Object.assign(MCG.Sweep, (function() {
     resultAddSet(result, context, "BminusA");
     resultAddSet(result, context, "intersection");
 
-    return result;
+    return {
+      result: result
+    };
+  }
+
+  function linearInfillInit(context, srcA, srcB, params) {
+    // calculate the leftmost line that crosses the contour s.t. all lines are
+    // vertical, all lines have the given spacing, and one line passes through 0
+    var spacing = params.spacing;
+    var hline = Math.ceil(srcA.min.h / spacing) * spacing;
+
+    return {
+      spacing: spacing,
+      hline: hline,
+      result: resultAddSet({}, context, "infill")
+    }
   }
 
 
 
   // event handler functions
 
-  function unionHandle(event, result) {
+  function unionHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
     var pos = event.getPosition();
+    var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
     var boundaryA = pos & flags.boundaryA, boundaryB = pos & flags.boundaryB;
@@ -62,9 +92,10 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
-  function intersectionHandle(event, result) {
+  function intersectionHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
     var pos = event.getPosition();
+    var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
     var boundaryA = pos & flags.boundaryA, boundaryB = pos & flags.boundaryB;
@@ -79,9 +110,10 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
-  function intersectionOpenHandle(event, result) {
+  function intersectionOpenHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
     var pos = event.getPosition();
+    var result = store.result;
 
     var insideA = pos & flags.insideA;
     var isB = event.weightB !== 0;
@@ -91,9 +123,10 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
-  function differenceHandle(event, result) {
+  function differenceHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
     var pos = event.getPosition();
+    var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
     var boundaryA = pos & flags.boundaryA, boundaryB = pos & flags.boundaryB;
@@ -113,9 +146,10 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
-  function fullDifferenceHandle(event, result) {
+  function fullDifferenceHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
     var pos = event.getPosition();
+    var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
     var boundaryA = pos & flags.boundaryA, boundaryB = pos & flags.boundaryB;
@@ -149,6 +183,44 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
+  function linearInfillHandle(event, status, store) {
+    var result = store.result;
+    var spacing = store.spacing;
+    var hline = store.hline;
+    var h = event.p.h, ht = event.twin.p.h;
+
+    // if segment is vertical or line position is outside its bounds, return
+    if (h === ht) return;
+
+    if (hline >= ht) return;
+
+    while (hline <= ht) {
+      // go through events in status, find pairs that enclose the interior of the
+      // contour, draw a segment between them
+      var iter = status.iterator();
+      var prev = null, curr;
+
+      while ((curr = iter.next()) !== null) {
+        if (!curr.contains(hline)) continue;
+
+        if (prev !== null) {
+          if (curr.depthBelowA > 0 && (prev.depthBelowA + prev.weightA) > 0) {
+            var p1 = prev.interpolate(hline);
+            var p2 = curr.interpolate(hline);
+
+            result.infill.addPointPair(p1, p2);
+          }
+        }
+
+        prev = curr;
+      }
+
+      hline += spacing;
+    }
+
+    store.hline = hline;
+  }
+
 
 
   var Operations = {
@@ -156,7 +228,8 @@ Object.assign(MCG.Sweep, (function() {
     intersection: makeOperation(intersectionInit, intersectionHandle),
     intersectionOpen: makeOperation(intersectionOpenInit, intersectionOpenHandle),
     difference: makeOperation(differenceInit, differenceHandle),
-    fullDifference: makeOperation(fullDifferenceInit, fullDifferenceHandle)
+    fullDifference: makeOperation(fullDifferenceInit, fullDifferenceHandle),
+    linearInfill: makeOperation(linearInfillInit, linearInfillHandle)
   };
 
 

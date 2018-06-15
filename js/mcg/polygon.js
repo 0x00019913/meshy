@@ -12,8 +12,8 @@ MCG.Polygon = (function() {
 
     this.area = 0;
 
-    this.max = null;
     this.min = null;
+    this.max = null;
 
     this.initBounds();
 
@@ -111,8 +111,8 @@ MCG.Polygon = (function() {
     initBounds: function() {
       var context = this.context;
 
-      this.max = new MCG.Vector(context).setScalar(-Infinity);
       this.min = new MCG.Vector(context).setScalar(Infinity);
+      this.max = new MCG.Vector(context).setScalar(-Infinity);
     },
 
     initArea: function() {
@@ -120,8 +120,8 @@ MCG.Polygon = (function() {
     },
 
     updateBounds: function(pt) {
-      this.max.max(pt);
       this.min.min(pt);
+      this.max.max(pt);
     },
 
     updateBoundsFromThis: function(min, max) {
@@ -132,8 +132,7 @@ MCG.Polygon = (function() {
     calculateBounds: function() {
       var context = this.context;
 
-      this.max = new MCG.Vector(context).setScalar(-Infinity);
-      this.min = new MCG.Vector(context).setScalar(Infinity);
+      this.initBounds();
 
       var _this = this;
 
@@ -209,6 +208,8 @@ MCG.Polygon = (function() {
       this.forEach(function(point) {
         point.rotate(angle);
       });
+
+      this.calculateBounds();
 
       return this;
     },

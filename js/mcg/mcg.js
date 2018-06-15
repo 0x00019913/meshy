@@ -23,5 +23,4 @@ MCG.Types = {
 MCG.Math = {};
 MCG.Sweep = {};
 MCG.Boolean = {};
-MCG.Generate = {};
 MCG.Infill = {};

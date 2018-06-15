@@ -274,7 +274,17 @@ Slicer.prototype.setPreviewSlice = function() {
     offset.forEachPointPair(function(p1, p2) {
       debug.line(p1.toVector3(), p2.toVector3(), 1, false, 0.0, axis);
     });
-    offset = MCG.Boolean.union(layer.base.foffset(-0.1, this.resolution)).union.toPolygonSet();
+    var internal = MCG.Boolean.union(layer.base.foffset(-0.1, this.resolution)).union.toPolygonSet();
+
+    var ires = MCG.Math.ftoi(this.resolution, context);
+    var infill = MCG.Infill.generate(internal, MCG.Infill.Types.linear, {
+      angle: Math.PI / 4,
+      spacing: ires * 1,
+      parity: slice%2
+    });
+    infill.forEachPointPair(function(p1, p2) {
+      debug.line(p1.toVector3(), p2.toVector3(), 1, false, 0.0, axis);
+    });
 
     debug.lines();
 
@@ -300,7 +310,7 @@ Slicer.prototype.setPreviewSlice = function() {
     var ires = MCG.Math.ftoi(this.resolution, context);
 
     //var infill = MCG.Generate.infillLinear(imin, imax, ires, Math.PI / 4, layer.level%2);
-    var infill = MCG.Generate.infillHex(imin, imax, ires*5, ires, layer.level%2);
+    //var infill = MCG.Generate.infillHex(imin, imax, ires*5, ires, layer.level%2);
 
     var foffset = layer.base.foffset(-0.1, this.resolution);
     var offset = MCG.Boolean.union(foffset, undefined, false).union;

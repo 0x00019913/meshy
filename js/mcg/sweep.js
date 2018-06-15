@@ -16,7 +16,7 @@ Object.assign(MCG.Sweep, (function() {
 
     var efactory = new MCG.Sweep.SweepEventFactory(context);
 
-    var result = operation.initResult(context);
+    var store = operation.initStore(context, srcA, srcB);
 
     // priority queue storing events from left to right
     var events = new PriorityQueue({
@@ -97,7 +97,7 @@ Object.assign(MCG.Sweep, (function() {
 
     debug.lines();
 
-    return result;
+    return store.result;
 
 
     // create an event pair for a p1-p2 segment
@@ -248,9 +248,9 @@ Object.assign(MCG.Sweep, (function() {
     function handleRightEvent(e) {
       var te = e.twin;
 
-      remove(te);
+      operation.handleEvent(te, status, store);
 
-      operation.handleEvent(te, result);
+      remove(te);
     }
 
     // handle a possible intersection between a pair of events

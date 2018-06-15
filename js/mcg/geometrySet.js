@@ -5,8 +5,10 @@ MCG.GeometrySet = (function() {
 
     this.elements = [];
 
-    this.min = new MCG.Vector(context).setScalar(Infinity);
-    this.max = new MCG.Vector(context).setScalar(-Infinity);
+    this.min = null;
+    this.max = null;
+
+    this.initBounds();
 
     this.type = MCG.Types.abstractGeometrySet;
   }
@@ -21,6 +23,13 @@ MCG.GeometrySet = (function() {
       }
 
       return this;
+    },
+
+    initBounds: function() {
+      var context = this.context;
+
+      this.min = new MCG.Vector(context).setScalar(Infinity);
+      this.max = new MCG.Vector(context).setScalar(-Infinity);
     },
 
     count: function() {
@@ -49,8 +58,12 @@ MCG.GeometrySet = (function() {
     },
 
     rotate: function(angle) {
+      this.initBounds();
+      var _this = this;
+
       this.forEach(function(element) {
         element.rotate(angle);
+        element.updateBoundsFromThis(_this.min, _this.max);
       });
 
       return this;

@@ -323,6 +323,31 @@ Object.assign(MCG.Sweep, (function() {
       return result;
     },
 
+    // subset of .getPosition; only evaluates boundary status
+    getBoundaryPosition: function() {
+      var flags = EventPositionFlags;
+
+      if (!this.contributing) return flags.none;
+
+      // depths above and below for A
+      var dbA = this.depthBelowA;
+      var daA = dbA + this.weightA;
+
+      // depths above and below for B
+      var dbB = this.depthBelowB;
+      var daB = dbB + this.weightB;
+
+      var boundaryA = (daA < 1 && dbA > 0) || (daA > 0 && dbA < 1);
+      var boundaryB = (daB < 1 && dbB > 0) || (daB > 0 && dbB < 1);
+
+      result = flags.none;
+
+      if (boundaryA) result |= flags.boundaryA;
+      if (boundaryB) result |= flags.boundaryB;
+
+      return result;
+    },
+
     addSegmentToSet: function(s, invert, weight) {
       var w = weight === undefined ? this.weightA + this.weightB : weight;
 
@@ -375,6 +400,10 @@ Object.assign(MCG.Sweep, (function() {
       var v = pa.v + (pat.v - pa.v) * (h - pa.h) / (pat.h - pa.h);
 
       return new MCG.Vector(context, h, v);
+    },
+
+    contains: function(h) {
+      return this.p.h <= h && h < this.twin.p.h;
     },
 
     collinear: function(other) {

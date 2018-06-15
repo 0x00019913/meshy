@@ -2,11 +2,11 @@ Object.assign(MCG.Boolean, (function() {
 
   return {
     union: function(a, b, dbg) {
-      return MCG.Sweep.sweep(MCG.Sweep.Operations.union, a, b, dbg);
+      return MCG.Sweep.sweep(MCG.Sweep.Operations.union(), a, b, dbg);
     },
 
     intersection: function(a, b, dbg) {
-      var op = MCG.Sweep.Operations.intersection;
+      var op = MCG.Sweep.Operations.intersection();
       var context = a.context;
 
       if (a.count() === 0 || b.count() === 0) return op.initResult(context);
@@ -15,7 +15,7 @@ Object.assign(MCG.Boolean, (function() {
     },
 
     intersectionOpen: function(a, b, dbg) {
-      var op = MCG.Sweep.Operations.intersectionOpen;
+      var op = MCG.Sweep.Operations.intersectionOpen();
       var context = a.context;
 
       if (a.count() === 0 || b.count() === 0) return op.initResult(context);
@@ -24,7 +24,7 @@ Object.assign(MCG.Boolean, (function() {
     },
 
     difference: function(a, b, dbg) {
-      var op = MCG.Sweep.Operations.difference;
+      var op = MCG.Sweep.Operations.difference();
       var context = a.context;
 
       if (a.count() === 0) return op.initResult(context);
@@ -34,7 +34,7 @@ Object.assign(MCG.Boolean, (function() {
     },
 
     fullDifference: function(a, b, dbg) {
-      var op = MCG.Sweep.Operations.fullDifference;
+      var op = MCG.Sweep.Operations.fullDifference();
       var context = a.context;
 
       if (a.count() === 0) {
