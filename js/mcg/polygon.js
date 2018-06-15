@@ -205,6 +205,14 @@ MCG.Polygon = (function() {
       return this;
     },
 
+    rotate: function(angle) {
+      this.forEach(function(point) {
+        point.rotate(angle);
+      });
+
+      return this;
+    },
+
     // compute bisectors and angles between each edge pair and its bisector
     computeBisectors: function() {
       // return if bisectors already calculated or if polygon is open
