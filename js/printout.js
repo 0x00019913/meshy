@@ -87,7 +87,7 @@ function PrintoutEntry(str) {
 }
 
 PrintoutEntry.prototype.setColor = function(color) {
-  this.style.color = color;
+  this.element.style.color = color;
 }
 
 PrintoutEntry.prototype.setProgress = function(f) {
