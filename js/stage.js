@@ -201,6 +201,8 @@ Stage.prototype.generateUI = function() {
   this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution;
   this.sliceNumWalls = 2;
+  this.sliceInfillType = Slicer.InfillTypes.solid; // todo: back to solid
+  this.sliceInfillDensity = 0.1;
   this.buildSupportSliceFolderInactive();
 
   this.gui.add(this, "undo").name("Undo");
@@ -377,7 +379,8 @@ Stage.prototype.buildSupportFolder = function() {
 // build the Slice folder for when slice mode is off
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
-  this.sliceFolder.add(this, "activateSliceMode").name("Slice mode");
+  this.addLayerSettingsFolder(this.sliceFolder);
+  this.sliceFolder.add(this, "activateSliceMode").name("Slice mode on");
 }
 // build the Slice folder for when slice mode is on
 // NB: the resulting elements go under the Supports & Slicing folder b/c
@@ -399,15 +402,30 @@ Stage.prototype.buildSliceFolderActive = function() {
     folder.add(
       this,
       "sliceMode",
-      { "preview": SlicerModes.preview, "layer": SlicerModes.layer }
+      { "preview": Slicer.Modes.preview, "layer": Slicer.Modes.layer }
     ).name("Mode").onChange(this.setSliceMode.bind(this));
 
-    this.sliceSettingsFolder = folder.addFolder("Layer Settings");
-    this.sliceSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
-    this.sliceSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
+    this.addLayerSettingsFolder(folder, true);
   }
 
-  this.supportSliceFolder.add(this, "deactivateSliceMode").name("Deactivate slice mode");
+  this.supportSliceFolder.add(this, "deactivateSliceMode").name("Slice mode off");
+}
+Stage.prototype.addLayerSettingsFolder = function(folder, showRecalculateButton) {
+  this.sliceLayerSettingsFolder = folder.addFolder("Layer Settings");
+  this.clearFolder(this.sliceLayerSettingsFolder);
+
+  this.sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
+  this.sliceLayerSettingsFolder.add(this, "sliceInfillType", {
+    "none": Slicer.InfillTypes.none,
+    "solid": Slicer.InfillTypes.solid,
+    "grid": Slicer.InfillTypes.grid,
+    "triangle": Slicer.InfillTypes.triangle,
+    "hex": Slicer.InfillTypes.hex
+  }).name("Infill Type");
+  this.sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
+  if (showRecalculateButton) {
+    this.sliceLayerSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
+  }
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
@@ -418,7 +436,9 @@ Stage.prototype.activateSliceMode = function() {
       axis: this.upAxis,
       sliceHeight: this.verticalResolution,
       resolution: this.planarResolution,
-      numWalls: this.sliceNumWalls
+      numWalls: this.sliceNumWalls,
+      infillType: this.sliceInfillType,
+      infillDensity: this.sliceInfillDensity
     });
     this.buildSliceFolderActive();
   }
@@ -727,7 +747,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 101;
+  this.currentSlice = 130;
   this.setSlice();
 
   this.filename = this.model.filename;
