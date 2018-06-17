@@ -403,7 +403,7 @@ Object.assign(MCG.Sweep, (function() {
     },
 
     contains: function(h) {
-      return this.p.h <= h && h < this.twin.p.h;
+      return this.p.h <= h && h <= this.twin.p.h;
     },
 
     collinear: function(other) {

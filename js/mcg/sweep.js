@@ -47,11 +47,9 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 4.5*p, 5.0*p) && inRange(ev.p.v, 26.5*p, 27.5*p);
+      printEvents = dbg;// && inRange(ev.p.h, 4.5*p, 5.0*p) && inRange(ev.p.v, 26.5*p, 27.5*p);
       drawEvents = false;
       incr = 0.1;
-
-      //if (ev.p.h===455913) debug.point(ev.p.toVector3(), 0.25, "z");
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;

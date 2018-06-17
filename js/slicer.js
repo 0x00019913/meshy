@@ -295,12 +295,16 @@ Slicer.prototype.setPreviewSlice = function() {
   if (layer.infill) {
     if (layer.infill.inner) {
       layer.infill.inner.forEachPointPair(function(p1, p2) {
-        debug.line(p1.toVector3(), p2.toVector3(), 1, false, 0.5, axis);
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.0, axis);
       });
     }
 
     layer.infill.solid.forEachPointPair(function(p1, p2) {
-      //debug.line(p1.toVector3(), p2.toVector3(), 1, false, -0.5, axis);
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
     });
   }
 
@@ -638,7 +642,7 @@ Layer.prototype.computeInfillContour = function(resolution, numWalls, force) {
     dist = resolution * numWalls;
   }
 
-  this.infillContour = source.foffset(-dist, resolution);
+  this.infillContour = MCG.Boolean.union(source.foffset(-dist, resolution)).union;
 }
 
 Layer.prototype.computeLayerDifferences = function(resolution, numWalls, force) {

@@ -44,12 +44,6 @@ Object.assign(MCG.Infill, (function() {
     });
 
     var infillRotated = MCG.Sweep.sweep(op, contourRotated).infill;
-    contourRotated.forEachPointPair(function(p1, p2) {
-      debug.line(p1.toVector3(), p2.toVector3(), 1, false, 1.0, "z");
-    });
-    infillRotated.forEachPointPair(function(p1, p2) {
-      debug.line(p1.toVector3(), p2.toVector3(), 1, false, 1.0, "z");
-    });
 
     return infillRotated.rotate(-angle);
   }

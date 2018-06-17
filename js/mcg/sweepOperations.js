@@ -189,11 +189,13 @@ Object.assign(MCG.Sweep, (function() {
     var hline = store.hline;
     var h = event.p.h, ht = event.twin.p.h;
 
-    // if segment is vertical or line position is outside its bounds, return
+    // if segment is vertical, return
     if (h === ht) return;
-
+    // if line position is already past the segment, return
     if (hline >= ht) return;
 
+    // move the line position up, drawing lines as we go, until it clears the
+    // segment completely
     while (hline <= ht) {
       // go through events in status, find pairs that enclose the interior of the
       // contour, draw a segment between them
