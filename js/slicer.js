@@ -71,7 +71,10 @@ Slicer.InfillTypes = {
   solid: 1,
   grid: 2,
   triangle: 4,
-  hex: 8
+  hex: 8,
+  // mask for all infill types that consist of lines that don't need to be
+  // connected to each other
+  disconnectedLineType: 1 | 2 | 4
 };
 
 // necessary function - called from constructor
@@ -692,20 +695,17 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
 
   this.computeInfillContour(resolution, numWalls);
 
-  // if solid infill, just fill the entire thing
-  if (type === Slicer.InfillTypes.solid) {
-    var ires = MCG.Math.ftoi(resolution, this.context);
+  var ires = MCG.Math.ftoi(resolution, this.context);
+  var iressq = ires*ires;
+  var infillInner = null, infillSolid = null;
 
-    var infill = MCG.Infill.generate(this.infillContour, MCG.Infill.Types.linear, {
+  // if solid infill, just fill the entire contour
+  if (type === Slicer.InfillTypes.solid) {
+    infillSolid = MCG.Infill.generate(this.infillContour, MCG.Infill.Types.linear, {
       angle: Math.PI / 4,
       spacing: ires,
       parity: this.level%2
     });
-
-    this.infill = {
-      inner: null,
-      solid: infill
-    };
   }
   // if other infill, need to determine where to fill with that and where to
   // fill with solid infill
@@ -715,29 +715,34 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
     var innerContour = this.infillDisjointContours.inner;
     var solidContour = this.infillDisjointContours.solid;
 
-    var ires = MCG.Math.ftoi(this.resolution, context);
-
-    var infillInner;
-
     if (type === Slicer.InfillTypes.grid) {
-      infillLinear = MCG.Infill.generate(innerContour, MCG.Infill.Types.linear, {
+      infillInner = MCG.Infill.generate(innerContour, MCG.Infill.Types.linear, {
         angle: Math.PI / 4,
         spacing: ires / density,
         parity: this.level%2
       });
     }
 
-    var infillSolid = MCG.Infill.generate(innerContour, MCG.Infill.Types.linear, {
+    infillSolid = MCG.Infill.generate(solidContour, MCG.Infill.Types.linear, {
       angle: Math.PI / 4,
       spacing: ires,
       parity: this.level%2
     });
-
-    this.infill = {
-      inner: infillInner,
-      solid: infillSolid
-    };
   }
+
+  // remove infill segments that are too short if infill consists of
+  // disconnected lines
+  if (type & Slicer.InfillTypes.disconnectedLineType) {
+    if (infillInner !== null) infillInner.filter(filterFn);
+    if (infillSolid !== null) infillSolid.filter(filterFn);
+  };
+
+  this.infill = {
+    inner: infillInner,
+    solid: infillSolid
+  };
+
+  function filterFn(segment) { return segment.lengthSq() >= iressq; }
 }
 
 Layer.prototype.writeToVerts = function(vertices) {

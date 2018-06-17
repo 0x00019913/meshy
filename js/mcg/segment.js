@@ -63,6 +63,14 @@ MCG.Segment = (function() {
       max.max(this.p1);
       min.min(this.p2);
       max.max(this.p2);
+    },
+
+    lengthSq: function() {
+      return this.p1.distanceToSq(this.p2);
+    },
+
+    length: function() {
+      return this.pq.distanceTo(this.p2);
     }
 
   });

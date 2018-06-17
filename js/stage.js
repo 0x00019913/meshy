@@ -201,7 +201,7 @@ Stage.prototype.generateUI = function() {
   this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution;
   this.sliceNumWalls = 2;
-  this.sliceInfillType = Slicer.InfillTypes.solid; // todo: back to solid
+  this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.buildSupportSliceFolderInactive();
 
