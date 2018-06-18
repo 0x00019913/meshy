@@ -840,8 +840,8 @@ Model.prototype.setSliceMeshGeometry = function() {
 Model.prototype.makeSlicePreviewMesh = function() {
   if (this.slicePreviewMesh) return;
 
-  this.slicePreviewMesh = this.baseMesh.clone();
-  this.slicePreviewMesh.material = this.materials.slicePreviewMeshGhost;
+  //this.slicePreviewMesh = this.baseMesh.clone();
+  //this.slicePreviewMesh.material = this.materials.slicePreviewMeshGhost;
 
   return;
 
