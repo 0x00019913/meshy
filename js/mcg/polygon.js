@@ -155,6 +155,22 @@ MCG.Polygon = (function() {
       }
     },
 
+    perimeter: function() {
+      var result = 0;
+
+      this.forEachPointPair(function(p1, p2) {
+        result += p1.distanceTo(p2);
+      });
+
+      return result;
+    },
+
+    isSliver: function(tol) {
+      tol = tol || this.context.p / 25;
+
+      return this.area / this.perimeter() < tol;
+    },
+
     size: function() {
       return this.min.vectorTo(this.max);
     },

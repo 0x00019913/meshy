@@ -402,8 +402,16 @@ Object.assign(MCG.Sweep, (function() {
       return new MCG.Vector(context, h, v);
     },
 
-    contains: function(h) {
+    hcontains: function(h) {
       return this.p.h <= h && h <= this.twin.p.h;
+    },
+
+    vcontains: function(v) {
+      return this.p.v <= v && v <= this.twin.p.v;
+    },
+
+    contains: function(p) {
+      return this.hcontains(p.h) || this.vcontains(p.v);
     },
 
     collinear: function(other) {

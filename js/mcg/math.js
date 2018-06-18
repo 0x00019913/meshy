@@ -222,9 +222,10 @@ Object.assign(MCG.Math, (function() {
           var cadotcd = -ac.dot(cd);
 
           if (acdotab < 0 && cadotcd < 0) return flags.none;
-          else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
+          else return a.h > c.h ? flags.a0 : a.h < c.h ? flags.b0 : flags.none;
+          /*else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
           else if (acdotab < 0 && cadotcd >= 0) return flags.a0;
-          else return flags.start;
+          else return flags.start;*/
         }
         if (einv) {
           var bd = b.vectorTo(d);
@@ -232,9 +233,10 @@ Object.assign(MCG.Math, (function() {
           var dbdotcd = -bd.dot(cd);
 
           if (bddotab < 0 && dbdotcd < 0) return flags.none;
-          else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
+          else return b.h > d.h ? flags.b1 : b.h < d.h ? flags.a1 : flags.none;
+          /*else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
           else if (bddotab < 0 && dbdotcd >= 0) return flags.b1;
-          else return flags.start;
+          else return flags.start;*/
         }
       }
 

@@ -37,7 +37,7 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 1.0;
-    var ct = 0, lim = dbg ? 5000 : 100000;
+    var ct = 0, lim = dbg ? 15000 : 100000;
     while (events.length > 0) {
       if (ct++ > lim) {
         //throw "exceeded event limit " + lim;
@@ -47,7 +47,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg;// && inRange(ev.p.h, 4.5*p, 5.0*p) && inRange(ev.p.v, 26.5*p, 27.5*p);
+      printEvents = dbg && inRange(ev.p.h, 0.0*p, 1.0*p) && inRange(ev.p.v, -12.0*p, -11.0*p);
       drawEvents = false;
       incr = 0.1;
 
@@ -270,13 +270,6 @@ Object.assign(MCG.Sweep, (function() {
         var dabc = dl(pa, pta, pb), dabd = dl(pa, pta, ptb);
         var dcda = dl(pb, ptb, pa), dcdb = dl(pb, ptb, pta);
         console.log(intersection, labc, labd, lcda, lcdb, dabc, dabd, dcda, dcdb);
-        var u = pa, v = pta, p = pb;
-        var uv = u.vectorTo(v);
-        var up = u.vectorTo(p);
-        var uvlensq = uv.lengthSq();
-        var dot = uv.dot(up);
-        //console.log(uv, up, uvlensq, dot);
-        var proj = uv.multiplyScalar(dot / uvlensq);
       }
 
       // if collinear, need to do special handling
@@ -405,6 +398,8 @@ Object.assign(MCG.Sweep, (function() {
         else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
         else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
         else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
+
+        if (pi && (!a.contains(pi) || !b.contains(pi))) pi = null;
 
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);

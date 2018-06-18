@@ -194,6 +194,8 @@ Object.assign(MCG.Sweep, (function() {
     // if line position is already past the segment, return
     if (hline >= ht) return;
 
+    //console.log(hline, h, ht, status.size);
+
     // move the line position up, drawing lines as we go, until it clears the
     // segment completely
     while (hline <= ht) {
@@ -203,7 +205,7 @@ Object.assign(MCG.Sweep, (function() {
       var prev = null, curr;
 
       while ((curr = iter.next()) !== null) {
-        if (!curr.contains(hline)) continue;
+        if (!curr.hcontains(hline)) continue;
 
         if (prev !== null) {
           if (curr.depthBelowA > 0 && (prev.depthBelowA + prev.weightA) > 0) {
