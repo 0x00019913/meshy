@@ -208,7 +208,7 @@ Object.assign(MCG.Math, (function() {
       // 2. it's some sort of invalid intersection, in which case correct the
       // result to indicate that the intersection happens on only one of the
       // starting points
-      var sinv = result & flags.a0 && result & flags.b0 && !coincident(a, c);
+      /*var sinv = result & flags.a0 && result & flags.b0 && !coincident(a, c);
       // analogously for end points
       var einv = result & flags.a1 && result & flags.b1 && !coincident(b, d);
 
@@ -223,9 +223,9 @@ Object.assign(MCG.Math, (function() {
 
           if (acdotab < 0 && cadotcd < 0) return flags.none;
           else return a.h > c.h ? flags.a0 : a.h < c.h ? flags.b0 : flags.none;
-          /*else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
+          else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
           else if (acdotab < 0 && cadotcd >= 0) return flags.a0;
-          else return flags.start;*/
+          else return flags.start;
         }
         if (einv) {
           var bd = b.vectorTo(d);
@@ -234,11 +234,11 @@ Object.assign(MCG.Math, (function() {
 
           if (bddotab < 0 && dbdotcd < 0) return flags.none;
           else return b.h > d.h ? flags.b1 : b.h < d.h ? flags.a1 : flags.none;
-          /*else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
+          else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
           else if (bddotab < 0 && dbdotcd >= 0) return flags.b1;
-          else return flags.start;*/
+          else return flags.start;
         }
-      }
+      }*/
 
       // possible intersection on intermediate points
       if (result === flags.none) {
@@ -251,7 +251,7 @@ Object.assign(MCG.Math, (function() {
     },
 
     // calculate intersection point of a0-a1 segment and b0-b1 segment
-    intersection: function(a0, a1, b0, b1) {
+    intersection: function(a0, a1, b0, b1, ignoreBounds) {
       // denominator
       var d = a0.h * (b1.v - b0.v) + a1.h * (b0.v - b1.v) +
               b1.h * (a1.v - a0.v) + b0.h * (a0.v - a1.v);
@@ -264,11 +264,14 @@ Object.assign(MCG.Math, (function() {
       // calculate pa
       n = a0.h * (b1.v - b0.v) + b0.h * (a0.v - b1.v) + b1.h * (b0.v - a0.v);
       var pa = n / d;
-      if (pa < 0 || pa > 1) return null;
-      // calculate pb
-      n = a0.h * (a1.v - b0.v) + a1.h * (b0.v - a0.v) + b0.h * (a0.v - a1.v);
-      pb = n / d;
-      if (pb < 0 || pb > 1) return null;
+
+      if (!ignoreBounds) {
+        if (pa < 0 || pa > 1) return null;
+        // calculate pb
+        n = a0.h * (a1.v - b0.v) + a1.h * (b0.v - a0.v) + b0.h * (a0.v - a1.v);
+        var pb = n / d;
+        if (pb < 0 || pb > 1) return null;
+      }
 
       return a0.clone().addScaledVector(a0.vectorTo(a1), pa);
     },
