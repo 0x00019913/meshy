@@ -37,19 +37,22 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 1.0;
-    var ct = 0, lim = dbg ? 15000 : 100000;
+    var ct = 0, lim = dbg ? 1850 : 100000;
     while (events.length > 0) {
       if (ct++ > lim) {
-        //throw "exceeded event limit " + lim;
+        if (!dbg) throw "exceeded event limit " + lim;
         console.log("exceeded event limit " + lim);
         break;
       }
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 0.0*p, 1.0*p) && inRange(ev.p.v, -12.0*p, -11.0*p);
+      printEvents = dbg && inRange(ev.p.h, 6.4*p, 6.5*p) && inRange(ev.p.v, -0.26*p, 0.0*p);
       drawEvents = false;
       incr = 0.1;
+
+      if (ev.p.h===642660) debug.point(ev.p.toVector3(), 3.05, "z");
+      if (ev.p.h===648546) debug.point(ev.p.toVector3(), 3.06, "z");
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -192,6 +195,7 @@ Object.assign(MCG.Sweep, (function() {
           }
         }
         if (present) {
+          if (!dbg) throw "failed to find event in status " + ev.id + " " + ev.twin.id;
           console.log("failed to find event in status", ev.id, ev.twin.id);
           statusPrint();
         }
@@ -394,6 +398,20 @@ Object.assign(MCG.Sweep, (function() {
         // only admit intersections on one endpoint of one segment or some
         // non-endpoint on both segments
         if (intersection === flags.intermediate) pi = a.intersection(b);
+        // intersection on both starting points - possibly valid if they're not
+        // coincident
+        else if ((intersection & flags.start) === flags.start) {
+          if (!coincident(pa, pb)) {
+            var t = pa.hcompare(pb) >= 0 ? a : b;
+            pi = t.isParent() ? t.p : a.intersection(b);
+          }
+        }
+        else if ((intersection & flags.end) === flags.end) {
+          if (!coincident(pta, ptb)) {
+            var t = pta.hcompare(ptb) > 0 ? tb : ta;
+            pi = t.isParent() ? t.p : a.intersection(b);
+          }
+        }
         else if (intersection === flags.a0) pi = a.isParent() ? pa : a.intersection(b);
         else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
         else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
@@ -449,8 +467,8 @@ Object.assign(MCG.Sweep, (function() {
             queue(itb);
           }
 
-          if (rma) insert(a);
-          if (rmb) insert(b);
+          if (rma && !cb) insert(a);
+          if (rmb && !ca) insert(b);
 
           eventPrint(a, "a ");
           eventPrint(b, "b ");
