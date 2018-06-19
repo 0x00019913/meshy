@@ -166,9 +166,9 @@ MCG.Polygon = (function() {
     },
 
     isSliver: function(tol) {
-      tol = tol || this.context.p / 25;
+      tol = tol || this.context.p / 100;
 
-      return this.area / this.perimeter() < tol;
+      return Math.abs(this.area) / this.perimeter() < tol;
     },
 
     size: function() {
