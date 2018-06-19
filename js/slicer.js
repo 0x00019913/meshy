@@ -297,6 +297,60 @@ Slicer.prototype.setPreviewSlice = function() {
 
   layer.computeInfill(this.resolution, this.numWalls, this.infillType, this.infillDensity, above);
 
+  if (false) {
+    var below = layer.below;
+    if (below) {
+      below.infillContour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.0, axis);
+      });
+    }
+    layer.infillContour.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 3.2, axis);
+    });
+
+    if (above) {
+      above.infillContour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.4, axis);
+      });
+    }
+
+    layer.layerDifferences.AminusB.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 5.0, axis);
+    });
+
+    if (above) {
+      above.layerDifferences.BminusA.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 5.2, axis);
+      });
+    }
+
+    layer.infillDisjointContours.solid.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 7.0, axis);
+    });
+
+    if (above) {
+      var uni = MCG.Boolean.union(above.layerDifferences.BminusA, layer.layerDifferences.AminusB).union;
+
+      uni.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 7.2, axis);
+      });
+    }
+  }
+
   if (layer.infill) {
     if (layer.infill.inner) {
       layer.infill.inner.forEachPointPair(function(p1, p2) {
@@ -587,7 +641,7 @@ Layer.prototype.computeInfillContour = function(resolution, numWalls, force) {
   this.infillContour = MCG.Boolean.union(source.foffset(-dist, resolution)).union;
 }
 
-Layer.prototype.computeLayerDifferences = function(resolution, numWalls, force) {
+Layer.prototype.computeLayerDifferences = function(resolution, numWalls, force, dbg) {
   if (this.layerDifferencesReady() && !force) return;
 
   var below = this.below;
@@ -624,13 +678,23 @@ Layer.prototype.computeInfillDisjointContours = function(resolution, numWalls, a
   intBelow = this.layerDifferences.intersection;
 
   var inner = MCG.Boolean.intersection(intAbove, intBelow).intersection;
-  var solid = MCG.Boolean.union(diffAbove, diffBelow).union;
-
-  inner.forEachPointPair(function(p1, p2) {
-    var v1 = p1.toVector3(THREE.Vector3, this.context);
-    var v2 = p2.toVector3(THREE.Vector3, this.context);
-    debug.line(v1, v2, 1, false, 1.0, this.context.axis);
-  });
+  var solid;
+  try { solid = MCG.Boolean.union(diffAbove, diffBelow).union;}
+  catch {
+    var context = this.context;
+    diffBelow.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 3.0, context.axis);
+    });
+    diffAbove.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 3.005, context.axis);
+    });
+    MCG.Boolean.union(diffAbove, diffBelow, true);
+    solid = new MCG.SegmentSet(this.context);
+  }
 
   this.infillDisjointContours = {
     inner: inner.toPolygonSet().filter(sliverFilterFn),
@@ -692,7 +756,7 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
     solid: infillSolid
   };
 
-  function filterFn(segment) { return segment.lengthSq() >= iressq; }
+  function filterFn(segment) { return segment.lengthSq() >= iressq/4; }
 }
 
 Layer.prototype.writeToVerts = function(vertices) {

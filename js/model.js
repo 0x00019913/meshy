@@ -2010,7 +2010,7 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = Slicer.Modes.preview; // todo: switch back to preview
+  this.sliceMode = Slicer.Modes.layer; // todo: switch back to preview
 
   this.setMode("slice", params);
 }
