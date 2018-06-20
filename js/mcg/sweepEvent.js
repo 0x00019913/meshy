@@ -150,6 +150,12 @@ Object.assign(MCG.Sweep, (function() {
       var pa = a.p, pta = a.twin.p;
       var pb = b.p, ptb = b.twin.p;
 
+      // if start points coincident, use strict left comparison
+      if (MCG.Math.coincident(pa, pb)) {
+        var ls = MCG.Math.leftCompareStrict(pb, ptb, pta);
+        return ls < 0 ? -1 : ls > 0 ? 1 : 0
+      }
+
       var leftCompare = MCG.Math.leftCompare;
 
       var lta = leftCompare(pb, ptb, pta);
