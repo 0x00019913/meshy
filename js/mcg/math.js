@@ -203,43 +203,6 @@ Object.assign(MCG.Math, (function() {
       if (result & flags.a0 && result & flags.a1) return flags.collinear;
       if (result & flags.b0 && result & flags.b1) return flags.collinear;
 
-      // if both segments have only a starting point on the other segment,
-      // 1. either they actually intersect at the starting point, or
-      // 2. it's some sort of invalid intersection, in which case correct the
-      // result to indicate that the intersection happens on only one of the
-      // starting points
-      /*var sinv = result & flags.a0 && result & flags.b0 && !coincident(a, c);
-      // analogously for end points
-      var einv = result & flags.a1 && result & flags.b1 && !coincident(b, d);
-
-      if (sinv || einv) {
-        var ab = a.vectorTo(b);
-        var cd = c.vectorTo(d);
-
-        if (sinv) {
-          var ac = a.vectorTo(c);
-          var acdotab = ac.dot(ab);
-          var cadotcd = -ac.dot(cd);
-
-          if (acdotab < 0 && cadotcd < 0) return flags.none;
-          else return a.h > c.h ? flags.a0 : a.h < c.h ? flags.b0 : flags.none;
-          else if (acdotab >= 0 && cadotcd < 0) return flags.b0;
-          else if (acdotab < 0 && cadotcd >= 0) return flags.a0;
-          else return flags.start;
-        }
-        if (einv) {
-          var bd = b.vectorTo(d);
-          var bddotab = bd.dot(ab);
-          var dbdotcd = -bd.dot(cd);
-
-          if (bddotab < 0 && dbdotcd < 0) return flags.none;
-          else return b.h > d.h ? flags.b1 : b.h < d.h ? flags.a1 : flags.none;
-          else if (bddotab >= 0 && dbdotcd < 0) return flags.a1;
-          else if (bddotab < 0 && dbdotcd >= 0) return flags.b1;
-          else return flags.start;
-        }
-      }*/
-
       // possible intersection on intermediate points
       if (result === flags.none) {
         if (abBtwn && cdBtwn) {

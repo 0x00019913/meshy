@@ -329,29 +329,16 @@ Object.assign(MCG.Sweep, (function() {
       return result;
     },
 
-    // subset of .getPosition; only evaluates boundary status
-    getBoundaryPosition: function() {
-      var flags = EventPositionFlags;
+    // compare the time at which two left events occur with respect to the
+    // scanline
+    timeCompare: function(other) {
+      var pt = this.p, po = other.p;
 
-      if (!this.contributing) return flags.none;
-
-      // depths above and below for A
-      var dbA = this.depthBelowA;
-      var daA = dbA + this.weightA;
-
-      // depths above and below for B
-      var dbB = this.depthBelowB;
-      var daB = dbB + this.weightB;
-
-      var boundaryA = (daA < 1 && dbA > 0) || (daA > 0 && dbA < 1);
-      var boundaryB = (daB < 1 && dbB > 0) || (daB > 0 && dbB < 1);
-
-      result = flags.none;
-
-      if (boundaryA) result |= flags.boundaryA;
-      if (boundaryB) result |= flags.boundaryB;
-
-      return result;
+      if (pt.h < po.h) return -1;
+      if (pt.h > po.h) return 1;
+      if (pt.v < po.v) return -1;
+      if (pt.v > po.v) return 1;
+      return 0;
     },
 
     addSegmentToSet: function(s, invert, weight) {

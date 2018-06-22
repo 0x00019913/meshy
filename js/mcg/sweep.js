@@ -14,6 +14,10 @@ Object.assign(MCG.Sweep, (function() {
     var av = context.av;
     var p = context.p;
 
+    // the farthest event that has occurred (with respect to the scanline) -
+    // used to catch events that were created in the past
+    var front = null;
+
     var efactory = new MCG.Sweep.SweepEventFactory(context);
 
     var store = operation.initStore(context, srcA, srcB);
@@ -37,7 +41,7 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 1.0;
-    var ct = 0, lim = dbg ? 1850 : 100000;
+    var ct = 0, lim = dbg ? 3000 : 100000;
     while (events.length > 0) {
       if (ct++ > lim) {
         if (!dbg) throw "exceeded event limit " + lim;
@@ -47,12 +51,9 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 6.4*p, 6.5*p) && inRange(ev.p.v, -0.26*p, 0.0*p);
+      printEvents = dbg && inRange(ev.p.h, 13.4*p, 13.8*p);// && inRange(ev.p.v, 28.0*p, 29.0*p);
       drawEvents = false;
       incr = 0.1;
-
-      if (ev.p.h===642660) debug.point(ev.p.toVector3(), 3.05, "z");
-      if (ev.p.h===648546) debug.point(ev.p.toVector3(), 3.06, "z");
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -62,6 +63,8 @@ Object.assign(MCG.Sweep, (function() {
         var [up, dn] = eventGetAdjacent(ev);
 
         ev.setDepthFromBelow(dn);
+
+        handlePastEvent(ev);
 
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
@@ -73,6 +76,8 @@ Object.assign(MCG.Sweep, (function() {
 
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
+
+        //depthValidate();
       }
       else {
         var tev = ev.twin;
@@ -253,6 +258,56 @@ Object.assign(MCG.Sweep, (function() {
       operation.handleEvent(te, status, store);
 
       remove(te);
+    }
+
+    function depthValidate() {
+      var iter = status.iterator();
+      var e, p = null;
+      while ((e = iter.next()) !== null) {
+        if (p) {
+          var vA = e.depthBelowA === (p.depthBelowA + p.weightA);
+          var vB = e.depthBelowB === (p.depthBelowB + p.weightB);
+          if (!vA || !vB) {
+            eventPrint(e, "!a");
+            eventPrint(p, "!b");
+          }
+        }
+
+        p = e;
+      }
+    }
+
+    function updateFront(e) {
+      var p = e.p, fp = front !== null ? front.p : null;
+
+      if (front === null) front = e;
+      else if (p.h > fp.h) front = e;
+      else if (p.h < fp.h) return;
+      else if (p.v > fp.v) front = e;
+
+      return front === e;
+    }
+
+    function depthCorrect(e) {
+      //statusPrint();
+
+      var iter = status.findIter(e);
+      var c, p = e;
+
+      while ((c = iter.next()) !== null) {
+        if (c.timeCompare(e) !== -1) c.setDepthFromBelow(p);
+        if (dbg) console.log("corrected depth", p.id, c.id, "from", e.id);
+
+        p = c;
+      }
+
+      statusPrint();
+    }
+
+    function handlePastEvent(e) {
+      var past = !updateFront(e);
+
+      if (past) depthCorrect(e);
     }
 
     // handle a possible intersection between a pair of events
