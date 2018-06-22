@@ -344,13 +344,33 @@ Slicer.prototype.setPreviewSlice = function() {
       var v2 = p2.toVector3(THREE.Vector3, context);
       debug.line(v1, v2, 1, false, 3.2, axis);
     });
-
     if (above) {
       above.infillContour.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
         debug.line(v1, v2, 1, false, 3.4, axis);
       });
+    }
+
+    // recalculated infill contour
+    if (1) {
+      var b = layer.printContours[layer.printContours.length-1];
+      var o = b.foffset(-this.resolution/2, this.resolution);
+
+      o.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.6, axis);
+      });
+
+      var u = MCG.Boolean.union(o, undefined, true).union;
+      u.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.8, axis);
+      });
+      debug.point(new MCG.Vector(u.context, -2820128, 450000).toVector3(), 3.9, u.context.axis);
+      debug.point(new MCG.Vector(u.context, -2820128, 500000).toVector3(), 3.9, u.context.axis);
     }
 
     // 5: 2 differences
@@ -381,31 +401,31 @@ Slicer.prototype.setPreviewSlice = function() {
       above.layerDifferences.intersection.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.005, axis);
+        debug.line(v1, v2, 1, false, 7.2, axis);
       });
     }
 
     // 7: recalculated intersection of intersections
 
-    if (true && above) {
+    if (0 && above) {
       var int = MCG.Boolean.intersection(
         above.layerDifferences.intersection, layer.layerDifferences.intersection, true
       ).intersection;
 
       var adj = int.makeAdjacencyMap();
-      //console.log(adj.getKeyWithNoPredecessors());
-      debug.point(new MCG.Vector(int.context, -91344, -3028).toVector3(), 7.02, context.axis);
+      console.log(adj.getKeyWithNoPredecessors());
+      debug.point(new MCG.Vector(int.context, -2820128, 523229).toVector3(), 7.025, context.axis);
 
       int.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.01, axis);
+        debug.line(v1, v2, 1, false, 7.015, axis);
       });
 
       int.toPolygonSet().forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.015, axis);
+        debug.line(v1, v2, 1, false, 7.02, axis);
       });
     }
 
@@ -477,8 +497,11 @@ Slicer.prototype.makeLayerGeometry = function() {
   for (var l = 0; l < layers.length; l++) {
     var layer = layers[l];
     if (layer === undefined) continue;
+    var above = l > 0 ? layers[l-1] : null;
 
     layer.computePrintContours(this.resolution, this.numWalls);
+    layer.computeInfill(this.resolution, this.numWalls, this.infillType, this.infillDensity, above);
+
     layer.writeToVerts(layerVertices);
   }
 
@@ -819,14 +842,36 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
 }
 
 Layer.prototype.writeToVerts = function(vertices) {
+  // write print contours
   var contours = this.printContours;
 
-  if (!contours) return;
+  if (contours) {
+    for (var c = 0; c < contours.length; c++) {
+      contours[c].forEachPointPair(function(p1, p2) {
+        vertices.push(p1.toVector3());
+        vertices.push(p2.toVector3());
+      });
+    }
+  }
 
-  for (var c = 0; c < contours.length; c++) {
-    contours[c].forEachPointPair(function(p1, p2) {
-      vertices.push(p1.toVector3());
-      vertices.push(p2.toVector3());
+  return;
+
+  var infillInner = this.infill.inner;
+  var infillSolid = this.infill.solid;
+
+  // write inner infill
+  if (infillInner) {
+    infillInner.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, this.context));
+      vertices.push(p2.toVector3(THREE.Vector3, this.context));
+    });
+  }
+
+  // write solid infill
+  if (infillSolid) {
+    infillSolid.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, this.context));
+      vertices.push(p2.toVector3(THREE.Vector3, this.context));
     });
   }
 }

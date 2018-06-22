@@ -51,7 +51,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 13.4*p, 13.8*p);// && inRange(ev.p.v, 28.0*p, 29.0*p);
+      printEvents = dbg && inRange(ev.p.h, -29.0*p, -28.0*p) && inRange(ev.p.v, 4.5*p, 5.0*p);
       drawEvents = false;
       incr = 0.1;
 
@@ -72,7 +72,7 @@ Object.assign(MCG.Sweep, (function() {
         if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
 
-        if (!statusValid()) statusPrint();
+        //if (!statusValid()) statusPrint();
 
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
@@ -277,37 +277,28 @@ Object.assign(MCG.Sweep, (function() {
       }
     }
 
-    function updateFront(e) {
-      var p = e.p, fp = front !== null ? front.p : null;
-
-      if (front === null) front = e;
-      else if (p.h > fp.h) front = e;
-      else if (p.h < fp.h) return;
-      else if (p.v > fp.v) front = e;
-
-      return front === e;
-    }
-
     function depthCorrect(e) {
-      //statusPrint();
-
       var iter = status.findIter(e);
       var c, p = e;
 
       while ((c = iter.next()) !== null) {
         if (c.timeCompare(e) !== -1) c.setDepthFromBelow(p);
-        if (dbg) console.log("corrected depth", p.id, c.id, "from", e.id);
+        if (printEvents) console.log("corrected depth", p.id, c.id, "from", e.id);
 
         p = c;
       }
-
-      statusPrint();
     }
 
     function handlePastEvent(e) {
-      var past = !updateFront(e);
+      if (front === null) {
+        front = e;
+        return;
+      }
 
-      if (past) depthCorrect(e);
+      var tc = e.timeCompare(front);
+
+      if (tc === 1) front = e;
+      else depthCorrect(e);
     }
 
     // handle a possible intersection between a pair of events
@@ -472,7 +463,9 @@ Object.assign(MCG.Sweep, (function() {
         else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
         else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
 
-        if (pi && (!a.contains(pi) || !b.contains(pi))) pi = null;
+        if (pi && printEvents) console.log(pi.h);
+
+        if (pi && (!a.contains(pi) && !b.contains(pi))) pi = null;
 
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);
