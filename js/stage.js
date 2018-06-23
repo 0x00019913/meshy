@@ -201,8 +201,14 @@ Stage.prototype.generateUI = function() {
   this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution;
   this.sliceNumWalls = 2;
-  this.sliceInfillType = Slicer.InfillTypes.solid; // todo: back to solid
+  this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
+  this.sliceMakeRaft = true;
+  this.sliceRaftMainLayers = 3;
+  this.sliceRaftBaseLayers = 1;
+  this.sliceRaftOffset = 1;
+  this.sliceRaftGap = 0.05;
+  this.sliceRaftBaseSpacing = 0.1;
   this.buildSupportSliceFolderInactive();
 
   this.gui.add(this, "undo").name("Undo");
@@ -380,6 +386,7 @@ Stage.prototype.buildSupportFolder = function() {
 Stage.prototype.buildSliceFolderInactive = function() {
   this.clearFolder(this.sliceFolder);
   this.addLayerSettingsFolder(this.sliceFolder);
+  this.addRaftFolder(this.sliceFolder);
   this.sliceFolder.add(this, "activateSliceMode").name("Slice mode on");
 }
 // build the Slice folder for when slice mode is on
@@ -406,6 +413,7 @@ Stage.prototype.buildSliceFolderActive = function() {
     ).name("Mode").onChange(this.setSliceMode.bind(this));
 
     this.addLayerSettingsFolder(folder, true);
+    this.addRaftFolder(folder);
   }
 
   this.supportSliceFolder.add(this, "deactivateSliceMode").name("Slice mode off");
@@ -427,6 +435,17 @@ Stage.prototype.addLayerSettingsFolder = function(folder, showRecalculateButton)
     this.sliceLayerSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
   }
 }
+Stage.prototype.addRaftFolder = function(folder) {
+  this.sliceRaftFolder = folder.addFolder("Raft");
+  this.clearFolder(this.sliceRaftFolder);
+
+  this.sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
+  this.sliceRaftFolder.add(this, "sliceRaftMainLayers", 0).step(1).name("Main layers");
+  this.sliceRaftFolder.add(this, "sliceRaftBaseLayers", 0).step(1).name("Base layers");
+  this.sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
+  this.sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
+  this.sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
+}
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
 }
@@ -437,8 +456,15 @@ Stage.prototype.activateSliceMode = function() {
       sliceHeight: this.verticalResolution,
       resolution: this.planarResolution,
       numWalls: this.sliceNumWalls,
-      infillType: this.sliceInfillType,
-      infillDensity: this.sliceInfillDensity
+      infillType: parseInt(this.sliceInfillType),
+      infillDensity: this.sliceInfillDensity,
+      makeRaft: this.sliceMakeRaft,
+      raftMainLayers: this.sliceRaftMainLayers,
+      raftBaseLayers: this.sliceRaftBaseLayers,
+      raftOffset: this.sliceRaftOffset,
+      raftGap: this.sliceRaftGap,
+      raftBaseSpacing: this.sliceRaftBaseSpacing,
+      precision: this.vertexPrecision
     });
     this.buildSliceFolderActive();
   }

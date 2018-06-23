@@ -14,29 +14,7 @@ function Slicer(sourceVertices, sourceFaces, params) {
   this.layerVerticesBase = null;
   this.layerVertices = null;
 
-  this.mode = Slicer.Modes.preview;
-  this.axis = "z";
-  this.sliceHeight = 0.5;
-  this.resolution = this.sliceHeight;
-  this.numWalls = 2;
-  this.infillType = Slicer.InfillTypes.none;
-  this.infillDensity = 0.1;
-
-  this.precision = 5;
-
-  // set from params
-  if (params) {
-    if (params.hasOwnProperty("mode")) this.mode = params.mode;
-    if (params.hasOwnProperty("axis")) this.axis = params.axis;
-    if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
-    if (params.hasOwnProperty("resolution")) this.resolution = params.resolution;
-    if (params.hasOwnProperty("numWalls")) this.numWalls = params.numWalls;
-    if (params.hasOwnProperty("precision")) this.precision = params.precision;
-    if (params.hasOwnProperty("infillType")) this.infillType = params.infillType;
-    if (params.hasOwnProperty("infillDensity")) this.infillDensity = params.infillDensity;
-  }
-
-  if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
+  this.setParams(params);
 
   this.previewGeometryReady = false;
   this.layerGeometryReady = false;
@@ -76,6 +54,41 @@ Slicer.InfillTypes = {
   // connected to each other
   disconnectedLineType: 1 | 2 | 4
 };
+
+Slicer.DefaultParams = {
+  mode: Slicer.Modes.preview,
+  axis: "z",
+  sliceHeight: 0.5,
+  resolution: 0.5,
+  numWalls: 2,
+  infillType: Slicer.InfillTypes.none,
+  infillDensity: 0.1,
+
+  makeRaft: true,
+  raftMainLayers: 3,
+  raftBaseLayers: 1,
+  raftOffset: 1.0,
+  raftGap: 0.05,
+  raftBaseSpacing: 0.1,
+
+  precision: 5
+};
+
+Slicer.prototype.setParams = function(params) {
+  params = params || {};
+
+  for (var p in Slicer.DefaultParams) {
+    if (params.hasOwnProperty(p)) {
+      this[p] = params[p];
+    }
+    else {
+      this[p] = Slicer.DefaultParams[p];
+    }
+  }
+
+  this.raftLayers = this.makeRaft ? this.raftBaseLayers + this.raftMainLayers : 0;
+  if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
+}
 
 // necessary function - called from constructor
 // calculates min and max for every face on the axis
@@ -544,7 +557,7 @@ Slicer.prototype.buildLayerFaceLists = function() {
 
   var numSlices = this.numSlices;
 
-  // position fo first and last layer
+  // position of first and last layer
   var layer0 = min - sliceHeight/2;
   var layerk = layer0 + sliceHeight * (numSlices);
 
