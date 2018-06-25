@@ -745,7 +745,7 @@ Model.prototype.addGeometryComponent = function(name, vstart, vcount, fstart, fc
     fstart: fstart,
     fcount: fcount
   };
-  this.count = this.faces.length;
+  this.count = this.faces.length + fcount;
 }
 
 Model.prototype.removeGeometryComponent = function(name) {
@@ -2081,9 +2081,10 @@ Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
   var blob;
   var fname;
+  var count = this.faces.length;
 
   if (format=="stl") {
-    var stlSize = 84 + 50 * this.count;
+    var stlSize = 84 + 50 * count;
     var array = new ArrayBuffer(stlSize);
     var offset = 0;
     var dv = new DataView(array);
@@ -2096,9 +2097,9 @@ Model.prototype.export = function(format, name) {
       dv.setUint8(offset, ch);
     }
 
-    dv.setUint32(offset, this.count, isLittleEndian);
+    dv.setUint32(offset, count, isLittleEndian);
     offset += 4;
-    for (var tri=0; tri<this.count; tri++) {
+    for (var tri=0; tri<count; tri++) {
       var face = this.faces[tri];
 
       setVector3(dv, offset, face.normal, isLittleEndian);
@@ -2131,7 +2132,7 @@ Model.prototype.export = function(format, name) {
     var out = "";
 
     out =  "solid " + name + '\n';
-    for (var tri=0; tri<this.count; tri++) {
+    for (var tri=0; tri<count; tri++) {
       var faceOut = "";
       var face = this.faces[tri];
       faceOut += indent2 + "facet normal" + writeVector3(face.normal) + '\n';
@@ -2176,7 +2177,7 @@ Model.prototype.export = function(format, name) {
     }
 
     out += "# faces: \n";
-    for (var tri=0; tri<this.count; tri++) {
+    for (var tri=0; tri<count; tri++) {
       var line = "f";
       var face = this.faces[tri];
       for (var vert=0; vert<3; vert++) {
