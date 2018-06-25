@@ -203,7 +203,7 @@ Stage.prototype.generateUI = function() {
   this.sliceNumWalls = 2;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
-  this.sliceMakeRaft = true;
+  this.sliceMakeRaft = false; // todo: back to true
   this.sliceRaftMainLayers = 3;
   this.sliceRaftBaseLayers = 1;
   this.sliceRaftOffset = 1;
@@ -395,21 +395,21 @@ Stage.prototype.buildSliceFolderInactive = function() {
 Stage.prototype.buildSliceFolderActive = function() {
   if (!this.model) return;
 
-  var numSlices = this.model.getNumSlices();
-  if (numSlices !== 0) {
+  var numLayers = this.model.getNumLayers();
+  if (numLayers !== 0) {
     var folder = this.supportSliceFolder;
     this.clearFolder(this.supportSliceFolder);
-    this.currentSlice = this.model.getCurrentSlice();
+    this.currentLevel = this.model.getCurrentLevel();
     this.sliceController = folder.add(
       this,
-      "currentSlice",
-      0, numSlices
-    ).name("Slice").step(1).onChange(this.setSlice.bind(this));
+      "currentLevel",
+      0, numLayers
+    ).name("Slice").step(1).onChange(this.setLevel.bind(this));
     this.sliceMode = this.model.getSliceMode();
     folder.add(
       this,
       "sliceMode",
-      { "preview": Slicer.Modes.preview, "layer": Slicer.Modes.layer }
+      { "preview": Slicer.Modes.preview, "path": Slicer.Modes.path }
     ).name("Mode").onChange(this.setSliceMode.bind(this));
 
     this.addLayerSettingsFolder(folder, true);
@@ -475,9 +475,9 @@ Stage.prototype.deactivateSliceMode = function() {
     this.model.deactivateSliceMode();
   }
 }
-Stage.prototype.setSlice = function() {
+Stage.prototype.setLevel = function() {
   if (this.model) {
-    this.model.setSlice(this.currentSlice);
+    this.model.setLevel(this.currentLevel);
   }
 }
 Stage.prototype.recalculateLayers = function() {
@@ -773,8 +773,8 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSlice = 150;
-  this.setSlice();
+  this.currentLevel = 100;
+  this.setLevel();
 
   this.filename = this.model.filename;
   this.setMeshColor();

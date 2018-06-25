@@ -45,7 +45,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.sliceMode = Slicer.Modes.preview;
   this.slicer = null; // instance of module responsible for slicing
   this.slicePreviewMesh = null;
-  this.sliceLayerMesh = null;
+  this.slicePathMesh = null;
 
   // will contain the bounds of distinct components in the geometry (main mesh
   // geometry, patch, supports)
@@ -84,11 +84,11 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       transparent: true,
       opacity: 0.3
     }),
-    sliceLayerMesh: new THREE.LineBasicMaterial({
+    slicePathMesh: new THREE.LineBasicMaterial({
       color: 0xffffff,
       linewidth: 1
     }),
-    sliceLayerMeshSecondary: new THREE.LineBasicMaterial({
+    slicePathMeshSecondary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
       linewidth: 1
     }),
@@ -780,19 +780,19 @@ Model.prototype.makeBaseMesh = function() {
 // Create a slice mesh for the current slice mode.
 Model.prototype.makeSliceMesh = function() {
   if (this.sliceMode==Slicer.Modes.preview) this.makeSlicePreviewMesh();
-  else if (this.sliceMode==Slicer.Modes.layer) this.makeSliceLayerMesh();
+  else if (this.sliceMode==Slicer.Modes.Path) this.makeSlicePathMesh();
 
   this.setSliceMeshGeometry();
 }
 
 Model.prototype.addSliceMesh = function() {
-  if (this.sliceLayerMesh) this.scene.add(this.sliceLayerMesh);
+  if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
 
   if (this.sliceMode==Slicer.Modes.preview) {
     if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
   }
-  /*else if (this.sliceMode==Slicer.Modes.layer) {
-    if (this.sliceLayerMesh) this.scene.add(this.sliceLayerMesh);
+  /*else if (this.sliceMode==Slicer.Modes.path) {
+    if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
   }*/
 }
 
@@ -806,7 +806,7 @@ Model.prototype.setSliceMeshGeometry = function() {
   var sliceFaces = sliceGeometry.faces;
 
   if (this.sliceMode==Slicer.Modes.preview) {
-    var mesh = this.sliceLayerMesh;
+    var mesh = this.slicePathMesh;
     if (!mesh) return;
 
     mesh.geometry.vertices = sliceVertices;
@@ -822,8 +822,8 @@ Model.prototype.setSliceMeshGeometry = function() {
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
   }
-  else if (this.sliceMode==Slicer.Modes.layer) {
-    var mesh = this.sliceLayerMesh;
+  else if (this.sliceMode==Slicer.Modes.path) {
+    var mesh = this.slicePathMesh;
     if (!mesh) return;
 
     // if we're adding more vertices than the existing geometry object can
@@ -869,17 +869,17 @@ Model.prototype.makeSlicePreviewMesh = function() {
   this.slicePreviewMesh = mesh;
 }
 
-// Create the slice-mode layer visualization mesh.
-Model.prototype.makeSliceLayerMesh = function() {
-  if (this.sliceLayerMesh) return;
+// Create the slice-mode path visualization mesh.
+Model.prototype.makeSlicePathMesh = function() {
+  if (this.slicePathMesh) return;
 
   var geo = new THREE.Geometry();
 
-  var mesh = new THREE.LineSegments(geo, this.materials.sliceLayerMesh);
+  var mesh = new THREE.LineSegments(geo, this.materials.slicePathMesh);
   mesh.name = "model";
   mesh.frustumCulled = false;
 
-  this.sliceLayerMesh = mesh;
+  this.slicePathMesh = mesh;
 }
 
 
@@ -2020,16 +2020,16 @@ Model.prototype.deactivateSliceMode = function() {
   this.setMode("base");
   this.slicer = null;
   this.slicePreviewMesh = null;
-  this.sliceLayerMesh = null;
+  this.slicePathMesh = null;
 }
 
-Model.prototype.getNumSlices = function() {
-  if (this.slicer) return this.slicer.getNumSlices();
+Model.prototype.getNumLayers = function() {
+  if (this.slicer) return this.slicer.getNumLayers();
   else return 0;
 }
 
-Model.prototype.getCurrentSlice = function() {
-  if (this.slicer) return this.slicer.getCurrentSlice();
+Model.prototype.getCurrentLevel = function() {
+  if (this.slicer) return this.slicer.getCurrentLevel();
   else return 0;
 }
 
@@ -2051,10 +2051,10 @@ Model.prototype.setSliceMode = function(sliceMode) {
   this.addSliceMesh();
 }
 
-Model.prototype.setSlice = function(slice) {
+Model.prototype.setLevel = function(level) {
   if (!this.slicer) return;
 
-  this.slicer.setSlice(slice);
+  this.slicer.setLevel(level);
 
   this.setSliceMeshGeometry();
 }
@@ -2064,11 +2064,11 @@ Model.prototype.recalculateLayers = function(resolution, numWalls) {
 
   this.slicer.setResolution(resolution);
   this.slicer.setNumWalls(numWalls);
-  this.slicer.unreadyLayerGeometry();
+  this.slicer.unreadyPathGeometry();
 
   // layer geometry is on the screen, so recalculate now
-  if (this.sliceMode == Slicer.Modes.layer) {
-    this.slicer.makeLayerGeometry();
+  if (this.sliceMode == Slicer.Modes.path) {
+    this.slicer.makePathGeometry();
     this.setSliceMeshGeometry();
   }
 }
