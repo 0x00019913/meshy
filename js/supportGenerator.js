@@ -278,7 +278,9 @@ SupportGenerator.prototype.generate = function(
           target = rayDown.point;
         }
 
-        nodes.push(new SupportTreeNode(target, p, q));
+        var flatCap = target === rayDown.point && !rayDown.meshHit;
+
+        nodes.push(new SupportTreeNode(target, p, q, flatCap));
 
         if (q !== null) {
           activeIndices.delete(qiFinal);
@@ -310,7 +312,7 @@ SupportGenerator.prototype.cleanup = function() {
 // params:
 //  v: vertex at which this node is placed
 //  b0, b1: this node's branches, if any
-function SupportTreeNode(v, b0, b1) {
+function SupportTreeNode(v, b0, b1, flatCap) {
   this.v = v;
 
   // every node is a root when created; when connected as a branch node to
@@ -324,6 +326,8 @@ function SupportTreeNode(v, b0, b1) {
   // if connected a branch node, that node is no longer root
   if (b0) b0.source = this;
   if (b1) b1.source = this;
+
+  this.flatCap = flatCap || false;
 }
 
 SupportTreeNode.prototype.isRoot = function() {
@@ -332,19 +336,6 @@ SupportTreeNode.prototype.isRoot = function() {
 
 SupportTreeNode.prototype.isLeaf = function() {
   return this.b0 === null && this.b1 === null;
-}
-
-SupportTreeNode.prototype.debug = function() {
-  if (this.b0) {
-    debug.line(this.v, this.b0.v);
-    this.b0.debug();
-  }
-  if (this.b1) {
-    debug.line(this.v, this.b1.v);
-    this.b1.debug();
-  }
-
-  if (this.isRoot()) debug.lines(12);
 }
 
 SupportTreeNode.prototype.writeToGeometry = function(geo, radius, subdivs, spikeFactor) {
@@ -388,14 +379,19 @@ SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFac
     // outgoing vector up to the child
     var vn = n.v.clone().sub(this.v).normalize();
 
-    // we can't offset farther than this from the end, else the profile would
-    // interfere with any struts connecting to this node
-    // (to avoid coincident vertices, add small epsilon * radius to the limit)
-    var offsetLimit = this.offsetLimit(radius) - 0.01 * radius;
-    // offset spike such that spike length is spikeFactor*radius (or less, if
-    // the whole spike can't fit) and it protrudes by at most 0.5 radius from
-    // the end of the strut
-    var spikeOffset = Math.min(offsetLimit, (spikeFactor - 1) * radius);
+    var spikeOffset = 0;
+
+    // if don't force flat cap, calculate spike offset
+    if (!this.flatCap) {
+      // we can't offset farther than this from the end, else the profile would
+      // interfere with any struts connecting to this node
+      // (to avoid coincident vertices, add small epsilon * radius to the limit)
+      var offsetLimit = this.offsetLimit(radius) - 0.01 * radius;
+      // offset spike such that spike length is spikeFactor*radius (or less, if
+      // the whole spike can't fit) and it protrudes by at most 0.5 radius from
+      // the end of the strut
+      spikeOffset = Math.min(offsetLimit, (spikeFactor - 1) * radius);
+    }
 
     // point where the profile center will go
     var p = this.v.clone().addScaledVector(vn, spikeOffset);
@@ -692,7 +688,7 @@ SupportTreeNode.prototype.makeSpike = function(geo, radius, subdivs, spikeFactor
   var vertices = geo.vertices;
   var faces = geo.faces;
 
-  var spikeLength = radius * spikeFactor;
+  var spikeLength = this.flatCap ? 0 : radius * spikeFactor;
 
   // get the profile and the inverse strut vector
   var p, vn;
@@ -785,4 +781,17 @@ SupportTreeNode.prototype.offsetLimit = function(radius) {
   var limit = l - Math.max(ea, eb);
 
   return limit;
+}
+
+SupportTreeNode.prototype.debug = function() {
+  if (this.b0) {
+    debug.line(this.v, this.b0.v);
+    this.b0.debug();
+  }
+  if (this.b1) {
+    debug.line(this.v, this.b1.v);
+    this.b1.debug();
+  }
+
+  if (this.isRoot()) debug.lines(12);
 }
