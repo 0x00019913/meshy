@@ -198,7 +198,7 @@ Stage.prototype.generateUI = function() {
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
   this.supportAngle = 45;
-  this.supportSpacingFactor = 6;
+  this.supportSpacingFactor = 6; // todo: back to 6
   this.supportRadius = this.planarResolution;
   this.sliceNumWalls = 2;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
@@ -767,14 +767,14 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  //this.generateSupports();
-  this.activateSliceMode();
+  this.generateSupports();
+  //this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  this.currentLevel = 100;
-  this.setLevel();
+  //this.currentLevel = 100;
+  //this.setLevel();
 
   this.filename = this.model.filename;
   this.setMeshColor();
