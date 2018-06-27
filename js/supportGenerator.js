@@ -45,6 +45,7 @@ var SupportGenerator = (function() {
     var angle = (90 - angleDegrees) * Math.PI / 180;
     var minHeight = min[axis];
     var resolution = resolution;
+    var minSupportLength = 3 * supportRadius;
 
     var vs = this.vertices;
     var fs = this.faces;
@@ -88,8 +89,8 @@ var SupportGenerator = (function() {
 
     for (var s=0; s<supportTrees.length; s++) {
       var tree = supportTrees[s];
-      tree.debug();
-      tree.writeToGeometry(supportTreeGeometry, supportRadius, 16, 2);
+      //tree.debug();
+      tree.writeToGeometry(supportTreeGeometry, supportRadius, 16, 0.5, 0.5);
     }
 
     supportTreeGeometry.computeFaceNormals();
@@ -216,7 +217,7 @@ var SupportGenerator = (function() {
 
           // attempt to extend a short support strut from the starting point
           // along the normal
-          var strutLength = 3 * supportRadius;
+          var strutLength = minSupportLength;
           var rayNormal = octree.castRayExternal(v, normal);
           var nv = v.clone().addScaledVector(normal, strutLength);
 
@@ -257,9 +258,10 @@ var SupportGenerator = (function() {
 
             // if valid intersection and it's inside the mesh boundary
             if (ixn && ixn[axis] > minHeight) {
-              var dist = p.v.distanceTo(ixn);
-              if (dist < minDist) {
-                minDist = dist;
+              var pidist = p.v.distanceTo(ixn);
+              var qidist = q.v.distanceTo(ixn);
+              if (pidist < minDist && pidist > supportRadius && qidist > supportRadius) {
+                minDist = pidist;
                 intersection = ixn;
                 qiFinal = qi;
               }
@@ -310,9 +312,9 @@ var SupportGenerator = (function() {
             target = rayDown.point;
           }
 
-          var flatCap = target === rayDown.point && !rayDown.meshHit;
+          var noTaper = target === rayDown.point && !rayDown.meshHit;
 
-          nodes.push(new SupportTreeNode(target, p, q, flatCap));
+          nodes.push(new SupportTreeNode(target, p, q, noTaper));
 
           if (q !== null) {
             activeIndices.delete(qiFinal);
@@ -344,7 +346,7 @@ var SupportGenerator = (function() {
   // params:
   //  v: vertex at which this node is placed
   //  b0, b1: this node's branches, if any
-  function SupportTreeNode(v, b0, b1, flatCap) {
+  function SupportTreeNode(v, b0, b1, noTaper) {
     this.v = v;
 
     // every node is a root when created; when connected as a branch node to
@@ -359,7 +361,7 @@ var SupportGenerator = (function() {
     if (b0) b0.source = this;
     if (b1) b1.source = this;
 
-    this.flatCap = flatCap || false;
+    this.noTaper = noTaper || false;
   }
 
   // true if at the bottom of a tree
@@ -382,15 +384,15 @@ var SupportGenerator = (function() {
     return this.b0 !== null && this.b1 !== null && this.source !== null;
   }
 
-  SupportTreeNode.prototype.writeToGeometry = function(geo, radius, subdivs, spikeFactor) {
+  SupportTreeNode.prototype.writeToGeometry = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
     if (!this.isRoot()) return null;
 
     // subdivs must be at least 4 and even
     if (subdivs === undefined || subdivs < 4) subidvs = 4;
     subdivs -= subdivs%2;
 
-    this.makeProfiles(geo, radius, subdivs, spikeFactor);
-    this.connectProfiles(geo, radius, subdivs, spikeFactor);
+    this.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    this.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
   }
 
   // build the profiles of vertices where the cylindrical struts will join or end;
@@ -403,9 +405,10 @@ var SupportGenerator = (function() {
   //  geo: geometry object
   //  radius: strut radius
   //  subdivs: the number of sides on each strut; this is even and >= 4
-  //  spikeFactor: factor that determines the length of the spike attaching the
-  //    root/leaf nodes to the mesh; length is radius * spikeFactor
-  SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, spikeFactor) {
+  //  taperFactor: factor that determines the radius of the taper attaching the
+  //    root/leaf nodes to the mesh; taper radius is radius * taperFactor
+  //  endOffsetFactor: strut extends past its node's center by radius * endOffsetFactor
+  SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
     var pi2 = Math.PI * 2;
 
     var vertices = geo.vertices;
@@ -421,25 +424,12 @@ var SupportGenerator = (function() {
 
       if (!n) return;
 
-      // outgoing vector up to the child
+      // outgoing vector up to the neighbor
       var vn = n.v.clone().sub(this.v).normalize();
 
-      var spikeOffset = 0;
-
-      // if don't force flat cap, calculate spike offset
-      if (!this.flatCap) {
-        // we can't offset farther than this from the end, else the profile would
-        // interfere with any struts connecting to this node
-        // (to avoid coincident vertices, add small epsilon * radius to the limit)
-        var offsetLimit = Math.max(0, this.offsetLimit(radius) - 0.01 * radius);
-        // offset spike such that spike length is spikeFactor*radius (or less, if
-        // the whole spike can't fit) and it protrudes by at most 0.5 radius from
-        // the end of the strut
-        spikeOffset = Math.min(offsetLimit, (spikeFactor - 0.5) * radius);
-      }
-
       // point where the profile center will go
-      var p = this.v.clone().addScaledVector(vn, spikeOffset);
+      var endOffset = this.noTaper ? 0 : -endOffsetFactor * radius;
+      var p = this.v.clone().addScaledVector(vn, endOffset);
 
       // two axes orthogonal to strut axis
       var b = orthogonalVector(vn).normalize();
@@ -454,16 +444,22 @@ var SupportGenerator = (function() {
       // angle increment
       var aincr = (isRoot ? 1 : -1) * pi2 / subdivs;
 
+      var r = this.noTaper ? radius : taperFactor * radius;
+
       // push verts and vertex indices to profile
       for (var ia = 0; ia < subdivs; ia++) {
         var a = ia * aincr;
         vertices.push(
           p.clone()
-          .addScaledVector(b, radius * Math.cos(a))
-          .addScaledVector(c, radius * Math.sin(a))
+          .addScaledVector(b, r * Math.cos(a))
+          .addScaledVector(c, r * Math.sin(a))
         );
         ps.push(sidx + ia);
       }
+
+      // push center point
+      vertices.push(p);
+      ps.push(sidx + subdivs);
 
       if (isRoot) this.p0 = ps;
       else this.ps = ps;
@@ -701,29 +697,29 @@ var SupportGenerator = (function() {
       this.p1 = p1;
     }
 
-    if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, spikeFactor);
-    if (this.b1) this.b1.makeProfiles(geo, radius, subdivs, spikeFactor);
+    if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    if (this.b1) this.b1.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
   }
 
   // connect created profiles with geometry
-  SupportTreeNode.prototype.connectProfiles = function(geo, radius, subdivs, spikeFactor) {
+  SupportTreeNode.prototype.connectProfiles = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
     var vertices = geo.vertices;
     var faces = geo.faces;
 
     if (this.isRoot()) {
       this.connectToBranch(this.b0, geo, subdivs);
-      this.makeSpike(geo, radius, subdivs, spikeFactor);
+      this.makeCap(geo, radius, subdivs, taperFactor, endOffsetFactor);
     }
     else if (this.isLeaf()) {
-      this.makeSpike(geo, radius, subdivs, spikeFactor);
+      this.makeCap(geo, radius, subdivs, taperFactor, endOffsetFactor);
     }
     else {
       this.connectToBranch(this.b0, geo, subdivs);
       this.connectToBranch(this.b1, geo, subdivs);
     }
 
-    if (this.b0) this.b0.connectProfiles(geo, radius, subdivs, spikeFactor);
-    if (this.b1) this.b1.connectProfiles(geo, radius, subdivs, spikeFactor);
+    if (this.b0) this.b0.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    if (this.b1) this.b1.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
 
     if (this.isRoot()) debug.lines(12);
   }
@@ -776,13 +772,11 @@ var SupportGenerator = (function() {
     }
   }
 
-  SupportTreeNode.prototype.makeSpike = function(geo, radius, subdivs, spikeFactor) {
+  SupportTreeNode.prototype.makeCap = function(geo, radius, subdivs, endOffsetFactor) {
     var vertices = geo.vertices;
     var faces = geo.faces;
 
-    var spikeLength = this.flatCap ? 0 : radius * spikeFactor;
-
-    // get the profile and the inverse strut vector
+    // get the profile and the incoming strut vector
     var p, vn;
 
     if (this.isRoot()) {
@@ -795,19 +789,15 @@ var SupportGenerator = (function() {
     }
     else return;
 
-    // spike vertex
-    var vs = this.v.clone().addScaledVector(vn, spikeLength / 2);
-
-    // record spike vertex
-    var sidx = vertices.length;
-    vertices.push(vs);
-
     // index increment (accounts for opposite winding)
     var iincr = this.isRoot() ? subdivs - 1 : 1
 
+    // index of center vertex
+    var pc = p[subdivs];
+
     // write faces
     for (var ii = 0; ii < subdivs; ii++) {
-      faces.push(new THREE.Face3(sidx, p[ii], p[(ii + iincr) % subdivs]));
+      faces.push(new THREE.Face3(pc, p[ii], p[(ii + iincr) % subdivs]));
     }
   }
 
