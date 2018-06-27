@@ -391,7 +391,7 @@ MCG.Polygon = (function() {
 
       this.fromPoints(vrpts);
 
-      if (Math.abs(this.area) < tol * tol) this.invalidate();
+      if (Math.abs(this.area) < tol * tol / 4) this.invalidate();
 
       return this;
 
