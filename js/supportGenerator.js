@@ -63,15 +63,7 @@ var SupportGenerator = (function() {
     // need an octree for raycasting
 
     if (this.octree === null) {
-      // octree size is some epsilon plus largest mesh size
-      var octreeOverflow = 0.01;
-      var octreeSize = vector3MaxElement(max.clone().sub(min)) + octreeOverflow;
-      // other params
-      var octreeDepth = Math.round(Math.log(fs.length)*0.6);
-      var octreeCenter = max.clone().add(min).multiplyScalar(0.5);
-      var octreeOrigin = octreeCenter.subScalar((octreeSize + octreeOverflow)/2);
-
-      this.octree = new Octree(octreeDepth, octreeOrigin, octreeSize, fs, vs);
+      this.octree = new Octree(fs, vs);
       this.octree.construct();
     }
 

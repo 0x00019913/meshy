@@ -896,23 +896,9 @@ Model.prototype.buildOctree = function(d, nextIterator) {
     return;
   }
 
-  // heuristic is that the tree should be as deep as necessary to have 1-10 faces
-  // per leaf node so as to make raytracing cheap; the effectiveness will vary
-  // between different meshes, of course, but I estimate that ln(polycount)*0.6
-  // should be good
-  var depth = !d ? Math.round(Math.log(this.count)*0.6) : d;
-
-  var meshSize = this.getSize();
-  // find largest dimension
-  var largestDimAxis = vector3ArgMax(meshSize);
-  // make octree 1.1 times as large as largest dimension
-  var size = meshSize[largestDimAxis] * 1.1;
-  // center octree on model
-  var origin = this.getCenter().subScalar(size/2);
-
   // create the octree; the last argument means that we will manually fill out
   // the geometry
-  this.octree = new Octree(depth, origin, size, this.faces, this.vertices, this.scene);
+  this.octree = new Octree(this.faces, this.vertices);
 
 
   // fill out the octree in a non-blocking way
