@@ -64,7 +64,9 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.materials = {
     baseMesh: new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      vertexColors: THREE.FaceColors
+      vertexColors: THREE.FaceColors,
+      roughness: 0.3,
+      metalness: 0.5
     }),
     slicePreviewMesh: new THREE.MeshStandardMaterial({
       side: THREE.FrontSide,
