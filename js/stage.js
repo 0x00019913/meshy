@@ -11,12 +11,12 @@
 // Constructor.
 Stage = function() {
   // params
-  this.floorSize = 50;
+  this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
 
   // toggles
   this.importEnabled = true;
   this.importingMeshName = "";
-  this.floorVisible = true;
+  this.buildVolumeVisible = true;
 
   // geometry
   this.model = null;
@@ -61,7 +61,7 @@ Stage = function() {
 }
 
 // Creates the dat.gui element and the InfoBox, initializes the viewport,
-// initializes floor.
+// initializes build volume.
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "import").name("Import");
@@ -79,14 +79,24 @@ Stage.prototype.generateUI = function() {
   settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this));
 
   var displayFolder = this.gui.addFolder("Display");
-  displayFolder.add(this, "toggleFloor").name("Toggle floor");
+  displayFolder.add(this, "toggleBuildVolume").name("Toggle build volume");
   displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget");
   displayFolder.add(this, "toggleCOM").name("Toggle center of mass");
   displayFolder.add(this, "toggleWireframe").name("Toggle wireframe");
   displayFolder.add(this, "cameraToModel").name("Camera to model");
   this.meshColor = "#662828"; // todo: reset to 0xffffff
+  this.meshRoughness = 0.3;
+  this.meshMetalness = 0.5;
   this.meshColorController =
-    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshColor.bind(this));
+    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshMaterial.bind(this));
+  displayFolder.add(this, "meshRoughness", 0, 1).onChange(this.setMeshMaterial.bind(this));
+  displayFolder.add(this, "meshMetalness", 0, 1).onChange(this.setMeshMaterial.bind(this));
+  displayFolder.add(this.buildVolumeSize, "x", 0).name("Build volume x")
+    .onChange(this.makeBuildVolume.bind(this));
+  displayFolder.add(this.buildVolumeSize, "y", 0).name("Build volume y")
+    .onChange(this.makeBuildVolume.bind(this));
+  displayFolder.add(this.buildVolumeSize, "z", 0).name("Build volume z")
+    .onChange(this.makeBuildVolume.bind(this));
 
   var transformFolder = this.gui.addFolder("Transform");
 
@@ -227,7 +237,7 @@ Stage.prototype.generateUI = function() {
   this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]], "[calculate]");
 
   this.initViewport();
-  this.initFloor();
+  this.makeBuildVolume();
 }
 
 // anything that needs to be refreshed by hand (not in every frame)
@@ -523,14 +533,14 @@ Stage.prototype.scaleToRingSize = function() {
   }
 }
 
-Stage.prototype.toggleFloor = function() {
-  this.floorVisible = !this.floorVisible;
-  this.setFloorState();
+Stage.prototype.toggleBuildVolume = function() {
+  this.buildVolumeVisible = !this.buildVolumeVisible;
+  this.setBuildVolumeState();
 }
-Stage.prototype.setFloorState = function() {
-  var visible = this.floorVisible;
+Stage.prototype.setBuildVolumeState = function() {
+  var visible = this.buildVolumeVisible;
   this.scene.traverse(function(o) {
-    if (o.name=="floor") o.visible = visible;
+    if (o.name=="buildVolume") o.visible = visible;
   });
 }
 Stage.prototype.toggleCOM = function() {
@@ -544,8 +554,8 @@ Stage.prototype.toggleWireframe = function() {
 Stage.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
 }
-Stage.prototype.setMeshColor = function() {
-  if (this.model) this.model.setMeshColor(this.meshColor);
+Stage.prototype.setMeshMaterial = function() {
+  if (this.model) this.model.setMeshMaterial(this.meshColor, this.meshRoughness, this.meshMetalness);
 }
 
 // Initialize the viewport, set up everything with WebGL including the
@@ -561,7 +571,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .001, 1000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -573,7 +583,7 @@ Stage.prototype.initViewport = function() {
       _this.camera,
       _this.container,
       {
-        r: 10,
+        r: _this.buildVolumeSize.length() * 1,
         phi: Math.PI/3,
         theta: 5*Math.PI/12
       }
@@ -652,9 +662,14 @@ Stage.prototype.initViewport = function() {
   }
 }
 
-// Create the floor.
-Stage.prototype.initFloor = function() {
-  var size = this.floorSize;
+// Create the build volume.
+Stage.prototype.makeBuildVolume = function() {
+  removeMeshByName(this.scene, "buildVolume");
+
+  var size = this.buildVolumeSize;
+  var x = size.x / 2;
+  var y = size.y / 2;
+  var z = size.z;
 
   // Primary: center line through origin
   // Secondary: lines along multiples of 5
@@ -675,36 +690,68 @@ Stage.prototype.initFloor = function() {
     linewidth: 1
   });
 
-  geoPrimary.vertices.push(new THREE.Vector3(0,-size,0));
-  geoPrimary.vertices.push(new THREE.Vector3(0,size,0));
-  geoPrimary.vertices.push(new THREE.Vector3(-size,0,0));
-  geoPrimary.vertices.push(new THREE.Vector3(size,0,0));
-  for (var i=-size; i<=size; i++) {
-    if (i==0) continue;
+  // draw primary axes
+  pushSegment(geoPrimary, 0, -y, 0, 0, y, 0);
+  pushSegment(geoPrimary, -x, 0, 0, x, 0, 0);
+
+  // draw grid
+  for (var i = 1; i < x; i++) {
     if (i%5==0) {
-      geoSecondary.vertices.push(new THREE.Vector3(i,-size,0));
-      geoSecondary.vertices.push(new THREE.Vector3(i,size,0));
-      geoSecondary.vertices.push(new THREE.Vector3(-size,i,0));
-      geoSecondary.vertices.push(new THREE.Vector3(size,i,0));
+      pushSegment(geoSecondary, i, -y, 0, i, y, 0);
+      pushSegment(geoSecondary, -i, -y, 0, -i, y, 0);
     }
     else {
-      geoTertiary.vertices.push(new THREE.Vector3(i,-size,0));
-      geoTertiary.vertices.push(new THREE.Vector3(i,size,0));
-      geoTertiary.vertices.push(new THREE.Vector3(-size,i,0));
-      geoTertiary.vertices.push(new THREE.Vector3(size,i,0));
+      pushSegment(geoTertiary, i, -y, 0, i, y, 0);
+      pushSegment(geoTertiary, -i, -y, 0, -i, y, 0);
     }
   }
+  for (var i = 1; i < y; i++) {
+    if (i==0) continue;
+    if (i%5==0) {
+      pushSegment(geoSecondary, -x, i, 0, x, i, 0);
+      pushSegment(geoSecondary, -x, -i, 0, x, -i, 0);
+    }
+    else {
+      pushSegment(geoTertiary, -x, i, 0, x, i, 0);
+      pushSegment(geoTertiary, -x, -i, 0, x, -i, 0);
+    }
+  }
+
+  // draw a box around the print bed
+  pushSegment(geoPrimary, -x, -y, 0, -x, y, 0);
+  pushSegment(geoPrimary, -x, -y, 0, x, -y, 0);
+  pushSegment(geoPrimary, -x, y, 0, x, y, 0);
+  pushSegment(geoPrimary, x, -y, 0, x, y, 0);
+
+  // draw vertical box
+  if (z > 0) {
+    pushSegment(geoTertiary, -x, -y, z, -x, y, z);
+    pushSegment(geoTertiary, -x, -y, z, x, -y, z);
+    pushSegment(geoTertiary, -x, y, z, x, y, z);
+    pushSegment(geoTertiary, x, -y, z, x, y, z);
+    pushSegment(geoTertiary, -x, -y, 0, -x, -y, z);
+    pushSegment(geoTertiary, -x, y, 0, -x, y, z);
+    pushSegment(geoTertiary, x, -y, 0, x, -y, z);
+    pushSegment(geoTertiary, x, y, 0, x, y, z);
+  }
+
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
   var lineSecondary = new THREE.LineSegments(geoSecondary, matSecondary);
   var lineTertiary = new THREE.LineSegments(geoTertiary, matTertiary);
-  linePrimary.name = "floor";
-  lineSecondary.name = "floor";
-  lineTertiary.name = "floor";
+  linePrimary.name = "buildVolume";
+  lineSecondary.name = "buildVolume";
+  lineTertiary.name = "buildVolume";
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
 
-  this.setFloorState();
+  this.setBuildVolumeState();
+
+  function pushSegment(geo, x0, y0, z0, x1, y1, z1) {
+    var vs = geo.vertices;
+    vs.push(new THREE.Vector3(x0, y0, z0));
+    vs.push(new THREE.Vector3(x1, y1, z1));
+  }
 }
 
 // Interface for the dat.gui button.
@@ -777,7 +824,7 @@ Stage.prototype.displayMesh = function(success, model) {
   //this.setLevel();
 
   this.filename = this.model.filename;
-  this.setMeshColor();
+  this.setMeshMaterial();
   this.updateUI();
 }
 

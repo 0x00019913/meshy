@@ -640,8 +640,12 @@ Model.prototype.toggleWireframe = function() {
 Model.prototype.getMeshColor = function() {
   if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
-Model.prototype.setMeshColor = function(color) {
-  if (this.baseMesh) return this.baseMesh.material.color.set(color);
+Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
+  var mat = this.materials.baseMesh;
+  
+  mat.color.set(color);
+  mat.roughness = roughness;
+  mat.metalness = metalness;
 }
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then
