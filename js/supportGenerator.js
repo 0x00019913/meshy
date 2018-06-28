@@ -221,9 +221,12 @@ var SupportGenerator = (function() {
           var rayNormal = octree.castRayExternal(v, normal);
           var nv = v.clone().addScaledVector(normal, strutLength);
 
-          // if a ray cast along the normal hits too close or goes below mesh
-          // min, can't extend the strut, so just leave the original node
-          if (rayNormal.dist < strutLength || nv[axis] < min[axis]) {
+          // if a ray cast along the normal hits too close, goes below mesh
+          // min, or can be more directly extended less than a strut length
+          // straight down, just leave the original node
+          if (rayNormal.dist < strutLength ||
+              nv[axis] < minHeight ||
+              (v[axis] - minHeight < strutLength)) {
             activeIndices.add(idx);
             pq.queue(idx);
           }
@@ -257,7 +260,7 @@ var SupportGenerator = (function() {
             var ixn = coneConeIntersection(p.v, q.v, angle, axis);
 
             // if valid intersection and it's inside the mesh boundary
-            if (ixn && ixn[axis] > minHeight) {
+            if (ixn && (ixn[axis] - minHeight > supportRadius)) {
               var pidist = p.v.distanceTo(ixn);
               var qidist = q.v.distanceTo(ixn);
               if (pidist < minDist && pidist > supportRadius && qidist > supportRadius) {
@@ -276,7 +279,7 @@ var SupportGenerator = (function() {
           // ray may hit the bottom side of the octree, which may not coincide
           // with mesh min
           rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
-          rayDown.dist = Math.min(rayDown.dist, rayDown.point[axis] - min[axis]);
+          rayDown.dist = Math.min(rayDown.dist, p.v[axis] - minHeight);
 
           // one or two nodes will connect to the target point
           var q = null;
@@ -312,6 +315,8 @@ var SupportGenerator = (function() {
             target = rayDown.point;
           }
 
+          // if the strut hits the bottom of the mesh's bounding box, force it
+          // to not taper at the end
           var noTaper = target === rayDown.point && !rayDown.meshHit;
 
           nodes.push(new SupportTreeNode(target, p, q, noTaper));
@@ -362,6 +367,10 @@ var SupportGenerator = (function() {
     if (b1) b1.source = this;
 
     this.noTaper = noTaper || false;
+
+    this.weight = 0;
+    if (b0) this.weight += b0.weight + v.distanceTo(b0.v);
+    if (b1) this.weight += b1.weight + v.distanceTo(b1.v);
   }
 
   // true if at the bottom of a tree
@@ -399,11 +408,12 @@ var SupportGenerator = (function() {
   // cases for nodes:
   //  root: make a circular profile and recurse to branches
   //  leaf: make a circular profile
+  //  elbow joint: make a circular profile and recurse to one branch
   //  internal: form three half-ellipse profiles joined at the two points where
   //    all three struts meet, then recurse to branches
   // params:
   //  geo: geometry object
-  //  radius: strut radius
+  //  radius: base strut radius
   //  subdivs: the number of sides on each strut; this is even and >= 4
   //  taperFactor: factor that determines the radius of the taper attaching the
   //    root/leaf nodes to the mesh; taper radius is radius * taperFactor
@@ -417,6 +427,8 @@ var SupportGenerator = (function() {
     var isLeaf = this.isLeaf();
     var isElbowJoint = this.isElbowJoint();
 
+    var r = radius + Math.sqrt(this.weight) * 0.01;
+
     if (isRoot || isLeaf) {
       // node's neighbor; if root, then this is the single branch node; if leaf,
       // this is the source
@@ -428,7 +440,7 @@ var SupportGenerator = (function() {
       var vn = n.v.clone().sub(this.v).normalize();
 
       // point where the profile center will go
-      var endOffset = this.noTaper ? 0 : -endOffsetFactor * radius;
+      var endOffset = this.noTaper ? 0 : -endOffsetFactor * r;
       var p = this.v.clone().addScaledVector(vn, endOffset);
 
       // two axes orthogonal to strut axis
@@ -444,7 +456,7 @@ var SupportGenerator = (function() {
       // angle increment
       var aincr = (isRoot ? 1 : -1) * pi2 / subdivs;
 
-      var r = this.noTaper ? radius : taperFactor * radius;
+      var r = this.noTaper ? r : taperFactor * r;
 
       // push verts and vertex indices to profile
       for (var ia = 0; ia < subdivs; ia++) {
@@ -481,11 +493,11 @@ var SupportGenerator = (function() {
       var ha = acos(v0.dot(vs)) / 2;
 
       // distance from center to the farthest intersection of the struts
-      var m = radius / Math.sin(ha);
+      var m = r / Math.sin(ha);
 
       // minor axis vector and magnitude
       var c = v0.clone().cross(b);
-      var n = radius;
+      var n = r;
 
       // starting index for the profile
       var sidx = vertices.length;
@@ -540,9 +552,9 @@ var SupportGenerator = (function() {
       var a1s = acos(v1.dot(vs)) / 2;
 
       // distance from center to the farthest intersection of two struts
-      var m01 = radius / Math.sin(a01);
-      var m0s = radius / Math.sin(a0s);
-      var m1s = radius / Math.sin(a1s);
+      var m01 = r / Math.sin(a01);
+      var m0s = r / Math.sin(a0s);
+      var m1s = r / Math.sin(a1s);
 
       // find the normal to the plane formed by the strut vectors
       var v01 = v1.clone().sub(v0);
@@ -557,7 +569,7 @@ var SupportGenerator = (function() {
       // magnitude of in/out vector is r / sin(acos(dot)), where dot is the
       // cosine of the angle between ihat and one of the strut vectors (this is
       // mathematically equivalent to the square root thing)
-      var mio = radius / Math.sqrt(1 - dot*dot);
+      var mio = r / Math.sqrt(1 - dot*dot);
 
       // An ellipse is specified like so:
       //  x = m cos t
