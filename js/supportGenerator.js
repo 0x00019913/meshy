@@ -276,6 +276,7 @@ var SupportGenerator = (function() {
           // one or two nodes will connect to the target point
           var q = null;
           var target = null;
+          var dist = 0;
 
           // if p-q intersection exists, either p and q connect or p's ray to q hits
           // the mesh first
@@ -289,23 +290,30 @@ var SupportGenerator = (function() {
               // hit along p's ray to intersection is closer, so join there
               if (rayQ.dist < rayDown.dist) {
                 target = rayQ.point;
+                dist = rayQ.dist;
               }
               // downward connection is closer, so join downward
               else {
                 target = rayDown.point;
+                dist = rayDown.dist;
               }
             }
             // p and q can be safely joined
             else {
               q = nodes[qiFinal];
               target = intersection;
+              dist = p.v.distanceTo(intersection);
             }
           }
           // if no intersection between p and q, cast a ray down and build a strut
           // where it intersects the mesh or the ground
           else {
             target = rayDown.point;
+            dist = rayDown.dist;
           }
+
+          // if distance somehow ended up as 0, ignore this point
+          if (dist === 0) continue;
 
           // if the strut hits the bottom of the mesh's bounding box, force it
           // to not taper at the end
