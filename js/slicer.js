@@ -304,6 +304,34 @@ Slicer.prototype.setPreviewLayer = function() {
   if (level >= this.numRaftLayers) {
     layer.computePrintContours(this.resolution, this.numWalls);
 
+    if (0) {
+      var o = layer.base.foffset(-0.025);
+      o.filter(function(poly) {
+        var mn = poly.min.h;
+        return inRange(mn, 2*context.p, 3*context.p);
+      });
+      var p = o.elements[4];
+
+      if (p) {
+        p.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 0.0, axis);
+        });
+
+        var u = MCG.Boolean.union(p, undefined, true).union;
+
+        u.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 0.1, axis);
+        });
+
+        debug.lines();
+        return;
+      }
+    }
+
     var contours = layer.printContours;
 
     for (var w = 0; w < contours.length; w++) {
@@ -487,7 +515,7 @@ Slicer.prototype.makePreviewGeometry = function() {
   this.previewGeometryReady = true;
 }
 
-Slicer.prototype.makeLayerGeometry = function() {
+Slicer.prototype.makePathGeometry = function() {
   if (this.pathGeometryReady) return;
 
   var layers = this.layers;
