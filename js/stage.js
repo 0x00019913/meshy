@@ -100,6 +100,8 @@ Stage.prototype.generateUI = function() {
 
   var transformFolder = this.gui.addFolder("Transform");
 
+  transformFolder.add(this, "autoCenter").name("Autocenter");
+
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
   translateFolder.add(this, "xTranslation").name("x translation");
@@ -274,6 +276,7 @@ Stage.prototype.redo = function() {
   this.undoStack.redo();
 }
 
+Stage.prototype.autoCenter = function() { this.transform("autoCenter","z",null); }
 Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
 Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
 Stage.prototype.translateZ = function() { this.transform("translate","z",this.zTranslation); }

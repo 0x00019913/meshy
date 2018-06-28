@@ -28,7 +28,7 @@ function Transform(op, axis, amount, model, printout) {
     case "floor":
       this.op = "translate";
       this.axis = axis;
-      if (axis=="all") {
+      if (axis==="all") {
         this.amount.copy(model.min).multiplyScalar(-1);
       }
       else {
@@ -38,11 +38,19 @@ function Transform(op, axis, amount, model, printout) {
     case "center":
       this.op = "translate";
       this.axis = axis;
-      if (axis=="all") {
+      if (axis==="all") {
         this.amount.copy(model.getCenter()).multiplyScalar(-1);
       }
       else {
         this.amount[axis] = -1 * model["getCenter"+axis]();
+      }
+      break;
+    case "autoCenter":
+      this.op = "translate";
+      this.axis = axis;
+      this.amount.copy(model.getCenter()).multiplyScalar(-1);
+      if (axis!=="all") {
+        this.amount[axis] = -model.min[axis];
       }
       break;
     case "mirror":
@@ -57,7 +65,7 @@ function Transform(op, axis, amount, model, printout) {
       break;
     case "rotate":
       this.op = "rotate";
-      if (axis=="all") {
+      if (axis==="all") {
         this.op = "noop";
         this.reason = "Cannot rotate on multiple axes at once.";
         return this;
@@ -83,7 +91,7 @@ function Transform(op, axis, amount, model, printout) {
       // to be specified as a number (then scale on all axes by that number)
       if (amount.isVector3) this.amount.copy(amount);
       else {
-        if (axis=="all") this.amount.set(amount, amount, amount);
+        if (axis==="all") this.amount.set(amount, amount, amount);
         else {
           this.amount.set(1,1,1);
           this.amount[axis] = amount;
@@ -91,20 +99,26 @@ function Transform(op, axis, amount, model, printout) {
       }
       break;
   }
+
+  if (this.op === "translate" && this.amount.length() === 0) {
+    this.op = "noop";
+    this.reason = "Translation by 0.";
+  }
+
   return this;
 }
 
-Transform.prototype = {
+Object.assign(Transform.prototype, {
   constructor: Transform,
 
   // Creates and returns an inverse transform.
   makeInverse: function() {
-    if (this.op=="noop") {
+    if (this.op==="noop") {
       return null;
     }
 
     var amount;
-    if (this.op=="scale") {
+    if (this.op==="scale") {
       amount = new THREE.Vector3(1,1,1).divide(this.amount);
     }
     else { // translations and rotations
@@ -134,54 +148,9 @@ Transform.prototype = {
         this.model.mirror(this.axis);
         break;
     }
-  },
-
-  // The following are for transforming geometry dynamically (as opposed to
-  // pressing a button to perform a discrete transformation), but I decided
-  // to not use it because WebGL is weighty enough without moving hundreds of
-  // thousands of vertices in real time.
-
-  // this will come back when I move to transforming the matrix as opposed to
-  // the vertices themselves
-
-  /* Intended pattern for dynamic updates (not using because updating in
-      real time in WebGL is slow for large meshes):
-    // in UI setup using dat.gui
-    this.xOffset = 0;
-    this.xOffsetPrev = this.xOffset;
-    translationFolder.add(this, "xOffset", -50, 50).onChange(this.translateXDynamic.bind(this).onFinishChange(this.endTranslateXDynamic.bind(this));
-    ...
-    // functions
-    this.translateXDynamic = function() {
-      if (!this.translationXDynamic) {
-        this.translationXDynamic = new Transform("translate","x",0,this.model);
-        this.translationXDynamic.setDynamicStart(this.xOffsetPrev);
-      }
-      var delta = this.xOffset - this.xOffsetPrev;
-      this.translationXDynamic.setAmount(delta);
-      this.translationXDynamic.apply();
-
-      console.log(this);
-
-      this.xOffsetPrev = this.xOffset;
-    }
-    this.endTranslateXDynamic = function() {
-      this.undoStack.push(this.translationXDynamic.makeInverse());
-      this.xOffsetPrev = this.xOffset;
-      this.translationXDynamic = null;
-    }
-  */
-
-  setDynamicStart: function(start) {
-    this.dynamic = true;
-    this.start = start;
-  },
-
-  setAmount: function(amount) {
-    this.amount = amount;
   }
 
-}
+});
 
 // Constructor - initialized with a printout object.
 function UndoStack(printout) {
