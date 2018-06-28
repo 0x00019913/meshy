@@ -21,7 +21,9 @@ var Octree = (function() {
     if (!params.origin || !params.size) this.calculateBounds();
 
     // set params
-    var overflow = params.overflow || 0.01;
+
+    // small overflow so that mesh is entirely contained in the top node
+    var overflow = params.overflow || 0.00001;
     // heuristic is that the tree should be as deep as necessary to have 1-10 faces
     // per leaf node so as to make raytracing cheap; the effectiveness will vary
     // between different meshes, of course, but I estimate that ln(polycount)*0.6
