@@ -51,7 +51,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, -29.0*p, -28.0*p) && inRange(ev.p.v, 4.5*p, 5.0*p);
+      printEvents = dbg && inRange(ev.p.h, 3.0*p, 4.0*p) && inRange(ev.p.v, 9.2*p, 9.5*p);
       drawEvents = false;
       incr = 0.1;
 
@@ -86,11 +86,25 @@ Object.assign(MCG.Sweep, (function() {
 
         var up = null, dn = null;
 
+        // removing an event causes its two adjacent events to become adjacent
+        // to each other, so they may intersect
         if (tev.contributing) [up, dn] = eventGetAdjacent(tev);
 
-        handleRightEvent(ev);
+        // handle possible intersection
+        var pi = handleEventIntersection(up, dn);
 
-        handleEventIntersection(up, dn);
+        // if intersection between adjacent events happens earlier in time
+        // (special case that can occur when points snap to the grid), return
+        // the currnt event and its twin to the queue and reprocess them to
+        // maintain correct depth
+        if (pi && pi.h < ev.p.h) {
+          queue(tev);
+          queue(ev);
+        }
+        // else, just handle the right event
+        else {
+          handleRightEvent(ev);
+        }
 
         eventDraw(ev, o);
       }
@@ -257,7 +271,7 @@ Object.assign(MCG.Sweep, (function() {
 
       operation.handleEvent(te, status, store);
 
-      remove(te);
+      return remove(te);
     }
 
     function depthValidate() {
@@ -282,8 +296,10 @@ Object.assign(MCG.Sweep, (function() {
       var c, p = e;
 
       while ((c = iter.next()) !== null) {
-        if (c.timeCompare(e) !== -1) c.setDepthFromBelow(p);
-        if (printEvents) console.log("corrected depth", p.id, c.id, "from", e.id);
+        if (c.timeCompare(e) !== -1) {
+          c.setDepthFromBelow(p);
+          if (printEvents) console.log("corrected depth", p.id, c.id, "from", e.id);
+        }
 
         p = c;
       }
@@ -433,6 +449,8 @@ Object.assign(MCG.Sweep, (function() {
 
         eventDraw(linv, o+incr*4);
         eventDraw(lval, o+incr*5);
+
+        return ls;
       }
       // else, not collinear but intersecting at at most one point
       else if (intersection !== flags.none) {
@@ -462,8 +480,6 @@ Object.assign(MCG.Sweep, (function() {
         else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
         else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
         else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
-
-        if (pi && printEvents) console.log(pi.h);
 
         if (pi && (!a.contains(pi) && !b.contains(pi))) pi = null;
 
@@ -528,7 +544,11 @@ Object.assign(MCG.Sweep, (function() {
           eventDraw(itb, o+incr*3, 0x666666);
 
         }
+
+        return pi;
       }
+
+      return null;
     }
 
     function eventInvalidate(e) {
