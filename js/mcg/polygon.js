@@ -274,8 +274,10 @@ MCG.Polygon = (function() {
 
       var size = this.size();
       var minsize = Math.min(size.h, size.v);
+      var minsizesq = minsize * minsize;
       var fdist = MCG.Math.itof(dist, this.context);
       var tol = tol || 0;
+      var tolsq = tol * tol;
 
       if (dist <= -minsize / 2) return result;
 
@@ -288,67 +290,71 @@ MCG.Polygon = (function() {
       var ct = this.count();
 
       var pi = Math.PI;
-      var pi2 = pi / 2;
+      var pi_2 = pi / 2;
       var orthogonalRightVector = MCG.Math.orthogonalRightVector;
       var coincident = MCG.Math.coincident;
-
-      // 30-degree lower threshold and 150-degree upper threshold for capping
-      // the offset off a spike or ignoring the offset inside a cusp
-      var tcaplow = pi / 6;
-      var tcaphigh = pi - tcaplow;
 
       for (var i = 0; i < ct; i++) {
         var b = bisectors[i];
         var pti = points[i];
+
         // angle between the offset vector and the neighboring segments (because
         // the angles array stores the angle relative to the outward-facing
         // bisector, which may be antiparallel to the offset vector)
         var a = fdist > 0 ? angles[i] : (pi - angles[i]);
+        // scale for bisector
         var d = fdist / Math.sin(a);
-        var displacement = pti.clone().addScaledVector(b, d);
+        // displace by this much
+        var displacement = b.clone().multiplyScalar(d);
+        // displaced point
+        var ptnew = pti.clone().add(displacement);
 
-        // if shifting out from a point, cap the resulting spike with a
-        // segment whose center is fdist away from the current point
-        if (a > tcaphigh) {
-          // half-angle between displacement and vector orthogonal to segment
-          var ha = (a - pi2) / 2;
+        // if displacement exceeds the size of the polygon, either cap it or
+        // ignore it entirely
+        if (displacement.lengthSq() > minsizesq) {
+          // if reflex vertex, cap the resulting spike
+          if (a > pi_2) {
+            // half-angle between displacement and vector orthogonal to segment
+            var ha = (a - pi_2) / 2;
 
-          // half-length of the cap for the spike
-          var hl = fdist * Math.tan(ha);
+            // half-length of the cap for the spike
+            var hl = fdist * Math.tan(ha);
 
-          // orthogonal vector from the end of the displacement vector
-          var ov = orthogonalRightVector(pti.vectorTo(displacement));
+            // orthogonal vector from the end of the displacement vector
+            var ov = orthogonalRightVector(pti.vectorTo(ptnew));
 
-          // midpoint of the cap
-          var mc = pti.clone().addScaledVector(b, fdist);
+            // midpoint of the cap
+            var mc = pti.clone().addScaledVector(b, fdist);
 
-          // endpoints of the cap segment
-          var p0 = mc.clone().addScaledVector(ov, -hl);
-          var p1 = mc.clone().addScaledVector(ov, hl);
+            // endpoints of the cap segment
+            var p0 = mc.clone().addScaledVector(ov, -hl);
+            var p1 = mc.clone().addScaledVector(ov, hl);
 
-          if (coincident(p0, p1)) addPoints(displacement);
-          else {
-            var fpt = fdist > 0 ? p0 : p1;
-            var spt = fdist > 0 ? p1 : p0;
+            if (coincident(p0, p1)) addPoints(ptnew);
+            else {
+              var fpt = fdist > 0 ? p0 : p1;
+              var spt = fdist > 0 ? p1 : p0;
 
-            addPoints(fpt, spt);
+              addPoints(fpt, spt);
+            }
           }
+          // if convex vertex, just ignore the displacement
         }
-        // if shift is "inside a cusp", just shift along bisector s.t. the
-        // resulting segments will be displaced by fdist, but only if the cusp
-        // is wide enough
-        else if (a > tcaplow) {
-          addPoints(displacement);
+        // else, all is good, so include the displaced point
+        else {
+          addPoints(ptnew);
         }
-        // else, cusp is too narrow, so just don't offset
       }
 
       result.fromPoints(rpoints);
 
-      //console.log(result.area, tol*tol);
+      // if area increased despite inward offset or area decreased despite
+      // outward offset, invalidate
+      if (dist < 0 && result.area > this.area) return result.invalidate();
+      if (dist > 0 && result.area < this.area) return result.invalidate();
 
       // if result area is too small, invalidate it
-      if (Math.abs(result.area) < tol * tol) result.invalidate();
+      if (Math.abs(result.area) < tolsq) return result.invalidate();
 
       return result;
 
@@ -362,7 +368,7 @@ MCG.Polygon = (function() {
         for (var ai = 0; ai < arglen; ai++) {
           var apt = arguments[ai];
 
-          if (!prevpt || (prevpt.distanceToSq(apt) > tol)) {
+          if (!prevpt || (prevpt.distanceToSq(apt) > tolsq)) {
             rpoints.push(apt);
             prevpt = apt;
           }
