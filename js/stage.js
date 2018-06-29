@@ -214,7 +214,13 @@ Stage.prototype.generateUI = function() {
   this.supportRadius = this.planarResolution * 2;
   this.supportTaperFactor = 0.5;
   this.supportSubdivs = 16;
-  this.supportRadiusFn = SupportGenerator.RadiusFunctions.sqrt;
+  // can't set support radius fn directly from dat.gui because it returns the
+  // function stringified, so just set index and then convert it to the fn
+  this.supportRadiusFnMap = {
+    constant: SupportGenerator.RadiusFunctions.constant,
+    sqrt: SupportGenerator.RadiusFunctions.sqrt
+  };
+  this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
   this.sliceNumWalls = 2;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
@@ -377,7 +383,7 @@ Stage.prototype.generateSupports = function() {
       radius: this.supportRadius,
       taperFactor: this.supportTaperFactor,
       subdivs: this.supportSubdivs,
-      radiusFn: this.supportRadiusFn,
+      radiusFn: this.supportRadiusFnMap[this.supportRadiusFnName],
       radiusFnK: this.supportRadiusFnK,
       axis: this.upAxis
     });
@@ -403,11 +409,7 @@ Stage.prototype.buildSupportFolder = function() {
   this.supportFolder.add(this, "supportRadius", 0.0001, 1).name("Radius");
   this.supportFolder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
   this.supportFolder.add(this, "supportSubdivs", 4).name("Subdivs");
-  this.supportFolder.add(this, "supportRadiusFn", {
-    constant: SupportGenerator.RadiusFunctions.constant,
-    sqrt: SupportGenerator.RadiusFunctions.sqrt,
-    log: SupportGenerator.RadiusFunctions.log
-  }).name("Radius function");
+  this.supportFolder.add(this, "supportRadiusFnName", ["constant", "sqrt"]).name("Radius function");
   this.supportFolder.add(this, "supportRadiusFnK", 0, 1).name("Function constant");
   this.supportFolder.add(this, "generateSupports").name("Generate supports");
   this.supportFolder.add(this, "removeSupports").name("Remove supports");
@@ -591,7 +593,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 10000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -835,14 +837,14 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  this.generateSupports();
-  //this.activateSliceMode();
+  //this.generateSupports();
+  this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  //this.currentLevel = 100;
-  //this.setLevel();
+  this.currentLevel = 140;
+  this.setLevel();
 
   this.filename = this.model.filename;
   this.setMeshMaterial();
