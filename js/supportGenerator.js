@@ -16,8 +16,7 @@ var SupportGenerator = (function() {
 
   SupportGenerator.RadiusFunctions = {
     constant: function(r, w, k) { return r; },
-    sqrt: function(r, w, k) { return r + k * Math.sqrt(w); },
-    log: function(r, w, k) { return r + k * Math.log(w); }
+    sqrt: function(r, w, k) { return r + k * Math.sqrt(w); }
   };
 
   // params:
@@ -357,7 +356,7 @@ var SupportGenerator = (function() {
           // to not taper at the end
           var noTaper = target === rayDown.point && !rayDown.meshHit;
 
-          nodes.push(new SupportTreeNode(target, p, q, { noTaper: true }));
+          nodes.push(new SupportTreeNode(target, p, q, { noTaper: noTaper }));
 
           if (q !== null) {
             activeIndices.delete(qiFinal);
