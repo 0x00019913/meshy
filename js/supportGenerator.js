@@ -14,28 +14,56 @@ var SupportGenerator = (function() {
     this.octree = null;
   }
 
+  SupportGenerator.RadiusFunctions = {
+    constant: function(r, w, k) { return r; },
+    sqrt: function(r, w, k) { return r + k * Math.sqrt(w); },
+    log: function(r, w, k) { return r + k * Math.log(w); }
+  };
+
   // params:
   //  angleDegrees: the maximal angle, given in degrees, between a face's normal
   //    and the downward vector; essentially specifies the steepness range in
   //    which faces require support
   //  resolution: horizontal resolution for spacing out support points
   //  layerHeight: for finding points that don't need supporting
-  //  supportRadius: radius of support struts
+  //  radius: radius of support struts
+  //  subdivs: angular subdivisions on each support
+  //  taperFactor: multiplies radius to determine support radius when
+  //    connecting to the mesh
+  //  radiusFn(K): function and constant used to determine strut radius
   //  axis: up axis
   //  min, max: min and max bounds of the mesh
   //  epsilon: optional
-  SupportGenerator.prototype.generate = function(
-      angleDegrees,
-      resolution,
-      layerHeight,
-      supportRadius,
-      axis,
-      min,
-      max,
-      epsilon
-  ) {
-    if (axis === undefined) axis = 'z';
-    if (epsilon === undefined) epsilon = 0.0000001;
+  SupportGenerator.prototype.generate = function(params) {
+    params = params || {};
+
+    var angleDegrees = params.angleDegrees || 45;
+    var resolution = params.resolution || 0.3;
+    var layerHeight = params.layerHeight || 0.1;
+    var radius = params.radius || 0.1;
+    var subdivs = params.subdivs || 16;
+    var taperFactor = params.taperFactor || 0.5;
+    var radiusFn = params.radiusFn || SupportGenerator.RadiusFunctions.sqrt;
+    var radiusFnK = params.radiusFnK || 0.01;
+    var axis = params.axis || "z";
+    var min = params.min || null;
+    var max = params.max || null;
+    var epsilon = params.epsilon || 0.0000001;
+
+
+    // if bounds not given, calculate them
+    if (min === null || max === null) {
+      min = new THREE.Vector3().setScalar(Infinity);
+      max = new THREE.Vector3().setScalar(-Infinity);
+
+      var vertices = this.vertices;
+
+      for (var i = 0; i < vertices.length; i++) {
+        var v = vertices[i];
+        min.min(v);
+        max.max(v);
+      }
+    }
 
     // axes in the horizontal plane
     var ah = cycleAxis(axis);
@@ -45,7 +73,7 @@ var SupportGenerator = (function() {
     var angle = (90 - angleDegrees) * Math.PI / 180;
     var minHeight = min[axis];
     var resolution = resolution;
-    var minSupportLength = 3 * supportRadius;
+    var minSupportLength = 3 * radius;
 
     var vs = this.vertices;
     var fs = this.faces;
@@ -79,10 +107,20 @@ var SupportGenerator = (function() {
 
     var supportTreeGeometry = new THREE.Geometry();
 
+    var treeWriteParams = {
+      geo: supportTreeGeometry,
+      radius: radius,
+      subdivs: subdivs,
+      taperFactor: taperFactor,
+      endOffsetFactor: 0.5,
+      radiusFn: radiusFn,
+      radiusFnK: radiusFnK
+    };
+
     for (var s=0; s<supportTrees.length; s++) {
       var tree = supportTrees[s];
       //tree.debug();
-      tree.writeToGeometry(supportTreeGeometry, supportRadius, 16, 0.5, 0.5);
+      tree.writeToGeometry(treeWriteParams);
     }
 
     supportTreeGeometry.computeFaceNormals();
@@ -252,10 +290,10 @@ var SupportGenerator = (function() {
             var ixn = coneConeIntersection(p.v, q.v, angle, axis);
 
             // if valid intersection and it's inside the mesh boundary
-            if (ixn && (ixn[axis] - minHeight > supportRadius)) {
+            if (ixn && (ixn[axis] - minHeight > radius)) {
               var pidist = p.v.distanceTo(ixn);
               var qidist = q.v.distanceTo(ixn);
-              if (pidist < minDist && pidist > supportRadius && qidist > supportRadius) {
+              if (pidist < minDist && pidist > radius && qidist > radius) {
                 minDist = pidist;
                 intersection = ixn;
                 qiFinal = qi;
@@ -319,7 +357,7 @@ var SupportGenerator = (function() {
           // to not taper at the end
           var noTaper = target === rayDown.point && !rayDown.meshHit;
 
-          nodes.push(new SupportTreeNode(target, p, q, noTaper));
+          nodes.push(new SupportTreeNode(target, p, q, { noTaper: true }));
 
           if (q !== null) {
             activeIndices.delete(qiFinal);
@@ -351,7 +389,8 @@ var SupportGenerator = (function() {
   // params:
   //  v: vertex at which this node is placed
   //  b0, b1: this node's branches, if any
-  function SupportTreeNode(v, b0, b1, noTaper) {
+  //  params: specify if node need to be forced to not taper
+  function SupportTreeNode(v, b0, b1, params) {
     this.v = v;
 
     // every node is a root when created; when connected as a branch node to
@@ -366,7 +405,8 @@ var SupportGenerator = (function() {
     if (b0) b0.source = this;
     if (b1) b1.source = this;
 
-    this.noTaper = noTaper || false;
+    // no-taper parameter
+    this.noTaper = (params && params.noTaper) || false;
 
     this.weight = 0;
     if (b0) this.weight += b0.weight + v.distanceTo(b0.v);
@@ -393,15 +433,20 @@ var SupportGenerator = (function() {
     return this.b0 !== null && this.b1 !== null && this.source !== null;
   }
 
-  SupportTreeNode.prototype.writeToGeometry = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
+  SupportTreeNode.prototype.writeToGeometry = function(params) {
     if (!this.isRoot()) return null;
+
+    params = params || {};
+    var subdivs = params.subdivs;
 
     // subdivs must be at least 4 and even
     if (subdivs === undefined || subdivs < 4) subidvs = 4;
     subdivs -= subdivs%2;
 
-    this.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
-    this.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    params.subdivs = subdivs;
+
+    this.makeProfiles(params);
+    this.connectProfiles(params);
   }
 
   // build the profiles of vertices where the cylindrical struts will join or end;
@@ -418,16 +463,24 @@ var SupportGenerator = (function() {
   //  taperFactor: factor that determines the radius of the taper attaching the
   //    root/leaf nodes to the mesh; taper radius is radius * taperFactor
   //  endOffsetFactor: strut extends past its node's center by radius * endOffsetFactor
-  SupportTreeNode.prototype.makeProfiles = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
+  //  radiusFn, radiusFnK: function and parameter that determine how radius
+  //    grows based on supported weight
+  SupportTreeNode.prototype.makeProfiles = function(params) {
     var pi2 = Math.PI * 2;
 
-    var vertices = geo.vertices;
+    var vertices = params.geo.vertices;
 
     var isRoot = this.isRoot();
     var isLeaf = this.isLeaf();
     var isElbowJoint = this.isElbowJoint();
 
-    var r = radius + Math.sqrt(this.weight) * 0.01;
+    var radius = params.radius;
+    var subdivs = params.subdivs;
+    var endOffsetFactor = params.endOffsetFactor;
+
+    // calculate radius at this strut from base radius, weight supported by this
+    // node, and the given constant
+    var r = params.radiusFn(radius, this.weight, params.radiusFnK);
 
     if (isRoot || isLeaf) {
       // node's neighbor; if root, then this is the single branch node; if leaf,
@@ -456,7 +509,7 @@ var SupportGenerator = (function() {
       // angle increment
       var aincr = (isRoot ? 1 : -1) * pi2 / subdivs;
 
-      var r = this.noTaper ? r : taperFactor * r;
+      var r = this.noTaper ? r : params.taperFactor * r;
 
       // push verts and vertex indices to profile
       for (var ia = 0; ia < subdivs; ia++) {
@@ -709,39 +762,43 @@ var SupportGenerator = (function() {
       this.p1 = p1;
     }
 
-    if (this.b0) this.b0.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
-    if (this.b1) this.b1.makeProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    if (this.b0) this.b0.makeProfiles(params);
+    if (this.b1) this.b1.makeProfiles(params);
   }
 
   // connect created profiles with geometry
-  SupportTreeNode.prototype.connectProfiles = function(geo, radius, subdivs, taperFactor, endOffsetFactor) {
+  SupportTreeNode.prototype.connectProfiles = function(params) {
+    var geo = params.geo;
     var vertices = geo.vertices;
     var faces = geo.faces;
 
     if (this.isRoot()) {
-      this.connectToBranch(this.b0, geo, subdivs);
-      this.makeCap(geo, radius, subdivs, taperFactor, endOffsetFactor);
+      this.connectToBranch(this.b0, params);
+      this.makeCap(params);
     }
     else if (this.isLeaf()) {
-      this.makeCap(geo, radius, subdivs, taperFactor, endOffsetFactor);
+      this.makeCap(params);
     }
     else {
-      this.connectToBranch(this.b0, geo, subdivs);
-      this.connectToBranch(this.b1, geo, subdivs);
+      this.connectToBranch(this.b0, params);
+      this.connectToBranch(this.b1, params);
     }
 
-    if (this.b0) this.b0.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
-    if (this.b1) this.b1.connectProfiles(geo, radius, subdivs, taperFactor, endOffsetFactor);
+    if (this.b0) this.b0.connectProfiles(params);
+    if (this.b1) this.b1.connectProfiles(params);
 
     if (this.isRoot()) debug.lines(12);
   }
 
   // connect a node to one of its branch nodes
-  SupportTreeNode.prototype.connectToBranch = function(n, geo, subdivs) {
+  SupportTreeNode.prototype.connectToBranch = function(n, params) {
     if (!n) return;
 
+    var geo = params.geo;
     var vertices = geo.vertices;
     var faces = geo.faces;
+
+    var subdivs = params.subdivs;
 
     // source and target profiles
     var sp = (n === this.b0) ? this.p0 : this.p1;
@@ -784,9 +841,12 @@ var SupportGenerator = (function() {
     }
   }
 
-  SupportTreeNode.prototype.makeCap = function(geo, radius, subdivs, endOffsetFactor) {
+  SupportTreeNode.prototype.makeCap = function(params) {
+    var geo = params.geo;
     var vertices = geo.vertices;
     var faces = geo.faces;
+
+    var subdivs = params.subdivs;
 
     // get the profile and the incoming strut vector
     var p, vn;

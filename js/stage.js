@@ -212,6 +212,10 @@ Stage.prototype.generateUI = function() {
   this.supportAngle = 45;
   this.supportSpacingFactor = 6;
   this.supportRadius = this.planarResolution * 2;
+  this.supportTaperFactor = 0.5;
+  this.supportSubdivs = 16;
+  this.supportRadiusFn = SupportGenerator.RadiusFunctions.sqrt;
+  this.supportRadiusFnK = 0.01;
   this.sliceNumWalls = 2;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
@@ -366,12 +370,17 @@ Stage.prototype.generateSupports = function() {
       this.printout.warn("Support radius is lower than the planar resolution.");
     }
 
-    this.model.generateSupports(
-      this.supportAngle,
-      this.planarResolution * this.supportSpacingFactor,
-      this.verticalResolution,
-      this.supportRadius,
-      this.upAxis);
+    this.model.generateSupports({
+      angle: this.supportAngle,
+      resolution: this.planarResolution * this.supportSpacingFactor,
+      layerHeight: this.verticalResolution,
+      radius: this.supportRadius,
+      taperFactor: this.supportTaperFactor,
+      subdivs: this.supportSubdivs,
+      radiusFn: this.supportRadiusFn,
+      radiusFnK: this.supportRadiusFnK,
+      axis: this.upAxis
+    });
   }
 }
 Stage.prototype.removeSupports = function() {
@@ -392,6 +401,14 @@ Stage.prototype.buildSupportFolder = function() {
   this.supportFolder.add(this, "supportAngle", 0, 90).name("Angle");
   this.supportFolder.add(this, "supportSpacingFactor", 1, 20).name("Spacing factor");
   this.supportFolder.add(this, "supportRadius", 0.0001, 1).name("Radius");
+  this.supportFolder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
+  this.supportFolder.add(this, "supportSubdivs", 4).name("Subdivs");
+  this.supportFolder.add(this, "supportRadiusFn", {
+    constant: SupportGenerator.RadiusFunctions.constant,
+    sqrt: SupportGenerator.RadiusFunctions.sqrt,
+    log: SupportGenerator.RadiusFunctions.log
+  }).name("Radius function");
+  this.supportFolder.add(this, "supportRadiusFnK", 0, 1).name("Function constant");
   this.supportFolder.add(this, "generateSupports").name("Generate supports");
   this.supportFolder.add(this, "removeSupports").name("Remove supports");
 }
@@ -587,8 +604,9 @@ Stage.prototype.initViewport = function() {
       _this.container,
       {
         r: _this.buildVolumeSize.length() * 1,
-        phi: Math.PI/3,
-        theta: 5*Math.PI/12
+        phi: 0,
+        theta: 5*Math.PI/12,
+        origin: new THREE.Vector3(0, 0, _this.buildVolumeSize.z / 8)
       }
     );
 

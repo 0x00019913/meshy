@@ -642,7 +642,7 @@ Model.prototype.getMeshColor = function() {
 }
 Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
   var mat = this.materials.baseMesh;
-  
+
   mat.color.set(color);
   mat.roughness = roughness;
   mat.metalness = metalness;
@@ -1952,28 +1952,20 @@ Model.prototype.generateBorderMap = function(adjacencyMap) {
 
 /* SUPPORTS */
 
-Model.prototype.generateSupports = function(
-  angle,
-  resolution,
-  layerHeight,
-  supportRadius,
-  axis
-) {
+Model.prototype.generateSupports = function(params) {
   this.removeSupports();
 
   if (!this.supportGenerator) {
     this.supportGenerator = new SupportGenerator(this.faces, this.vertices);
   }
 
-  var supportGeometry = this.supportGenerator.generate(
-    angle,
-    resolution,
-    layerHeight,
-    supportRadius,
-    axis,
-    this.min,
-    this.max
-  );
+  // add mesh min and max to the params and pass them to the support generator
+  Object.assign(params, {
+    min: this.min,
+    max: this.max
+  });
+
+  var supportGeometry = this.supportGenerator.generate(params);
 
   var geometry = this.baseMesh.geometry
 
