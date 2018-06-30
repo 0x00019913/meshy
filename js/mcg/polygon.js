@@ -211,8 +211,21 @@ MCG.Polygon = (function() {
       return clone;
     },
 
-    fromPoints: function(points) {
-      this.points = points;
+    // points is an array of vectors
+    // mk is an optional array of bools indicating valid points
+    fromPoints: function(points, mk) {
+      if (mk) {
+        var rpoints = [];
+
+        for (var i = 0; i < points.length; i++) {
+          if (mk[i]) rpoints.push(points[i]);
+        }
+
+        this.points = rpoints;
+      }
+      else {
+        this.points = points;
+      }
 
       this.calculateArea();
       this.calculateBounds();
@@ -287,10 +300,11 @@ MCG.Polygon = (function() {
       var angles = this.angles;
       var points = this.points;
       var rpoints = [];
-      var ct = this.count();
+      var ct = points.length;
 
       var pi = Math.PI;
       var pi_2 = pi / 2;
+      var capThreshold = pi * 5 / 6;
       var orthogonalRightVector = MCG.Math.orthogonalRightVector;
       var coincident = MCG.Math.coincident;
 
@@ -309,72 +323,73 @@ MCG.Polygon = (function() {
         // displaced point
         var ptnew = pti.clone().add(displacement);
 
-        // if displacement exceeds the size of the polygon, either cap it or
-        // ignore it entirely
-        if (displacement.lengthSq() > minsizesq) {
-          // if reflex vertex, cap the resulting spike
-          if (a > pi_2) {
-            // half-angle between displacement and vector orthogonal to segment
-            var ha = (a - pi_2) / 2;
+        // if angle is too sharp, cap the resulting spike
+        if (a > capThreshold) {
+          // half-angle between displacement and vector orthogonal to segment
+          var ha = (a - pi_2) / 2;
 
-            // half-length of the cap for the spike
-            var hl = fdist * Math.tan(ha);
+          // half-length of the cap for the spike
+          var hl = fdist * Math.tan(ha);
 
-            // orthogonal vector from the end of the displacement vector
-            var ov = orthogonalRightVector(pti.vectorTo(ptnew));
+          // orthogonal vector from the end of the displacement vector
+          var ov = orthogonalRightVector(pti.vectorTo(ptnew));
 
-            // midpoint of the cap
-            var mc = pti.clone().addScaledVector(b, fdist);
+          // midpoint of the cap
+          var mc = pti.clone().addScaledVector(b, fdist);
 
-            // endpoints of the cap segment
-            var p0 = mc.clone().addScaledVector(ov, -hl);
-            var p1 = mc.clone().addScaledVector(ov, hl);
+          // endpoints of the cap segment
+          var p0 = mc.clone().addScaledVector(ov, -hl);
+          var p1 = mc.clone().addScaledVector(ov, hl);
 
-            if (coincident(p0, p1)) addPoints(ptnew);
-            else {
-              var fpt = fdist > 0 ? p0 : p1;
-              var spt = fdist > 0 ? p1 : p0;
+          var fpt = fdist > 0 ? p0 : p1;
+          var spt = fdist > 0 ? p1 : p0;
 
-              addPoints(fpt, spt);
-            }
-          }
-          // if convex vertex, just ignore the displacement
+          rpoints.push(fpt);
+          rpoints.push(spt);
         }
-        // else, all is good, so include the displaced point
         else {
-          addPoints(ptnew);
+          rpoints.push(ptnew);
         }
       }
 
-      result.fromPoints(rpoints);
+      // determine valid points
 
-      // if area increased despite inward offset or area decreased despite
-      // outward offset, invalidate
-      if (dist < 0 && result.area > this.area) return result.invalidate();
-      if (dist > 0 && result.area < this.area) return result.invalidate();
+      var rlen = rpoints.length;
+      var rlen1 = rlen - 1;
+      var ri = 0;
+      var mk = new Array(rlen);
+      var lcs = MCG.Math.leftCompareStrict;
+
+      // if displacement is larger than min polygon size, point is invalid;
+      // else, if previous point is to the right of bisector or next point is
+      // to its left, point is invalid
+      for (var i = 0; i < points.length; i++) {
+        var a = fdist > 0 ? angles[i] : (pi - angles[i]);
+
+        if (a > capThreshold) {
+          mk[ri++] = true;
+          mk[ri++] = true;
+        }
+        else {
+          var rpprev = rpoints[ri === 0 ? rlen1 : ri - 1];
+          var rpnext = rpoints[ri === rlen1 ? 0 : ri + 1];
+          var rp = rpoints[ri];
+
+          var p = points[i];
+
+          //if (rpprev.distanceToSq(rp) < tolsq / 4) mk[ri] = false;
+          mk[ri] = !(lcs(p, rp, rpprev) === -1 && lcs(p, rp, rpnext) === 1);
+
+          ri++;
+        }
+      }
+
+      result.fromPoints(rpoints, mk);
 
       // if result area is too small, invalidate it
       if (Math.abs(result.area) < tolsq) return result.invalidate();
 
       return result;
-
-      function addPoints() {
-        var rlen = rpoints.length;
-        var arglen = arguments.length;
-        var prevpt = null;
-
-        if (rlen > 0) prevpt = rpoints[rlen-1];
-
-        for (var ai = 0; ai < arglen; ai++) {
-          var apt = arguments[ai];
-
-          if (!prevpt || (prevpt.distanceToSq(apt) > tolsq)) {
-            rpoints.push(apt);
-            prevpt = apt;
-          }
-
-        }
-      }
     },
 
     fdecimate: function(ftol) {
