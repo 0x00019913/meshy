@@ -405,7 +405,7 @@ Stage.prototype.buildSupportSliceFolderInactive = function() {
 }
 Stage.prototype.buildSupportFolder = function() {
   this.supportFolder.add(this, "supportAngle", 0, 90).name("Angle");
-  this.supportFolder.add(this, "supportSpacingFactor", 1, 20).name("Spacing factor");
+  this.supportFolder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor");
   this.supportFolder.add(this, "supportRadius", 0.0001, 1).name("Radius");
   this.supportFolder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
   this.supportFolder.add(this, "supportSubdivs", 4).name("Subdivs");
@@ -837,13 +837,13 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  //this.generateSupports();
+  this.generateSupports();
   this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  this.currentLevel = 140;
+  this.currentLevel = 127;
   this.setLevel();
 
   this.filename = this.model.filename;
