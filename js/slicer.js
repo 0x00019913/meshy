@@ -296,7 +296,6 @@ Slicer.prototype.setPreviewLayer = function() {
   debug.cleanup();
 
   var layer = this.layers[level];
-  var above = level === this.numLayers - 1 ? null : this.layers[level + 1];
   var context = layer.context;
   var axis = context.axis;
   var vertices = [];
@@ -364,7 +363,7 @@ Slicer.prototype.setPreviewLayer = function() {
       });
     }
 
-    layer.computeInfill(this.resolution, this.numWalls, this.infillType, this.infillDensity, above);
+    layer.computeInfill(this.resolution, this.numWalls, this.infillType, this.infillDensity);
   }
   else {
     layer.base.forEachPointPair(function(p1, p2) {
@@ -380,7 +379,8 @@ Slicer.prototype.setPreviewLayer = function() {
 
     // 3: 3 infill contours
 
-    var below = layer.below;
+    var below = layer.getBelow();
+    var above = layer.getAbove();
     if (below) {
       below.infillContour.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
@@ -571,12 +571,8 @@ Slicer.prototype.makeLayers = function() {
   // make layers containing slices of the mesh
   for (var i = 0; i < segmentSets.length; i++) {
     var idx = i + numRaftLayers;
-    var below = i > 0 ? layers[idx-1] : null;
 
-    var sourceDecimated = segmentSets[i].toPolygonSet().fdecimate(resolution);
-    var base = MCG.Boolean.union(sourceDecimated).union.toPolygonSet();
-
-    var layer = new Layer(base, resolution, idx, below);
+    var layer = new Layer(segmentSets[i], resolution, layers, idx);
 
     layers[idx] = layer;
   }
@@ -732,17 +728,19 @@ Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
 
 
 // contains a single slice of the mesh
-function Layer(base, resolution, idx, below) {
+function Layer(source, resolution, layers, idx) {
+  this.source = source;
+
   // base contour, decimated and unified
-  this.base = base;
+  this.base = null;
 
   // store resolution and context
   this.resolution = resolution;
-  this.idx = idx;
-  this.context = base.context;
+  this.context = source.context;
 
-  // layer below this layer
-  this.below = below;
+  // layer array and this layer's index in it
+  this.layers = layers;
+  this.idx = idx;
 
   // internal contours for printing
   this.printContours = null;
@@ -764,6 +762,7 @@ function Layer(base, resolution, idx, below) {
   this.infill = null;
 }
 
+Layer.prototype.baseReady = function() { return this.base !== null; }
 Layer.prototype.printContoursReady = function() { return this.printContours !== null; }
 Layer.prototype.infillContourReady = function() { return this.infillContour !== null; }
 Layer.prototype.layerDifferencesReady = function() { return this.layerDifferences !== null; }
@@ -772,8 +771,36 @@ Layer.prototype.infillDisjointContoursReady = function() {
   return this.infillDisjointContours !== null;
 }
 
+Layer.prototype.getBelow = function() {
+  var idx = this.idx;
+
+  return idx === 0 ? null : this.layers[idx - 1];
+}
+
+Layer.prototype.getAbove = function() {
+  var idx = this.idx, layers = this.layers;
+
+  return idx === layers.length - 1 ? null : layers[idx + 1];
+}
+
+Layer.prototype.computeBase = function(force) {
+  if (this.baseReady() && !force) return;
+
+  var sourceDecimated = this.source.toPolygonSet().fdecimate(this.resolution);
+  var base = MCG.Boolean.union(sourceDecimated).union.toPolygonSet();
+
+  // source no longer necessary
+  this.source = null;
+
+  this.base = base;
+
+  return this.base;
+}
+
 Layer.prototype.computePrintContours = function(resolution, numWalls, force) {
   if (this.printContoursReady() && !force) return;
+
+  this.computeBase();
 
   var contours = [];
   var contour = this.base;
@@ -791,6 +818,8 @@ Layer.prototype.computePrintContours = function(resolution, numWalls, force) {
   }
 
   this.printContours = contours;
+
+  return this.printContours;
 }
 
 Layer.prototype.computeInfillContour = function(resolution, numWalls, force) {
@@ -803,17 +832,19 @@ Layer.prototype.computeInfillContour = function(resolution, numWalls, force) {
     dist = resolution / 2;
   }
   else {
-    source = this.base;
+    source = this.computeBase();
     dist = resolution * numWalls;
   }
 
   this.infillContour = MCG.Boolean.union(source.foffset(-dist, resolution)).union;
+
+  return this.infillContour;
 }
 
 Layer.prototype.computeLayerDifferences = function(resolution, numWalls, force) {
   if (this.layerDifferencesReady() && !force) return;
 
-  var below = this.below;
+  var below = this.getBelow();
 
   this.computeInfillContour(resolution, numWalls);
   if (below) below.computeInfillContour(resolution, numWalls);
@@ -822,12 +853,15 @@ Layer.prototype.computeLayerDifferences = function(resolution, numWalls, force) 
   var contourBelow = below !== null ? below.infillContour : new MCG.SegmentSet(this.context);
 
   this.layerDifferences = MCG.Boolean.fullDifference(contour, contourBelow);
+
+  return this.layerDifferences;
 }
 
-Layer.prototype.computeInfillDisjointContours = function(resolution, numWalls, above, force) {
+Layer.prototype.computeInfillDisjointContours = function(resolution, numWalls, force) {
   if (this.infillDisjointContoursReady() && !force) return;
 
-  var below = this.below;
+  var below = this.getBelow();
+  var above = this.getAbove();
 
   this.computeLayerDifferences(resolution, numWalls);
   if (above !== null) above.computeLayerDifferences(resolution, numWalls);
@@ -854,10 +888,12 @@ Layer.prototype.computeInfillDisjointContours = function(resolution, numWalls, a
     solid: solid.toPolygonSet().filter(sliverFilterFn)
   };
 
+  return this.infillDisjointContours;
+
   function sliverFilterFn(poly) { return !poly.isSliver(); }
 }
 
-Layer.prototype.computeInfill = function(resolution, numWalls, type, density, above, force) {
+Layer.prototype.computeInfill = function(resolution, numWalls, type, density, force) {
   if (this.infillReady() && !force) return;
 
   this.computeInfillContour(resolution, numWalls);
@@ -877,7 +913,7 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
   // if other infill, need to determine where to fill with that and where to
   // fill with solid infill
   else {
-    this.computeInfillDisjointContours(resolution, numWalls, above);
+    this.computeInfillDisjointContours(resolution, numWalls);
 
     var innerContour = this.infillDisjointContours.inner;
     var solidContour = this.infillDisjointContours.solid;
@@ -908,6 +944,8 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
     inner: infillInner,
     solid: infillSolid
   };
+
+  return this.infill;
 
   function filterFn(segment) { return segment.lengthSq() >= iressq / 4; }
 }
