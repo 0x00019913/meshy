@@ -305,31 +305,53 @@ Slicer.prototype.setPreviewLayer = function() {
     layer.computePrintContours(this.resolution, this.numWalls);
 
     if (0) {
-      var o = layer.base.foffset(-0.025);
-      o.filter(function(poly) {
-        var mn = poly.min.h;
-        return inRange(mn, 2*context.p, 3*context.p);
+      layer.base.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.0, axis);
       });
-      var p = o.elements[4];
 
-      if (p) {
-        p.forEachPointPair(function(p1, p2) {
+      if (layer.printContours.length>1) {
+        layer.printContours[0].forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3(THREE.Vector3, context);
           var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 0.0, axis);
+          debug.line(v1, v2, 1, false, 1.0, axis);
+        });
+        layer.base.foffset(-0.025, this.resolution).forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 1.2, axis);
+        });
+        layer.printContours[1].forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 2.0, axis);
+        });
+        layer.printContours[0].foffset(-0.05, this.resolution).forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 2.2, axis);
+        });
+        var o = layer.printContours[1].foffset(-0.025, this.resolution, true);
+        o.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 3.0, axis);
         });
 
-        var u = MCG.Boolean.union(p, undefined, true).union;
+        var u = MCG.Boolean.union(o, undefined, false).union;
 
         u.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3(THREE.Vector3, context);
           var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 0.1, axis);
+          debug.line(v1, v2, 1, false, 4.0, axis);
         });
 
-        debug.lines();
-        return;
       }
+
+
+      debug.lines();
+      return;
     }
 
     var contours = layer.printContours;
@@ -887,7 +909,7 @@ Layer.prototype.computeInfill = function(resolution, numWalls, type, density, ab
     solid: infillSolid
   };
 
-  function filterFn(segment) { return segment.lengthSq() >= iressq/4; }
+  function filterFn(segment) { return segment.lengthSq() >= iressq / 4; }
 }
 
 Layer.prototype.writeToVerts = function(vertices) {
