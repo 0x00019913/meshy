@@ -431,12 +431,12 @@ Stage.prototype.buildSliceFolderActive = function() {
   if (numLayers !== 0) {
     var folder = this.supportSliceFolder;
     this.clearFolder(this.supportSliceFolder);
-    this.currentLevel = this.model.getCurrentLevel();
+    this.currentSliceLevel = this.model.getCurrentSliceLevel();
     this.sliceController = folder.add(
       this,
-      "currentLevel",
+      "currentSliceLevel",
       0, numLayers
-    ).name("Slice").step(1).onChange(this.setLevel.bind(this));
+    ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
     this.sliceMode = this.model.getSliceMode();
     folder.add(
       this,
@@ -507,9 +507,9 @@ Stage.prototype.deactivateSliceMode = function() {
     this.model.deactivateSliceMode();
   }
 }
-Stage.prototype.setLevel = function() {
+Stage.prototype.setSliceLevel = function() {
   if (this.model) {
-    this.model.setLevel(this.currentLevel);
+    this.model.setSliceLevel(this.currentSliceLevel);
   }
 }
 Stage.prototype.recalculateLayers = function() {
@@ -837,14 +837,14 @@ Stage.prototype.displayMesh = function(success, model) {
   }
 
   // todo: remove
-  this.generateSupports();
+  //this.generateSupports();
   this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  this.currentLevel = 127;
-  this.setLevel();
+  this.currentSliceLevel = 142;
+  this.setSliceLevel();
 
   this.filename = this.model.filename;
   this.setMeshMaterial();
