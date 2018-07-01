@@ -19,7 +19,6 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   // internal geometry
   this.faces = [];
   this.vertices = [];
-  this.count = 0; // count of faces; used more often than count of vertices
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
@@ -124,7 +123,6 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 // Add a Face3 to the model.
 Model.prototype.addFace = function(face) {
   this.faces.push(face);
-  this.count++;
   this.updateBoundsF(face);
 }
 
@@ -270,7 +268,7 @@ Model.prototype.rotate = function(axis, amount) {
     vertex.applyAxisAngle(axisVector, degree);
     this.updateBoundsV(vertex);
   }
-  for (var f=0; f<this.count; f++) {
+  for (var f=0; f<this.faces.length; f++) {
     this.faces[f].normal.applyAxisAngle(axisVector, degree);
   }
 
@@ -481,7 +479,7 @@ Model.prototype.deactivateMeasurement = function () {
 // Calculate surface area.
 Model.prototype.calcSurfaceArea = function() {
   this.surfaceArea = 0;
-  for (var i=0; i<this.count; i++) {
+  for (var i=0; i<this.faces.length; i++) {
     var face = this.faces[i];
     this.surfaceArea += this.faceCalcSurfaceArea(face);
   }
@@ -491,7 +489,7 @@ Model.prototype.calcSurfaceArea = function() {
 // Calculate volume.
 Model.prototype.calcVolume = function() {
   this.volume = 0;
-  for (var i=0; i<this.count; i++) {
+  for (var i=0; i<this.faces.length; i++) {
     var face = this.faces[i];
     this.volume += this.faceCalcSignedVolume(face);
   }
@@ -502,7 +500,7 @@ Model.prototype.calcCenterOfMass = function() {
   if (this.centerOfMass) return this.centerOfMass;
   var modelVolume = 0, faceVolume = 0;
   var center = new THREE.Vector3();
-  for (var i=0; i<this.count; i++) {
+  for (var i=0; i<this.faces.length; i++) {
     var face = this.faces[i];
     var verts = faceGetVerts(face, this.vertices);
     faceVolume = this.faceCalcSignedVolume(face);
@@ -525,7 +523,7 @@ Model.prototype.calcCrossSection = function(axis, pos) {
   var axis2 = cycleAxis(axis1);
   var minAxis2 = Infinity, maxAxis2 = -Infinity;
 
-  for (var i=0; i<this.count; i++) {
+  for (var i=0; i<this.faces.length; i++) {
     var face = this.faces[i];
     var segment = this.faceIntersection(face, axis, pos);
     if (segment && segment.length==2) {
@@ -751,7 +749,6 @@ Model.prototype.addGeometryComponent = function(name, vstart, vcount, fstart, fc
     fstart: fstart,
     fcount: fcount
   };
-  this.count = this.faces.length + fcount;
 }
 
 Model.prototype.removeGeometryComponent = function(name) {
@@ -766,8 +763,6 @@ Model.prototype.removeGeometryComponent = function(name) {
   this.baseMesh.geometry.elementsNeedUpdate = true;
 
   delete this.geometryComponents[name];
-
-  this.count = this.faces.length;
 }
 
 // Create the base mesh (as opposed to another display mode).
@@ -2012,7 +2007,7 @@ Model.prototype.getNumLayers = function() {
   else return 0;
 }
 
-Model.prototype.getCurrentLevel = function() {
+Model.prototype.getCurrentSliceLevel = function() {
   if (this.slicer) return this.slicer.getCurrentLevel();
   else return 0;
 }
@@ -2035,7 +2030,7 @@ Model.prototype.setSliceMode = function(sliceMode) {
   this.addSliceMesh();
 }
 
-Model.prototype.setLevel = function(level) {
+Model.prototype.setSliceLevel = function(level) {
   if (!this.slicer) return;
 
   this.slicer.setLevel(level);
