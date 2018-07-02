@@ -66,6 +66,7 @@ Slicer.DefaultParams = {
   numWalls: 2,
   infillType: Slicer.InfillTypes.none,
   infillDensity: 0.1,
+  infillOverlap: 0.5,
 
   makeRaft: true,
   raftMainLayers: 3,
@@ -301,69 +302,35 @@ Slicer.prototype.setPreviewLayer = function() {
   var vertices = [];
 
   if (level >= this.numRaftLayers) {
-    layer.computePrintContours(this.resolution, this.numWalls);
+    var printContours = layer.getPrintContours();
 
-    if (0) {
-      layer.base.forEachPointPair(function(p1, p2) {
+    for (var w = 0; w < printContours.length; w++) {
+      printContours[w].forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
         debug.line(v1, v2, 1, false, 0.0, axis);
       });
+    }
 
-      if (layer.printContours.length>1) {
-        layer.printContours[0].forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 1.0, axis);
-        });
-        layer.base.foffset(-0.025, this.resolution).forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 1.2, axis);
-        });
-        layer.printContours[1].forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 2.0, axis);
-        });
-        layer.printContours[0].foffset(-0.05, this.resolution).forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 2.2, axis);
-        });
-        var o = layer.printContours[1].foffset(-0.025, this.resolution, true);
-        o.forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 3.0, axis);
-        });
+    var infill = layer.getInfill();
 
-        var u = MCG.Boolean.union(o, undefined, false).union;
-
-        u.forEachPointPair(function(p1, p2) {
+    if (infill) {
+      if (infill.inner) {
+        infill.inner.forEachPointPair(function(p1, p2) {
           var v1 = p1.toVector3(THREE.Vector3, context);
           var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 4.0, axis);
+          debug.line(v1, v2, 1, false, 0.0, axis);
         });
-
       }
 
-
-      debug.lines();
-      return;
+      if (infill.solid) {
+        infill.solid.forEachPointPair(function(p1, p2) {
+          var v1 = p1.toVector3(THREE.Vector3, context);
+          var v2 = p2.toVector3(THREE.Vector3, context);
+          debug.line(v1, v2, 1, false, 0.0, axis);
+        });
+      }
     }
-
-    var contours = layer.printContours;
-
-    for (var w = 0; w < contours.length; w++) {
-      contours[w].forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
-      });
-    }
-
-    layer.computeInfill(this.resolution, this.numWalls, this.infillType, this.infillDensity);
   }
   else {
     layer.base.forEachPointPair(function(p1, p2) {
@@ -493,24 +460,6 @@ Slicer.prototype.setPreviewLayer = function() {
     });
   }
 
-  if (layer.infill) {
-    if (layer.infill.inner) {
-      layer.infill.inner.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
-      });
-    }
-
-    if (layer.infill.solid) {
-      layer.infill.solid.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
-      });
-    }
-  }
-
   debug.lines();
 
   return;
@@ -569,7 +518,8 @@ Slicer.prototype.makeLayers = function() {
     resolution: this.resolution,
     numWalls: this.numWalls,
     infillType: this.infillType,
-    infillDensity: this.infillDensity
+    infillDensity: this.infillDensity,
+    infillOverlap: this.infillOverlap
   };
 
   // make layers containing slices of the mesh
@@ -855,16 +805,17 @@ Layer.prototype.computeInfillContour = function() {
 
   var resolution = this.params.resolution;
   var numWalls = this.params.numWalls;
+  var overlapFactor = 1.0 - params.infillOverlap;
 
   var source, dist;
 
   if (this.printContoursReady()) {
     source = this.printContours[this.printContours.length-1];
-    dist = resolution / 2;
+    dist = resolution * overlapFactor;
   }
   else {
     source = this.getBase();
-    dist = resolution * numWalls;
+    dist = resolution * (numWalls + overlapFactor - 0.5);
   }
 
   this.infillContour = MCG.Boolean.union(source.foffset(-dist, resolution)).union;
@@ -960,8 +911,8 @@ Layer.prototype.computeInfill = function() {
   // remove infill segments that are too short if infill consists of
   // disconnected lines
   if (type & Slicer.InfillTypes.disconnectedLineType) {
-    if (infillInner !== null) infillInner.filter(filterFn);
-    if (infillSolid !== null) infillSolid.filter(filterFn);
+    //if (infillInner !== null) infillInner.filter(filterFn);
+    //if (infillSolid !== null) infillSolid.filter(filterFn);
   };
 
   this.infill = {

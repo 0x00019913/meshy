@@ -222,16 +222,18 @@ Stage.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
+  this.sliceModeOn = false;
   this.sliceNumWalls = 2;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
+  this.sliceInfillOverlap = 0.5;
   this.sliceMakeRaft = false; // todo: back to true
   this.sliceRaftMainLayers = 3;
   this.sliceRaftBaseLayers = 1;
   this.sliceRaftOffset = 1;
   this.sliceRaftGap = 0.05;
   this.sliceRaftBaseSpacing = 0.1;
-  this.buildSupportSliceFolderInactive();
+  this.buildSupportSliceFolder();
 
   this.gui.add(this, "undo").name("Undo");
   this.gui.add(this, "redo").name("Redo");
@@ -392,91 +394,90 @@ Stage.prototype.generateSupports = function() {
 Stage.prototype.removeSupports = function() {
   if (this.model) this.model.removeSupports();
 }
-// build support & slicing folder when slice mode is off
-Stage.prototype.buildSupportSliceFolderInactive = function() {
-  this.clearFolder(this.supportSliceFolder);
-  this.supportSliceFolder.add(this, "verticalResolution", .0001, 1).name("Vertical resolution");
-  this.supportSliceFolder.add(this, "planarResolution", .0001, 1).name("Planar resolution");
-  this.supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis");
-  this.supportFolder = this.supportSliceFolder.addFolder("Supports");
-  this.buildSupportFolder();
-  this.sliceFolder = this.supportSliceFolder.addFolder("Slice");
-  this.buildSliceFolderInactive();
-}
-Stage.prototype.buildSupportFolder = function() {
-  this.supportFolder.add(this, "supportAngle", 0, 90).name("Angle");
-  this.supportFolder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor");
-  this.supportFolder.add(this, "supportRadius", 0.0001, 1).name("Radius");
-  this.supportFolder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
-  this.supportFolder.add(this, "supportSubdivs", 4).name("Subdivs");
-  this.supportFolder.add(this, "supportRadiusFnName", ["constant", "sqrt"]).name("Radius function");
-  this.supportFolder.add(this, "supportRadiusFnK", 0, 1).name("Function constant");
-  this.supportFolder.add(this, "generateSupports").name("Generate supports");
-  this.supportFolder.add(this, "removeSupports").name("Remove supports");
-}
-// build the Slice folder for when slice mode is off
-Stage.prototype.buildSliceFolderInactive = function() {
-  this.clearFolder(this.sliceFolder);
-  this.addLayerSettingsFolder(this.sliceFolder);
-  this.addRaftFolder(this.sliceFolder);
-  this.sliceFolder.add(this, "activateSliceMode").name("Slice mode on");
-}
-// build the Slice folder for when slice mode is on
-// NB: the resulting elements go under the Supports & Slicing folder b/c
-// supports can't be generated nor removed while slice mode is on
-Stage.prototype.buildSliceFolderActive = function() {
-  if (!this.model) return;
+// build support & slicing folder
+Stage.prototype.buildSupportSliceFolder = function() {
+  var supportSliceFolder = this.supportSliceFolder;
+  this.clearFolder(supportSliceFolder);
 
-  var numLayers = this.model.getNumLayers();
-  if (numLayers !== 0) {
-    var folder = this.supportSliceFolder;
-    this.clearFolder(this.supportSliceFolder);
-    this.currentSliceLevel = this.model.getCurrentSliceLevel();
-    this.sliceController = folder.add(
-      this,
-      "currentSliceLevel",
-      0, numLayers
-    ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
-    this.sliceMode = this.model.getSliceMode();
-    folder.add(
-      this,
-      "sliceMode",
-      { "preview": Slicer.Modes.preview, "path": Slicer.Modes.path }
-    ).name("Mode").onChange(this.setSliceMode.bind(this));
-
-    this.addLayerSettingsFolder(folder, true);
-    this.addRaftFolder(folder);
+  if (this.sliceModeOn) {
+    this.buildSliceFolder(supportSliceFolder);
   }
+  else {
+    supportSliceFolder.add(this, "verticalResolution", .0001, 1).name("Vertical resolution");
+    supportSliceFolder.add(this, "planarResolution", .0001, 1).name("Planar resolution");
+    supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis");
 
-  this.supportSliceFolder.add(this, "deactivateSliceMode").name("Slice mode off");
+    var supportFolder = supportSliceFolder.addFolder("Supports");
+    this.buildSupportFolder(supportFolder);
+
+    var sliceFolder = supportSliceFolder.addFolder("Slice");
+    this.buildSliceFolder(sliceFolder);
+  }
 }
-Stage.prototype.addLayerSettingsFolder = function(folder, showRecalculateButton) {
-  this.sliceLayerSettingsFolder = folder.addFolder("Layer Settings");
-  this.clearFolder(this.sliceLayerSettingsFolder);
+Stage.prototype.buildSupportFolder = function(folder) {
+  folder.add(this, "supportAngle", 0, 90).name("Angle");
+  folder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor");
+  folder.add(this, "supportRadius", 0.0001, 1).name("Radius");
+  folder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
+  folder.add(this, "supportSubdivs", 4).name("Subdivs");
+  folder.add(this, "supportRadiusFnName", ["constant", "sqrt"]).name("Radius function");
+  folder.add(this, "supportRadiusFnK", 0, 1).name("Function constant");
+  folder.add(this, "generateSupports").name("Generate supports");
+  folder.add(this, "removeSupports").name("Remove supports");
+}
+Stage.prototype.buildSliceFolder = function(folder) {
+  this.clearFolder(folder);
+  if (this.sliceModeOn) {
+    var numLayers = this.model.getNumLayers();
+    if (numLayers !== 0) {
+      this.currentSliceLevel = this.model.getCurrentSliceLevel();
+      var sliceController = folder.add(
+        this,
+        "currentSliceLevel",
+        0, numLayers
+      ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
+      this.sliceMode = this.model.getSliceMode();
+      folder.add(
+        this,
+        "sliceMode",
+        { "preview": Slicer.Modes.preview, "path": Slicer.Modes.path }
+      ).name("Mode").onChange(this.setSliceMode.bind(this));
+    }
+  }
+  this.buildLayerSettingsFolder(folder);
+  this.buildRaftFolder(folder);
 
-  this.sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
-  this.sliceLayerSettingsFolder.add(this, "sliceInfillType", {
+  if (this.sliceModeOn) folder.add(this, "deactivateSliceMode").name("Slice mode off")
+  else folder.add(this, "activateSliceMode").name("Slice mode on");
+}
+Stage.prototype.buildLayerSettingsFolder = function(folder) {
+  var sliceLayerSettingsFolder = folder.addFolder("Layer Settings");
+  this.clearFolder(sliceLayerSettingsFolder);
+
+  sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
+  sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
     "grid": Slicer.InfillTypes.grid,
     "triangle": Slicer.InfillTypes.triangle,
     "hex": Slicer.InfillTypes.hex
   }).name("Infill Type");
-  this.sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
-  if (showRecalculateButton) {
-    this.sliceLayerSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
+  sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
+  sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill Overlap");
+  if (this.sliceModeOn) {
+    sliceLayerSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
   }
 }
-Stage.prototype.addRaftFolder = function(folder) {
-  this.sliceRaftFolder = folder.addFolder("Raft");
-  this.clearFolder(this.sliceRaftFolder);
+Stage.prototype.buildRaftFolder = function(folder) {
+  var sliceRaftFolder = folder.addFolder("Raft");
+  this.clearFolder(sliceRaftFolder);
 
-  this.sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
-  this.sliceRaftFolder.add(this, "sliceRaftMainLayers", 0).step(1).name("Main layers");
-  this.sliceRaftFolder.add(this, "sliceRaftBaseLayers", 0).step(1).name("Base layers");
-  this.sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
-  this.sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
-  this.sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
+  sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
+  sliceRaftFolder.add(this, "sliceRaftMainLayers", 0).step(1).name("Main layers");
+  sliceRaftFolder.add(this, "sliceRaftBaseLayers", 0).step(1).name("Base layers");
+  sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
+  sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
+  sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) this.model.setSliceMode(this.sliceMode);
@@ -490,6 +491,7 @@ Stage.prototype.activateSliceMode = function() {
       numWalls: this.sliceNumWalls,
       infillType: parseInt(this.sliceInfillType),
       infillDensity: this.sliceInfillDensity,
+      infillOverlap: this.sliceInfillOverlap,
       makeRaft: this.sliceMakeRaft,
       raftMainLayers: this.sliceRaftMainLayers,
       raftBaseLayers: this.sliceRaftBaseLayers,
@@ -498,12 +500,12 @@ Stage.prototype.activateSliceMode = function() {
       raftBaseSpacing: this.sliceRaftBaseSpacing,
       precision: this.vertexPrecision
     });
-    this.buildSliceFolderActive();
+    this.buildSliceFolder();
   }
 }
 Stage.prototype.deactivateSliceMode = function() {
   if (this.model) {
-    this.buildSupportSliceFolderInactive();
+    this.buildSupportSliceFolder();
     this.model.deactivateSliceMode();
   }
 }
