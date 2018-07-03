@@ -152,6 +152,22 @@ Model.prototype.getBounds = function() {
   };
 }
 
+Model.prototype.boundCompareMin = function(min) {
+  var sx = Math.sign(this.min.x - min.x);
+  var sy = Math.sign(this.min.y - min.y);
+  var sz = Math.sign(this.min.z - min.z);
+
+  return new THREE.Vector3(sx, sy, sz);
+}
+
+Model.prototype.boundCompareMax = function(max) {
+  var sx = Math.sign(this.max.x - max.x);
+  var sy = Math.sign(this.max.y - max.y);
+  var sz = Math.sign(this.max.z - max.z);
+
+  return new THREE.Vector3(sx, sy, sz);
+}
+
 // Get a vector representing the coords of the center.
 Model.prototype.getCenter = function() {
   return new THREE.Vector3(this.getCenterx(), this.getCentery(), this.getCenterz());
