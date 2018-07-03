@@ -15,7 +15,6 @@ Stage = function() {
   this.buildVolumeMin = null;
   this.buildVolumeMax = null;
   this.centerOriginOnBuildPlate = true;
-  this.buildVolumePlanes = null;
   this.buildVolumeMaterials = {
     linePrimary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
@@ -28,17 +27,6 @@ Stage = function() {
     lineTertiary: new THREE.LineBasicMaterial({
       color: 0x444444,
       linewidth: 1
-    }),
-    planeTransparent: new THREE.MeshStandardMaterial({
-      color: 0x00ff00,
-      transparent: true,
-      opacity: 0.5,
-      side: THREE.DoubleSide
-    }),
-    planeHighlighted: new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.5
     })
   };
 
@@ -809,56 +797,12 @@ Stage.prototype.makeBuildVolume = function() {
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
 
-  // make bounding volume planes
-
-  var matPlaneTransparent = this.buildVolumeMaterials.planeTransparent;
-  var v000 = new THREE.Vector3(x0, y0, z0);
-  var v001 = new THREE.Vector3(x0, y0, z1);
-  var v010 = new THREE.Vector3(x0, y1, z0);
-  var v011 = new THREE.Vector3(x0, y1, z1);
-  var v100 = new THREE.Vector3(x1, y0, z0);
-  var v101 = new THREE.Vector3(x1, y0, z1);
-  var v110 = new THREE.Vector3(x1, y1, z0);
-  var v111 = new THREE.Vector3(x1, y1, z1);
-
-  // near and far x planes
-  var planex0 = makePlane(v000, v001, v011, v010);
-  var planex1 = makePlane(v100, v101, v111, v110);
-  // near and far y planes
-  var planey0 = makePlane(v000, v100, v101, v001);
-  var planey1 = makePlane(v010, v110, v111, v011);
-  // near and far z planes
-  var planez0 = makePlane(v000, v100, v110, v010);
-  var planez1 = makePlane(v001, v101, v111, v011);
-
-  this.buildVolumePlanes = [planex0, planex1, planey0, planey1, planez0, planez1];
-
-  this.scene.add(planex0);
-  this.scene.add(planex1);
-  this.scene.add(planey0);
-  this.scene.add(planey1);
-  this.scene.add(planez0);
-  this.scene.add(planez1);
-
   this.setBuildVolumeState();
 
   function pushSegment(geo, x0, y0, z0, x1, y1, z1) {
     var vs = geo.vertices;
     vs.push(new THREE.Vector3(x0, y0, z0));
     vs.push(new THREE.Vector3(x1, y1, z1));
-  }
-
-  function makePlane(v0, v1, v2, v3) {
-    var geo = new THREE.Geometry();
-
-    geo.vertices.push(v0, v1, v2, v3);
-    geo.faces.push(new THREE.Face3(0, 1, 2));
-    geo.faces.push(new THREE.Face3(0, 2, 3));
-
-    var mesh = new THREE.Mesh(geo, matPlaneTransparent);
-    mesh.name = "buildVolumePlane";
-
-    return mesh;
   }
 }
 
