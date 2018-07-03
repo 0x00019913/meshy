@@ -12,6 +12,35 @@
 Stage = function() {
   // params
   this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
+  this.buildVolumeMin = null;
+  this.buildVolumeMax = null;
+  this.centerOriginOnBuildPlate = true;
+  this.buildVolumePlanes = null;
+  this.buildVolumeMaterials = {
+    linePrimary: new THREE.LineBasicMaterial({
+      color: 0xdddddd,
+      linewidth: 1
+    }),
+    lineSecondary: new THREE.LineBasicMaterial({
+      color: 0x777777,
+      linewidth: 1
+    }),
+    lineTertiary: new THREE.LineBasicMaterial({
+      color: 0x444444,
+      linewidth: 1
+    }),
+    planeTransparent: new THREE.MeshStandardMaterial({
+      color: 0x00ff00,
+      transparent: true,
+      opacity: 0.5,
+      side: THREE.DoubleSide
+    }),
+    planeHighlighted: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.5
+    })
+  };
 
   // toggles
   this.importEnabled = true;
@@ -79,7 +108,7 @@ Stage.prototype.generateUI = function() {
   settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this));
 
   var displayFolder = this.gui.addFolder("Display");
-  displayFolder.add(this, "toggleBuildVolume").name("Toggle build volume");
+
   displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget");
   displayFolder.add(this, "toggleCOM").name("Toggle center of mass");
   displayFolder.add(this, "toggleWireframe").name("Toggle wireframe");
@@ -91,11 +120,15 @@ Stage.prototype.generateUI = function() {
     displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshMaterial.bind(this));
   displayFolder.add(this, "meshRoughness", 0, 1).onChange(this.setMeshMaterial.bind(this));
   displayFolder.add(this, "meshMetalness", 0, 1).onChange(this.setMeshMaterial.bind(this));
-  displayFolder.add(this.buildVolumeSize, "x", 0).name("Build volume x")
+  var buildVolumeFolder = displayFolder.addFolder("Build Volume");
+  buildVolumeFolder.add(this, "toggleBuildVolume").name("Toggle volume");
+  buildVolumeFolder.add(this, "centerOriginOnBuildPlate").name("Center origin")
     .onChange(this.makeBuildVolume.bind(this));
-  displayFolder.add(this.buildVolumeSize, "y", 0).name("Build volume y")
+  buildVolumeFolder.add(this.buildVolumeSize, "x", 0).name("Build volume x")
     .onChange(this.makeBuildVolume.bind(this));
-  displayFolder.add(this.buildVolumeSize, "z", 0).name("Build volume z")
+  buildVolumeFolder.add(this.buildVolumeSize, "y", 0).name("Build volume y")
+    .onChange(this.makeBuildVolume.bind(this));
+  buildVolumeFolder.add(this.buildVolumeSize, "z", 0).name("Build volume z")
     .onChange(this.makeBuildVolume.bind(this));
 
   var transformFolder = this.gui.addFolder("Transform");
@@ -612,7 +645,7 @@ Stage.prototype.initViewport = function() {
         r: _this.buildVolumeSize.length() * 1,
         phi: 0,
         theta: 5*Math.PI/12,
-        origin: new THREE.Vector3(0, 0, _this.buildVolumeSize.z / 8)
+        origin: _this.defaultCameraCenter()
       }
     );
 
@@ -689,78 +722,82 @@ Stage.prototype.initViewport = function() {
   }
 }
 
+Stage.prototype.calculateBuildVolumeBounds = function() {
+  var size = this.buildVolumeSize;
+  var x0, x1;
+  var y0, y1;
+  var z0 = 0, z1 = size.z;
+
+  if (this.centerOriginOnBuildPlate) {
+    x0 = -size.x / 2, x1 = size.x / 2;
+    y0 = -size.y / 2, y1 = size.y / 2;
+  }
+  else {
+    x0 = 0, x1 = size.x;
+    y0 = 0, y1 = size.y;
+  }
+
+  this.buildVolumeMin = new THREE.Vector3(x0, y0, z0);
+  this.buildVolumeMax = new THREE.Vector3(x1, y1, z1);
+}
+
+Stage.prototype.calculateBuildVolumeCenter = function() {
+  if (!this.buildVolumeMin || !this.buildVolumeMax) this.calculateBuildVolumeBounds();
+
+  return this.buildVolumeMin.clone().add(this.buildVolumeMax).divideScalar(2);
+}
+
+Stage.prototype.defaultCameraCenter = function() {
+  return this.calculateBuildVolumeCenter().setZ(this.buildVolumeSize.z/8);
+}
+
 // Create the build volume.
 Stage.prototype.makeBuildVolume = function() {
   removeMeshByName(this.scene, "buildVolume");
+  removeMeshByName(this.scene, "buildVolumePlane");
 
-  var size = this.buildVolumeSize;
-  var x = size.x / 2;
-  var y = size.y / 2;
-  var z = size.z;
+  this.calculateBuildVolumeBounds();
+  var min = this.buildVolumeMin, max = this.buildVolumeMax;
+
+  var x0 = min.x, x1 = max.x;
+  var y0 = min.y, y1 = max.y;
+  var z0 = min.z, z1 = max.z;
 
   // Primary: center line through origin
   // Secondary: lines along multiples of 5
   // Tertiary: everything else
   var geoPrimary = new THREE.Geometry();
-  var matPrimary = new THREE.LineBasicMaterial({
-    color: 0xdddddd,
-    linewidth: 1
-  });
   var geoSecondary = new THREE.Geometry();
-  var matSecondary = new THREE.LineBasicMaterial({
-    color: 0x777777,
-    linewidth: 1
-  });
   var geoTertiary = new THREE.Geometry();
-  var matTertiary = new THREE.LineBasicMaterial({
-    color: 0x444444,
-    linewidth: 1
-  });
-
-  // draw primary axes
-  pushSegment(geoPrimary, 0, -y, 0, 0, y, 0);
-  pushSegment(geoPrimary, -x, 0, 0, x, 0, 0);
+  var matPrimary = this.buildVolumeMaterials.linePrimary;
+  var matSecondary = this.buildVolumeMaterials.lineSecondary;
+  var matTertiary = this.buildVolumeMaterials.lineTertiary;
 
   // draw grid
-  for (var i = 1; i < x; i++) {
-    if (i%5==0) {
-      pushSegment(geoSecondary, i, -y, 0, i, y, 0);
-      pushSegment(geoSecondary, -i, -y, 0, -i, y, 0);
-    }
-    else {
-      pushSegment(geoTertiary, i, -y, 0, i, y, 0);
-      pushSegment(geoTertiary, -i, -y, 0, -i, y, 0);
-    }
+  for (var i = Math.floor(x0 + 1); i < x1; i++) {
+    var geo = i === 0 ? geoPrimary : i%5 === 0 ? geoSecondary : geoTertiary;
+    pushSegment(geo, i, y0, z0, i, y1, z0);
   }
-  for (var i = 1; i < y; i++) {
-    if (i==0) continue;
-    if (i%5==0) {
-      pushSegment(geoSecondary, -x, i, 0, x, i, 0);
-      pushSegment(geoSecondary, -x, -i, 0, x, -i, 0);
-    }
-    else {
-      pushSegment(geoTertiary, -x, i, 0, x, i, 0);
-      pushSegment(geoTertiary, -x, -i, 0, x, -i, 0);
-    }
+  for (var i = Math.floor(y0 + 1); i < y1; i++) {
+    var geo = i === 0 ? geoPrimary : i%5 === 0 ? geoSecondary : geoTertiary;
+    pushSegment(geo, x0, i, z0, x1, i, z0);
   }
 
-  // draw a box around the print bed
-  pushSegment(geoPrimary, -x, -y, 0, -x, y, 0);
-  pushSegment(geoPrimary, -x, -y, 0, x, -y, 0);
-  pushSegment(geoPrimary, -x, y, 0, x, y, 0);
-  pushSegment(geoPrimary, x, -y, 0, x, y, 0);
+  // draw a box around the build volume
+  pushSegment(geoPrimary, x0, y0, z0, x0, y1, z0);
+  pushSegment(geoPrimary, x0, y0, z0, x1, y0, z0);
+  pushSegment(geoPrimary, x0, y1, z0, x1, y1, z0);
+  pushSegment(geoPrimary, x1, y0, z0, x1, y1, z0);
 
-  // draw vertical box
-  if (z > 0) {
-    pushSegment(geoTertiary, -x, -y, z, -x, y, z);
-    pushSegment(geoTertiary, -x, -y, z, x, -y, z);
-    pushSegment(geoTertiary, -x, y, z, x, y, z);
-    pushSegment(geoTertiary, x, -y, z, x, y, z);
-    pushSegment(geoTertiary, -x, -y, 0, -x, -y, z);
-    pushSegment(geoTertiary, -x, y, 0, -x, y, z);
-    pushSegment(geoTertiary, x, -y, 0, x, -y, z);
-    pushSegment(geoTertiary, x, y, 0, x, y, z);
-  }
+  // vertical box uses a less conspicuous material
+  pushSegment(geoTertiary, x0, y0, z1, x0, y1, z1);
+  pushSegment(geoTertiary, x0, y0, z1, x1, y0, z1);
+  pushSegment(geoTertiary, x0, y1, z1, x1, y1, z1);
+  pushSegment(geoTertiary, x1, y0, z1, x1, y1, z1);
+  pushSegment(geoTertiary, x0, y0, z0, x0, y0, z1);
+  pushSegment(geoTertiary, x0, y1, z0, x0, y1, z1);
+  pushSegment(geoTertiary, x1, y0, z0, x1, y0, z1);
+  pushSegment(geoTertiary, x1, y1, z0, x1, y1, z1);
 
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
   var lineSecondary = new THREE.LineSegments(geoSecondary, matSecondary);
@@ -772,12 +809,56 @@ Stage.prototype.makeBuildVolume = function() {
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
 
+  // make bounding volume planes
+
+  var matPlaneTransparent = this.buildVolumeMaterials.planeTransparent;
+  var v000 = new THREE.Vector3(x0, y0, z0);
+  var v001 = new THREE.Vector3(x0, y0, z1);
+  var v010 = new THREE.Vector3(x0, y1, z0);
+  var v011 = new THREE.Vector3(x0, y1, z1);
+  var v100 = new THREE.Vector3(x1, y0, z0);
+  var v101 = new THREE.Vector3(x1, y0, z1);
+  var v110 = new THREE.Vector3(x1, y1, z0);
+  var v111 = new THREE.Vector3(x1, y1, z1);
+
+  // near and far x planes
+  var planex0 = makePlane(v000, v001, v011, v010);
+  var planex1 = makePlane(v100, v101, v111, v110);
+  // near and far y planes
+  var planey0 = makePlane(v000, v100, v101, v001);
+  var planey1 = makePlane(v010, v110, v111, v011);
+  // near and far z planes
+  var planez0 = makePlane(v000, v100, v110, v010);
+  var planez1 = makePlane(v001, v101, v111, v011);
+
+  this.buildVolumePlanes = [planex0, planex1, planey0, planey1, planez0, planez1];
+
+  this.scene.add(planex0);
+  this.scene.add(planex1);
+  this.scene.add(planey0);
+  this.scene.add(planey1);
+  this.scene.add(planez0);
+  this.scene.add(planez1);
+
   this.setBuildVolumeState();
 
   function pushSegment(geo, x0, y0, z0, x1, y1, z1) {
     var vs = geo.vertices;
     vs.push(new THREE.Vector3(x0, y0, z0));
     vs.push(new THREE.Vector3(x1, y1, z1));
+  }
+
+  function makePlane(v0, v1, v2, v3) {
+    var geo = new THREE.Geometry();
+
+    geo.vertices.push(v0, v1, v2, v3);
+    geo.faces.push(new THREE.Face3(0, 1, 2));
+    geo.faces.push(new THREE.Face3(0, 2, 3));
+
+    var mesh = new THREE.Mesh(geo, matPlaneTransparent);
+    mesh.name = "buildVolumePlane";
+
+    return mesh;
   }
 }
 
