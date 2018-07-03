@@ -215,7 +215,7 @@ Stage.prototype.generateUI = function() {
   this.supportTaperFactor = 0.5;
   this.supportSubdivs = 16;
   // can't set support radius fn directly from dat.gui because it returns the
-  // function stringified, so just set index and then convert it to the fn
+  // function stringified, so just set fn name and then convert it to the fn
   this.supportRadiusFnMap = {
     constant: SupportGenerator.RadiusFunctions.constant,
     sqrt: SupportGenerator.RadiusFunctions.sqrt
@@ -484,6 +484,7 @@ Stage.prototype.setSliceMode = function() {
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
+    this.sliceModeOn = true;
     this.model.activateSliceMode({
       axis: this.upAxis,
       sliceHeight: this.verticalResolution,
@@ -500,11 +501,12 @@ Stage.prototype.activateSliceMode = function() {
       raftBaseSpacing: this.sliceRaftBaseSpacing,
       precision: this.vertexPrecision
     });
-    this.buildSliceFolder();
+    this.buildSliceFolder(this.supportSliceFolder);
   }
 }
 Stage.prototype.deactivateSliceMode = function() {
   if (this.model) {
+    this.sliceModeOn = false;
     this.buildSupportSliceFolder();
     this.model.deactivateSliceMode();
   }
@@ -845,7 +847,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 142;
+  this.currentSliceLevel = 64;
   this.setSliceLevel();
 
   this.filename = this.model.filename;

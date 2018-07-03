@@ -286,13 +286,17 @@ MCG.Polygon = (function() {
       if (!this.valid()) return result;
 
       var size = this.size();
+      var area = this.area;
       var minsize = Math.min(size.h, size.v);
-      var minsizesq = minsize * minsize;
       var fdist = MCG.Math.itof(dist, this.context);
       var tol = tol || 0;
       var tolsq = tol * tol;
 
-      if (dist <= -minsize / 2) return result;
+      // invalid offset if:
+      // normal poly and inward offset is too large, or
+      // hole and outward offset is too large
+      if (this.area > 0 && dist < -minsize / 2) return result;
+      if (this.area < 0 && dist > minsize / 2) return result;
 
       this.computeBisectors();
 
