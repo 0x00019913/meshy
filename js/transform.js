@@ -45,14 +45,6 @@ function Transform(op, axis, amount, model, printout) {
         this.amount[axis] = -1 * model["getCenter"+axis]();
       }
       break;
-    case "autoCenter":
-      this.op = "translate";
-      this.axis = axis;
-      this.amount.copy(model.getCenter()).multiplyScalar(-1);
-      if (axis!=="all") {
-        this.amount[axis] = -model.min[axis];
-      }
-      break;
     case "mirror":
       this.op = "mirror";
       this.axis = axis;

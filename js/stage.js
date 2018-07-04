@@ -309,7 +309,13 @@ Stage.prototype.redo = function() {
   this.undoStack.redo();
 }
 
-Stage.prototype.autoCenter = function() { this.transform("autoCenter","z",null); }
+Stage.prototype.autoCenter = function() {
+  var model = this.model;
+  if (!model) return;
+
+  var d = this.calculateBuildPlateCenter().sub(model.getCenter()).setZ(-model.min.z);
+  this.transform("translate","all",d);
+}
 Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
 Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
 Stage.prototype.translateZ = function() { this.transform("translate","z",this.zTranslation); }
@@ -733,6 +739,10 @@ Stage.prototype.calculateBuildVolumeCenter = function() {
   if (!this.buildVolumeMin || !this.buildVolumeMax) this.calculateBuildVolumeBounds();
 
   return this.buildVolumeMin.clone().add(this.buildVolumeMax).divideScalar(2);
+}
+
+Stage.prototype.calculateBuildPlateCenter = function() {
+  return this.calculateBuildVolumeCenter().setZ(0);
 }
 
 Stage.prototype.defaultCameraCenter = function() {
