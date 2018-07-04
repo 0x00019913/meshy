@@ -80,6 +80,16 @@ MCG.GeometrySet = (function() {
       return clone;
     },
 
+    merge: function(other) {
+      var elements = this.elements;
+
+      other.forEach(function(element) {
+        elements.push(element);
+      });
+
+      return this;
+    },
+
     setContext: function(context) {
       this.context = context;
 
