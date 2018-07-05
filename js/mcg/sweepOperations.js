@@ -7,6 +7,14 @@ Object.assign(MCG.Sweep, (function() {
     return result;
   }
 
+  // assign values to store, from sweep params if provided
+  function assignParams(store, params) {
+    params = params || {};
+
+    store.minDepthA = params.hasOwnProperty("minDepthA") ? params.minDepthA : 1;
+    store.minDepthB = params.hasOwnProperty("minDepthB") ? params.minDepthB : 1;
+  }
+
   // makes an object containing the init function and event handler
   function makeOperation(initStore, handleEvent) {
     var op = function(params) {
@@ -25,40 +33,50 @@ Object.assign(MCG.Sweep, (function() {
 
   // operation store initialization functions
 
-  function unionInit(context) {
-    return {
-      result: resultAddSet({}, context, "union")
-    };
+  function unionInit(context, srcA, srcB, params) {
+    var store = { result: resultAddSet({}, context, "union") };
+
+    assignParams(store, params);
+
+    return store;
   }
 
-  function intersectionInit(context) {
-    return {
-      result: resultAddSet({}, context, "intersection")
-    };
+  function intersectionInit(context, srcA, srcB, params) {
+    var store = { result: resultAddSet({}, context, "intersection") };
+
+    assignParams(store, params);
+
+    return store;
   }
 
-  function intersectionOpenInit(context) {
-    return {
-      result: resultAddSet({}, context, "intersectionOpen")
-    }
+  function intersectionOpenInit(context, srcA, srcB, params) {
+    var store = { result: resultAddSet({}, context, "intersectionOpen") };
+
+    assignParams(store, params);
+
+    return store;
   }
 
-  function differenceInit(context) {
-    return {
-      result: resultAddSet({}, context, "difference")
-    }
+  function differenceInit(context, srcA, srcB, params) {
+    var store = { result: resultAddSet({}, context, "difference") };
+
+    assignParams(store, params);
+
+    return store;
   }
 
-  function fullDifferenceInit(context) {
+  function fullDifferenceInit(context, srcA, srcB, params) {
     var result = {};
 
     resultAddSet(result, context, "AminusB");
     resultAddSet(result, context, "BminusA");
     resultAddSet(result, context, "intersection");
 
-    return {
-      result: result
-    };
+    var store =  { result: result };
+
+    assignParams(store, params);
+
+    return store;
   }
 
   function linearInfillInit(context, srcA, srcB, params) {
@@ -67,11 +85,15 @@ Object.assign(MCG.Sweep, (function() {
     var spacing = params.spacing;
     var hline = Math.ceil(srcA.min.h / spacing) * spacing;
 
-    return {
+    var store = {
       spacing: spacing,
       hline: hline,
       result: resultAddSet({}, context, "infill")
-    }
+    };
+
+    assignParams(store, params);
+
+    return store;
   }
 
 
@@ -80,7 +102,7 @@ Object.assign(MCG.Sweep, (function() {
 
   function unionHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
-    var pos = event.getPosition();
+    var pos = event.getPosition(store.minDepthA, store.minDepthB);
     var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
@@ -94,7 +116,7 @@ Object.assign(MCG.Sweep, (function() {
 
   function intersectionHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
-    var pos = event.getPosition();
+    var pos = event.getPosition(store.minDepthA, store.minDepthB);
     var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
@@ -112,7 +134,7 @@ Object.assign(MCG.Sweep, (function() {
 
   function intersectionOpenHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
-    var pos = event.getPosition();
+    var pos = event.getPosition(store.minDepthA, store.minDepthB);
     var result = store.result;
 
     var insideA = pos & flags.insideA;
@@ -125,7 +147,7 @@ Object.assign(MCG.Sweep, (function() {
 
   function differenceHandle(event, status, store) {
     var flags = MCG.Sweep.EventPositionFlags;
-    var pos = event.getPosition();
+    var pos = event.getPosition(store.minDepthA, store.minDepthB);
     var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;
@@ -146,9 +168,9 @@ Object.assign(MCG.Sweep, (function() {
     }
   }
 
-  function fullDifferenceHandle(event, status, store) {
+  function fullDifferenceHandle(event, status, store, params) {
     var flags = MCG.Sweep.EventPositionFlags;
-    var pos = event.getPosition();
+    var pos = event.getPosition(store.minDepthA, store.minDepthB);
     var result = store.result;
 
     var inside = pos & flags.insideA || pos & flags.insideB;

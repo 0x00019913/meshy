@@ -299,8 +299,10 @@ Object.assign(MCG.Sweep, (function() {
 
     // get a status code that indicates the event's position (inside or at the
     // boundary of one of the polygons)
-    getPosition: function() {
+    getPosition: function(minDepthA, minDepthB) {
       var flags = EventPositionFlags;
+      var mdA = minDepthA || 1;
+      var mdB = minDepthB || 1;
 
       if (!this.contributing) return flags.none;
 
@@ -316,17 +318,27 @@ Object.assign(MCG.Sweep, (function() {
 
       var result = flags.none;
 
-      var boundaryA = (daA < 1 && dbA > 0) || (daA > 0 && dbA < 1);
-      var boundaryB = (daB < 1 && dbB > 0) || (daB > 0 && dbB < 1);
+      var boundaryA = (daA < mdA && dbA >= mdA) || (daA >= mdA && dbA < mdA);
+      var boundaryB = (daB < mdB && dbB >= mdB) || (daB >= mdB && dbB < mdB);
       var signChange = Math.sign(wA) === -Math.sign(wB);
 
-      if (dbA > 0 && daA > 0) result |= flags.insideA;
-      if (dbB > 0 && daB > 0) result |= flags.insideB;
+      if (dbA >= mdA && daA >= mdA) result |= flags.insideA;
+      if (dbB >= mdB && daB >= mdB) result |= flags.insideB;
       if (boundaryA) result |= flags.boundaryA;
       if (boundaryB) result |= flags.boundaryB;
       if (boundaryA && boundaryB && signChange) result |= flags.fromAtoB;
 
       return result;
+    },
+
+    addSegmentToSet: function(s, invert, weight) {
+      var w = weight === undefined ? this.weightA + this.weightB : weight;
+
+      var pf = w < 0 ? this.twin.p : this.p;
+      var ps = w < 0 ? this.p : this.twin.p;
+
+      if (invert) s.addPointPair(ps, pf);
+      else s.addPointPair(pf, ps);
     },
 
     // compare the time at which two left events occur with respect to the
@@ -339,16 +351,6 @@ Object.assign(MCG.Sweep, (function() {
       if (pt.v < po.v) return -1;
       if (pt.v > po.v) return 1;
       return 0;
-    },
-
-    addSegmentToSet: function(s, invert, weight) {
-      var w = weight === undefined ? this.weightA + this.weightB : weight;
-
-      var pf = w < 0 ? this.twin.p : this.p;
-      var ps = w < 0 ? this.p : this.twin.p;
-
-      if (invert) s.addPointPair(ps, pf);
-      else s.addPointPair(pf, ps);
     },
 
     // return vertical axis comparison for two left events at the later event's
