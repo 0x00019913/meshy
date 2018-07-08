@@ -171,6 +171,16 @@ MCG.Polygon = (function() {
       return Math.abs(this.area) / this.perimeter() < tol;
     },
 
+    fAreaGreaterThanTolerance: function(ftol) {
+      var tol = MCG.Math.ftoi(ftol, this.context);
+
+      return this.areaGreaterThanTolerance(tol);
+    },
+
+    areaGreaterThanTolerance: function(tol) {
+      return Math.abs(this.area) > tol;
+    },
+
     size: function() {
       return this.min.vectorTo(this.max);
     },

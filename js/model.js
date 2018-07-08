@@ -41,7 +41,6 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   // current mode and the meshes it switches in and out
   this.mode = "base";
   this.baseMesh = null;
-  this.sliceMode = Slicer.Modes.preview;
   this.slicer = null; // instance of module responsible for slicing
   this.slicePreviewMesh = null;
   this.slicePathMesh = null;
@@ -744,11 +743,7 @@ Model.prototype.setMode = function(mode, params) {
   }
   // slicing mode - init slicer and display a model in preview mode by default
   else if (mode == "slice") {
-    this.slicer = new Slicer(
-      this.vertices,
-      this.faces,
-      Object.assign({ mode: this.sliceMode }, params)
-    );
+    this.slicer = new Slicer(this.vertices, this.faces, params);
 
     this.makeSliceMesh();
     this.addSliceMesh();
@@ -796,21 +791,19 @@ Model.prototype.makeBaseMesh = function() {
 
 // Create a slice mesh for the current slice mode.
 Model.prototype.makeSliceMesh = function() {
-  if (this.sliceMode==Slicer.Modes.preview) this.makeSlicePreviewMesh();
-  else if (this.sliceMode==Slicer.Modes.Path) this.makeSlicePathMesh();
+  if (this.slicer.mode === Slicer.Modes.preview) this.makeSlicePreviewMesh();
+  else if (this.slicer.mode === Slicer.Modes.path) this.makeSlicePathMesh();
 
   this.setSliceMeshGeometry();
 }
 
 Model.prototype.addSliceMesh = function() {
-  if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
-
-  if (this.sliceMode==Slicer.Modes.preview) {
+  if (this.slicer.mode === Slicer.Modes.preview) {
     if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
   }
-  /*else if (this.sliceMode==Slicer.Modes.path) {
+  else if (this.slicer.mode === Slicer.Modes.path) {
     if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
-  }*/
+  }
 }
 
 // Set the geometry on the current slice mesh.
@@ -822,7 +815,7 @@ Model.prototype.setSliceMeshGeometry = function() {
   var sliceVertices = sliceGeometry.vertices;
   var sliceFaces = sliceGeometry.faces;
 
-  if (this.sliceMode==Slicer.Modes.preview) {
+  if (this.slicer.mode==Slicer.Modes.preview) {
     var mesh = this.slicePathMesh;
     if (!mesh) return;
 
@@ -839,12 +832,10 @@ Model.prototype.setSliceMeshGeometry = function() {
     mesh.geometry.groupsNeedUpdate = true;
     mesh.geometry.elementsNeedUpdate = true;
   }
-  else if (this.sliceMode==Slicer.Modes.path) {
+  else if (this.slicer.mode==Slicer.Modes.path) {
     var mesh = this.slicePathMesh;
     if (!mesh) return;
 
-    // if we're adding more vertices than the existing geometry object can
-    // contain, recreate the geometry
     mesh.geometry = new THREE.Geometry();
     mesh.geometry.vertices = sliceVertices;
 
@@ -2005,8 +1996,6 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
-  this.sliceMode = Slicer.Modes.preview; // todo: switch back to preview
-
   this.setMode("slice", params);
 }
 
@@ -2034,11 +2023,11 @@ Model.prototype.getSliceMode = function() {
 }
 
 Model.prototype.setSliceMode = function(sliceMode) {
-  if (this.sliceMode == sliceMode || !this.slicer) return;
+  if (this.slicer.mode == sliceMode || !this.slicer) return;
 
   removeMeshByName(this.scene, "model");
 
-  this.sliceMode = sliceMode;
+  this.slicer.mode = sliceMode;
 
   this.slicer.setMode(sliceMode);
 
@@ -2062,7 +2051,7 @@ Model.prototype.recalculateLayers = function(resolution, numWalls) {
   this.slicer.unreadyPathGeometry();
 
   // layer geometry is on the screen, so recalculate now
-  if (this.sliceMode == Slicer.Modes.path) {
+  if (this.slicer.mode == Slicer.Modes.path) {
     this.slicer.makePathGeometry();
     this.setSliceMeshGeometry();
   }

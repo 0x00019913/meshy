@@ -13,6 +13,7 @@ Object.assign(MCG.Sweep, (function() {
 
     store.minDepthA = params.hasOwnProperty("minDepthA") ? params.minDepthA : 1;
     store.minDepthB = params.hasOwnProperty("minDepthB") ? params.minDepthB : 1;
+    store.dbg = params.hasOwnProperty("dbg") ? params.dbg : false;
   }
 
   // makes an object containing the init function and event handler

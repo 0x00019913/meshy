@@ -226,7 +226,7 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch").name("Accept patch");
   repairFolder.add(this, "cancelPatch").name("Cancel patch");
 
-  this.verticalResolution = .05;//todo: back to 0.1
+  this.verticalResolution = .01;//todo: back to 0.1
   this.planarResolution = 0.05;
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
@@ -243,8 +243,10 @@ Stage.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
+  this.sliceMode = Slicer.Modes.path; // todo: back to preview
   this.sliceModeOn = false;
   this.sliceNumWalls = 2;
+  this.sliceNumTopLayers = 3;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
@@ -481,7 +483,8 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
   var sliceLayerSettingsFolder = folder.addFolder("Layer Settings");
   this.clearFolder(sliceLayerSettingsFolder);
 
-  sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1).name("Number of walls").step(1);
+  sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1, 10).name("Walls").step(1);
+  sliceLayerSettingsFolder.add(this, "sliceNumTopLayers", 1, 10).name("Top layers").step(1);
   sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
@@ -507,16 +510,18 @@ Stage.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
 }
 Stage.prototype.setSliceMode = function() {
-  if (this.model) this.model.setSliceMode(this.sliceMode);
+  if (this.model) this.model.setSliceMode(parseInt(this.sliceMode));
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = true;
     this.model.activateSliceMode({
+      mode: this.sliceMode,
       axis: this.upAxis,
       sliceHeight: this.verticalResolution,
       resolution: this.planarResolution,
       numWalls: this.sliceNumWalls,
+      numTopLayers: this.sliceNumTopLayers,
       infillType: parseInt(this.sliceInfillType),
       infillDensity: this.sliceInfillDensity,
       infillOverlap: this.sliceInfillOverlap,
@@ -624,7 +629,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 10000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .001, 10000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -882,7 +887,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 64;
+  this.currentSliceLevel = 88;
   this.setSliceLevel();
 
   this.filename = this.model.filename;

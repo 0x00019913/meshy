@@ -95,6 +95,8 @@ Object.assign(MCG.Math, (function() {
     var b0 = 8, b1 = 16;
     var a0b0 = a0 | b0;
     var a1b1 = a1 | b1;
+    var a0b1 = a0 | b1;
+    var a1b0 = a1 | b0;
     var a01 = a0 | a1;
     var b01 = b0 | b1;
 
@@ -109,6 +111,8 @@ Object.assign(MCG.Math, (function() {
       b: b01,                 // b0 and b1 are on a0-a1
       start: a0b0,            // intersection point is start of both segments
       end: a1b1,              // intersection point is end of both segments
+      a0b1: a0b1,             // intersection point is a start and b end
+      a1b0: a1b0,             // intersection point is a end and b start
       collinear: a0b0 | a1b1  // a and b are collinear
     };
   })();
