@@ -4,7 +4,7 @@ Object.assign(MCG.Sweep, (function() {
   var drawEvents = false;
   var incr = 0;
 
-  function sweep(operation, srcA, srcB, dbg) {
+  function sweep(operation, srcA, srcB) {
     if (!srcA) return null;
 
     var context = srcA.context;
@@ -21,6 +21,7 @@ Object.assign(MCG.Sweep, (function() {
     var efactory = new MCG.Sweep.SweepEventFactory(context);
 
     var store = operation.initStore(context, srcA, srcB);
+    var dbg = store.dbg;
 
     // priority queue storing events from left to right
     var events = new PriorityQueue({
@@ -51,7 +52,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 3.0*p, 4.0*p) && inRange(ev.p.v, 9.2*p, 9.5*p);
+      printEvents = dbg && inRange(ev.p.h, 4*p, 5*p) && inRange(ev.p.v, -0.75*p, -0.25*p); // && inRange(ev.p.h, -6.0*p, -4.8*p) && inRange(ev.p.v, 4.0*p, 5.0*p);
       drawEvents = false;
       incr = 0.1;
 
@@ -69,8 +70,8 @@ Object.assign(MCG.Sweep, (function() {
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
 
-        if (up) eventPrint(up, "up");
         if (dn) eventPrint(dn, "dn");
+        if (up) eventPrint(up, "up");
 
         //if (!statusValid()) statusPrint();
 
@@ -462,24 +463,48 @@ Object.assign(MCG.Sweep, (function() {
         // only admit intersections on one endpoint of one segment or some
         // non-endpoint on both segments
         if (intersection === flags.intermediate) pi = a.intersection(b);
-        // intersection on both starting points - possibly valid if they're not
-        // coincident
-        else if ((intersection & flags.start) === flags.start) {
-          if (!coincident(pa, pb)) {
-            var t = pa.hcompare(pb) >= 0 ? a : b;
-            pi = t.isParent() ? t.p : a.intersection(b);
-          }
-        }
-        else if ((intersection & flags.end) === flags.end) {
-          if (!coincident(pta, ptb)) {
-            var t = pta.hcompare(ptb) > 0 ? tb : ta;
-            pi = t.isParent() ? t.p : a.intersection(b);
-          }
-        }
         else if (intersection === flags.a0) pi = a.isParent() ? pa : a.intersection(b);
         else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
         else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
         else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
+        // intersection on both starting points - possibly valid if they're not
+        // coincident
+        else if ((intersection & flags.start) === flags.start) {
+          var hvcomp = a.hvcompare(b);
+          if (hvcomp !== 0) pi = hvcomp > 0 ? pa : pb;
+
+          /*if (!coincident(pa, pb)) {
+            var t = pa.hcompare(pb) >= 0 ? a : b;
+            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
+          }*/
+        }
+        else if ((intersection & flags.end) === flags.end) {
+          var hvcomp = ta.hvcompare(tb);
+          if (hvcomp !== 0) pi = hvcomp > 0 ? ptb : pta;
+
+          /*if (!coincident(pta, ptb)) {
+            var t = pta.hcompare(ptb) > 0 ? tb : ta;
+            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
+          }*/
+        }
+        else if ((intersection & flags.a0b1) === flags.a0b1) {
+          var hvcomp = a.hvcompare(tb);
+          if (hvcomp !== 0) pi = hvcomp > 0 ? pa : ptb;
+
+          /*if (!coincident(pa, ptb)) {
+            var t = pa.hcompare(ptb) >= 0 ? a : tb;
+            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
+          }*/
+        }
+        else if ((intersection & flags.a1b0) === flags.a1b0) {
+          var hvcomp = ta.hvcompare(b);
+          if (hvcomp !== 0) pi = hvcomp > 0 ? pb : pta;
+
+          /*if (!coincident(pta, pb)) {
+            var t = pta.hcompare(pb) > 0 ? b : ta;
+            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
+          }*/
+        }
 
         if (pi && (!a.contains(pi) && !b.contains(pi))) pi = null;
 

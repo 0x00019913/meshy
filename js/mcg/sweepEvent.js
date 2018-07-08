@@ -65,15 +65,10 @@ Object.assign(MCG.Sweep, (function() {
       // in case events are the same
       if (a.id === b.id) return 0;
 
-      var pa = a.p, pb = b.p;
-
       // primary sorting on horizontal coordinate (x if up axis is z)
-      var hcomp = pa.hcompare(pb);
-      if (hcomp !== 0) return hcomp;
-
       // secondary sorting on vertical coordinate (y if up axis is z)
-      var vcomp = pa.vcompare(pb);
-      if (vcomp !== 0) return vcomp;
+      var hvcomp = a.hvcompare(b);
+      if (hvcomp !== 0) return hvcomp;
 
       // tertiary sorting on left/right (right goes first so that, given two
       //   segments sharing an endpoint but with no vertical overlap, the first
@@ -110,19 +105,22 @@ Object.assign(MCG.Sweep, (function() {
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
 
-      /*var ap = a.parent, bp = b.parent;
-
-      var pvcomp = ap.vcompare(bp);
-      if (pvcomp !== 0) return pvcomp;
-
-      var pscomp = ap.scompare(bp);
-      if (pscomp !== 0) return pscomp;*/
-
       // comparison based on parent extents
       var pcomp = a.pcompare(b);
       if (pcomp !== 0) return pcomp;
 
       return Math.sign(a.id - b.id);
+    },
+
+    // return horizontal comparison if unequal; else, return vertical comparison
+    hvcompare: function(other) {
+      var a = this, b = other;
+      var pa = a.p, pb = b.p;
+
+      var hcomp = pa.hcompare(pb);
+      if (hcomp !== 0) return hcomp;
+
+      return pa.vcompare(pb);
     },
 
     // return left-right comparison for two events (right goes first)
@@ -200,11 +198,11 @@ Object.assign(MCG.Sweep, (function() {
       var slope = src.vertical() ? Infinity : diff.v/diff.h;
       var cslope = slope===Infinity
         ? "v"
-        : (Math.sign(slope)==1
-          ? "+"
-          : (Math.sign(slope)==-1
-            ? "-"
-            : 0));
+        : (slope===0
+          ? 0
+          : (Math.sign(slope)==1
+            ? "+"+(slope>0.5 ? "^" : ">")
+            : "-"+(slope<-0.5 ? "v" : ">")));
 
       var data =
         [this.isLeft ? "L " : "R ", this.id, this.twin.id,
@@ -359,7 +357,6 @@ Object.assign(MCG.Sweep, (function() {
       var a = this, b = other;
       var pa = a.p, pb = b.p;
       var pah = pa.h, pbh = pb.h;
-
       var pav = pa.v, pbv = pb.v;
 
       // if events horizontally coincident, just test the vertical coordinate
@@ -367,7 +364,7 @@ Object.assign(MCG.Sweep, (function() {
 
       var patv = a.twin.p.v, pbtv = b.twin.p.v;
 
-      // if no horizontal overlap, decide by which is higher/lower
+      // if no vertical overlap, decide by which is higher/lower
       if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
       if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
 
