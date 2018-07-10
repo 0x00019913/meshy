@@ -154,16 +154,16 @@ Object.assign(MCG.Sweep, (function() {
         return ls < 0 ? -1 : ls > 0 ? 1 : 0
       }
 
-      var leftCompare = MCG.Math.leftCompare;
+      var lc = MCG.Math.leftCompare;
 
-      var lta = leftCompare(pb, ptb, pta);
-      var ltb = leftCompare(pa, pta, ptb);
+      var lta = lc(pb, ptb, pta);
+      var ltb = lc(pa, pta, ptb);
 
       if (lta === -1 || ltb === 1) return -1;
       if (lta === 1 || ltb === -1) return 1;
 
-      var la = leftCompare(pb, ptb, pa);
-      var lb = leftCompare(pa, pta, pb);
+      var la = lc(pb, ptb, pa);
+      var lb = lc(pa, pta, pb);
 
       if (la === 1 || lb === -1) return -1;
       if (la === -1 || lb === 1) return 1;
@@ -216,7 +216,7 @@ Object.assign(MCG.Sweep, (function() {
           "d", src.depthBelowA, src.depthBelowA+src.weightA, src.depthBelowB, src.depthBelowB+src.weightB,
           src.contributing ? "t" : "f"];
       var p =
-        [1, 4, 4,
+        [1, 5, 5,
           2, d+3,
           d+3, 1,
           2, d+3,
@@ -360,11 +360,11 @@ Object.assign(MCG.Sweep, (function() {
       var pav = pa.v, pbv = pb.v;
 
       // if events horizontally coincident, just test the vertical coordinate
-      if (pah === pbh) return Math.sign(pav - pbv);
+      if (pah === pbh) return pa.vcompare(pb);
 
       var patv = a.twin.p.v, pbtv = b.twin.p.v;
 
-      // if no vertical overlap, decide by which is higher/lower
+      // if no horizontal overlap, decide by which is higher/lower
       if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
       if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
 
@@ -372,6 +372,10 @@ Object.assign(MCG.Sweep, (function() {
       var f = pah < pbh ? a : b;
       var s = pah < pbh ? b : a;
       var ps = s.p;
+
+      //var lc = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
+      //if (pah < pbh) lc *= -1;
+      //return lc;
 
       var v = f.interpolate(ps.h).v;
 

@@ -297,26 +297,41 @@ Slicer.prototype.setPreviewLevel = function() {
       printContours[w].forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
+        //debug.line(v1, v2, 1, false, 0.0, axis);
       });
     }
 
-    if (0) {
-      var contour;
+    var o;
 
-      contour = layer.base.foffset(-0.025, this.resolution);
-      contour = contour.foffset(-0.05, this.resolution).filter(function(p) {return p.max.h>500000;});
-      contour.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 2.0, axis);
-      });
-      MCG.Boolean.union(contour, undefined, {dbg: true}).union.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 2.2, axis);
-      });
+    o = printContours[0].foffset(-0.05, this.resolution);
+    if (o.elements.length==0) return;
+    o = o.elements[10];
+    o.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+    var b = MCG.Boolean.union(o, undefined, {dbg:true}).union;
+    b.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.1, axis);
+    });
+    b.toPolygonSet().forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.2, axis);
+    });
+
+    var adj = b.makeAdjacencyMap();
+    var key = adj.getKeyWithNoPredecessors();
+    if (key) {
+      var v = adj.map[key].pt.toVector3();
+      debug.line(v.clone().setZ(context.d),v.clone().setZ(context.d+3.1));
     }
+
+    debug.lines();
+    return;
 
     var infill = layer.getInfill();
 
@@ -327,22 +342,23 @@ Slicer.prototype.setPreviewLevel = function() {
 
       for (var i = 1; i <= layer.params.numTopLayers; i++) {
         if (level + i <= idxk) {
-          layers[level + i].getInfillContour().forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3(THREE.Vector3, context);
-            var v2 = p2.toVector3(THREE.Vector3, context);
-            debug.line(v1, v2, 1, false, 1.0 + i*0.0001, axis);
-          });
           neighborContours.merge(layers[level + i].getInfillContour());
         }
         if (level - i >= idx0) {
-          layers[level - i].getInfillContour().forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3(THREE.Vector3, context);
-            var v2 = p2.toVector3(THREE.Vector3, context);
-            debug.line(v1, v2, 1, false, 1.0 - i*0.0001, axis);
-          });
           neighborContours.merge(layers[level - i].getInfillContour());
         }
       }
+      contour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 1.0, axis);
+      });
+
+      neighborContours.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 1.0, axis);
+      });
 
       var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
         minDepthB: layer.params.numTopLayers * 2,
@@ -352,32 +368,29 @@ Slicer.prototype.setPreviewLevel = function() {
       var adj = fullDifference.intersection.makeAdjacencyMap();
       var key = adj.getKeyWithNoPredecessors();
       if (key) {
-        console.log(adj.map, key, adj.map[key]);
-        debug.point(adj.map[key].pt.toVector3(), context.d+2.5, context.axis);
+        console.log(level, adj.map, key, adj.map[key]);
+        var v = adj.map[key].pt.toVector3();
+        debug.line(v.clone().setZ(context.d),v.clone().setZ(context.d+3.1));
+        debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(), 1.01, context.axis);
+        debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(), 1.01, context.axis);
       }
 
       function sliverFilterFn(poly) { return !poly.isSliver(); }
-
-      contour.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 1.0, axis);
-      });
-      neighborContours.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 1.0, axis);
-      });
 
       fullDifference.intersection.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
         debug.line(v1, v2, 1, false, 2.0, axis);
       });
+      fullDifference.intersection.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 2.1, axis);
+      });
       fullDifference.AminusB.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 2.2, axis);
+        debug.line(v1, v2, 1, false, 2.4, axis);
       });
     }
 

@@ -42,7 +42,7 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 1.0;
-    var ct = 0, lim = dbg ? 3000 : 100000;
+    var ct = 0, lim = dbg ? 30000 : 100000;
     while (events.length > 0) {
       if (ct++ > lim) {
         if (!dbg) throw "exceeded event limit " + lim;
@@ -52,9 +52,12 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg && inRange(ev.p.h, 4*p, 5*p) && inRange(ev.p.v, -0.75*p, -0.25*p); // && inRange(ev.p.h, -6.0*p, -4.8*p) && inRange(ev.p.v, 4.0*p, 5.0*p);
+      printEvents = dbg;// && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       drawEvents = false;
       incr = 0.1;
+
+      if (dbg) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.00005, axis);
+      if (dbg && ev.id===21038) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.000025, axis);
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
@@ -65,25 +68,40 @@ Object.assign(MCG.Sweep, (function() {
 
         ev.setDepthFromBelow(dn);
 
-        handlePastEvent(ev);
+        //handlePastEvent(ev);
 
         eventPrint(ev);
         eventDraw(ev, o, 0x999999);
 
+        if (ev.id === 21073) {
+          statusPrint(ev.p.h);
+          statusDraw(ev, 10, 10, true);
+        }
+
+        //statusPrint(ev.p.h);
+
         if (dn) eventPrint(dn, "dn");
         if (up) eventPrint(up, "up");
 
-        //if (!statusValid()) statusPrint();
-
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
+
+        if (ev.p.h >= 134075 && ev.p.h <= 134123) {
+          statusPrint(ev.p.h, -542794, -536778);
+        }
 
         //depthValidate();
       }
       else {
         var tev = ev.twin;
 
-        eventPrint(ev);
+        if (tev.contributing) eventPrint(ev);
+        if (ev.id === 21076) {
+          if (tev.contributing) statusPrint(ev.p.h);
+          statusDraw(ev, 10, 9.995, true);
+        }
+
+        //if (tev.contributing) statusPrint(ev.p.h);
 
         var up = null, dn = null;
 
@@ -96,7 +114,7 @@ Object.assign(MCG.Sweep, (function() {
 
         // if intersection between adjacent events happens earlier in time
         // (special case that can occur when points snap to the grid), return
-        // the currnt event and its twin to the queue and reprocess them to
+        // the current event and its twin to the queue and reprocess them to
         // maintain correct depth
         if (pi && pi.h < ev.p.h) {
           queue(tev);
@@ -110,9 +128,8 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(ev, o);
       }
 
-      statusPrintShort();
+      if (ev.contributing || ev.twin.contributing) statusPrintShort();
 
-      statusDraw(o+incr*6);
       if (drawEvents) o += incr*10;
     }
 
@@ -215,9 +232,9 @@ Object.assign(MCG.Sweep, (function() {
           }
         }
         if (present) {
+          statusPrint(undefined, undefined, undefined, true);
           if (!dbg) throw "failed to find event in status " + ev.id + " " + ev.twin.id;
           console.log("failed to find event in status", ev.id, ev.twin.id);
-          statusPrint();
         }
       }
 
@@ -451,59 +468,37 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(linv, o+incr*4);
         eventDraw(lval, o+incr*5);
 
-        return ls;
+        return ls.p;
       }
       // else, not collinear but intersecting at at most one point
       else if (intersection !== flags.none) {
-        var coincident = MCG.Math.coincident;
-
         // intersection point
         var pi = null;
 
         // only admit intersections on one endpoint of one segment or some
         // non-endpoint on both segments
         if (intersection === flags.intermediate) pi = a.intersection(b);
-        else if (intersection === flags.a0) pi = a.isParent() ? pa : a.intersection(b);
-        else if (intersection === flags.a1) pi = ta.isParent() ? pta : a.intersection(b);
-        else if (intersection === flags.b0) pi = b.isParent() ? pb : a.intersection(b);
-        else if (intersection === flags.b1) pi = tb.isParent() ? ptb : a.intersection(b);
+        else if (intersection === flags.a0) pi = pa;
+        else if (intersection === flags.a1) pi = pta;
+        else if (intersection === flags.b0) pi = pb;
+        else if (intersection === flags.b1) pi = ptb;
         // intersection on both starting points - possibly valid if they're not
         // coincident
-        else if ((intersection & flags.start) === flags.start) {
+        else if ((intersection & flags.a0b0) === flags.a0b0) {
           var hvcomp = a.hvcompare(b);
           if (hvcomp !== 0) pi = hvcomp > 0 ? pa : pb;
-
-          /*if (!coincident(pa, pb)) {
-            var t = pa.hcompare(pb) >= 0 ? a : b;
-            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
-          }*/
         }
-        else if ((intersection & flags.end) === flags.end) {
+        else if ((intersection & flags.a1b1) === flags.a1b1) {
           var hvcomp = ta.hvcompare(tb);
           if (hvcomp !== 0) pi = hvcomp > 0 ? ptb : pta;
-
-          /*if (!coincident(pta, ptb)) {
-            var t = pta.hcompare(ptb) > 0 ? tb : ta;
-            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
-          }*/
         }
         else if ((intersection & flags.a0b1) === flags.a0b1) {
           var hvcomp = a.hvcompare(tb);
           if (hvcomp !== 0) pi = hvcomp > 0 ? pa : ptb;
-
-          /*if (!coincident(pa, ptb)) {
-            var t = pa.hcompare(ptb) >= 0 ? a : tb;
-            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
-          }*/
         }
         else if ((intersection & flags.a1b0) === flags.a1b0) {
           var hvcomp = ta.hvcompare(b);
           if (hvcomp !== 0) pi = hvcomp > 0 ? pb : pta;
-
-          /*if (!coincident(pta, pb)) {
-            var t = pta.hcompare(pb) > 0 ? b : ta;
-            pi = t.p;//t.isParent() ? t.p : a.intersection(b);
-          }*/
         }
 
         if (pi && (!a.contains(pi) && !b.contains(pi))) pi = null;
@@ -521,6 +516,8 @@ Object.assign(MCG.Sweep, (function() {
 
           var va = a.vertical(), vb = b.vertical();
           var ita = null, itb = null;
+
+          var coincident = MCG.Math.coincident;
 
           var ca = coincident(pa, pi), cta = coincident(pta, pi);
           var cb = coincident(pb, pi), ctb = coincident(ptb, pi);
@@ -632,30 +629,54 @@ Object.assign(MCG.Sweep, (function() {
       console.log(statusString());
     }
 
-    function statusPrint(force) {
+    function statusPrint(h, vmin, vmax, force) {
       if (!printEvents && !force) return;
+
+      if (vmin === undefined) vmin = -Infinity;
+      if (vmax === undefined) vmax = Infinity;
 
       var iter = status.iterator(), e, p = null;
       while ((e = iter.prev()) !== null) {
+        if (e.p.v < vmin || e.p.v > vmax) continue;
         if (p) {
           var f = p.p.h < e.p.h ? p : e;
           var s = p.p.h < e.p.h ? e : p;
           var ps = s.p;
-          var pp = p.parent, ep = e.parent;
+          var lc = MCG.Math.leftCompareStrict;
           console.log(
             p.linecompare(e), e.linecompare(p),
             p.vcompare(e), e.vcompare(p),
             p.scompare(e), e.scompare(p),
-            MCG.Math.leftCompare(p.p, p.twin.p, e.p), MCG.Math.leftCompare(p.p, p.twin.p, e.twin.p),
-            MCG.Math.leftCompare(e.p, e.twin.p, p.p), MCG.Math.leftCompare(e.p, e.twin.p, p.twin.p),
-            pp.vcompare(ep), ep.vcompare(pp),
-            pp.scompare(ep), ep.scompare(pp),
-            f.interpolate(ps.h).v, ps.v
+            lc(p.p, p.twin.p, e.twin.p), lc(e.p, e.twin.p, p.twin.p),
+            lc(p.p, p.twin.p, e.p), lc(e.p, e.twin.p, p.p),
+            e.intersects(p),
+            e.interpolate(h!==undefined ? h : p.p.h).v, e.interpolate(p.p.h).v
           );
         }
-        eventPrint(e, "N ", force);
+        eventPrint(e, ">N", force);
         p = e;
       }
+    }
+
+    function statusDraw(ev, factor, d, force) {
+      if (!drawEvents && !force) return;
+
+      var iter = status.iterator(), e;
+      var vmin = Infinity, vmax = -Infinity;
+      var ctx = Object.assign({}, context);
+      ctx.d = d;
+      while ((e = iter.next()) !== null) {
+        var ep = e.p, etp = e.twin.p;
+        vmin = Math.min(vmin, ep.v);
+        vmax = Math.max(vmax, ep.v);
+        var epc = ep.clone().multiplyScalar(factor);
+        var etpc = etp.clone().multiplyScalar(factor);
+        debug.line(epc.toVector3(THREE.Vector3, ctx), etpc.toVector3(THREE.Vector3, ctx), 1, false, 0, ctx.axis);
+      }
+
+      var top = ev.p.clone().setV(vmax).multiplyScalar(factor);
+      var bot = ev.p.clone().setV(vmin).multiplyScalar(factor);
+      debug.line(top.toVector3(THREE.Vector3, ctx), bot.toVector3(THREE.Vector3, ctx), 1, false, 0, ctx.axis);
     }
 
     function statusValid() {
@@ -695,17 +716,6 @@ Object.assign(MCG.Sweep, (function() {
       }
       else if (e.contributing) return 0xff6666;
       else return 0x6666ff;
-    }
-
-    function statusDraw(offset, force) {
-      offset = offset || 0;
-      var it = status.iterator();
-      var e;
-      var ooo = 0;
-      while ((e = it.next()) !== null) {
-        if (e.contributing) eventDraw(e, offset+ooo, 0x444444, force);
-        ooo += 0.02;
-      }
     }
   }
 

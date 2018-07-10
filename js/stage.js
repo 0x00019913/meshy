@@ -243,7 +243,7 @@ Stage.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
-  this.sliceMode = Slicer.Modes.path; // todo: back to preview
+  this.sliceMode = Slicer.Modes.preview; // todo: back to preview
   this.sliceModeOn = false;
   this.sliceNumWalls = 2;
   this.sliceNumTopLayers = 3;
@@ -887,7 +887,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 88;
+  this.currentSliceLevel = 26;//71;
   this.setSliceLevel();
 
   this.filename = this.model.filename;

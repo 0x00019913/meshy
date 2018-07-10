@@ -66,23 +66,6 @@ Object.assign(MCG.Math, (function() {
   function leftCompare(a, b, c) {
     if (distanceToLineSq(a, b, c) <= 2) return 0;
     else return Math.sign(area(a, b, c));
-
-    var abdistsq = a.distanceToSq(b);
-    var bcdistsq = b.distanceToSq(c);
-    var cadistsq = c.distanceToSq(a);
-    var maxdist = Math.sqrt(Math.max(abdistsq, bcdistsq, cadistsq));
-
-    var tarea = area(a, b, c);
-
-    // Given triangle a-b-c, take the longest side - let's say it's a-b.
-    // If a, b, and c are collinear, c's deviation from a-b should be at most
-    // sqrt(2), and the area of a-b-c should be at most (a-b dist) * sqrt2 / 2
-    // (deviation results from the fact that the coordinates snap to an integer
-    // grid, so the integer coords may not be collinear even if their original
-    // float coords were within a reasonable epsilon).
-
-    if (Math.abs(tarea) < maxdist / Math.SQRT2) return 0;
-    else return Math.sign(tarea);
   }
 
   function leftCompareStrict(a, b, c) {
@@ -109,8 +92,8 @@ Object.assign(MCG.Math, (function() {
       b1: b1,                 // b1 is on a0-a1
       a: a01,                 // a0 and a1 are on b0-b1
       b: b01,                 // b0 and b1 are on a0-a1
-      start: a0b0,            // intersection point is start of both segments
-      end: a1b1,              // intersection point is end of both segments
+      a0b0: a0b0,            // intersection point is start of both segments
+      a1b1: a1b1,              // intersection point is end of both segments
       a0b1: a0b1,             // intersection point is a start and b end
       a1b0: a1b0,             // intersection point is a end and b start
       collinear: a0b0 | a1b1  // a and b are collinear
