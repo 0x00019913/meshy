@@ -25,9 +25,10 @@ MCG.Vector = (function() {
       return this;
     },
 
+    // arguments:
+    //  constr: 3-vector constructor; assumed to follow THREE.Vector3 API
+    //  context: context to use, if different from this.context
     toVector3: function(constr, context) {
-      // Vector3 constructor, THREE.js constructor by default
-      constr = constr || THREE.Vector3;
       context = context || this.context;
 
       var itof = MCG.Math.itof;
