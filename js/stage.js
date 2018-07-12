@@ -226,7 +226,7 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch").name("Accept patch");
   repairFolder.add(this, "cancelPatch").name("Cancel patch");
 
-  this.verticalResolution = .01;//todo: back to 0.1
+  this.verticalResolution = .05;//todo: back to 0.1
   this.planarResolution = 0.05;
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
@@ -887,8 +887,12 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 26;//71;
+  this.currentSliceLevel = 41;//71;
   this.setSliceLevel();
+  //this.currentSliceLevel = 43;//71;
+  //this.setSliceLevel();
+  //this.currentSliceLevel = 46;//71;
+  //this.setSliceLevel();
 
   this.filename = this.model.filename;
   this.setMeshMaterial();

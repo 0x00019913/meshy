@@ -42,6 +42,7 @@ Object.assign(MCG.Sweep, (function() {
       Object.assign(e, this);
       e.p = p;
       e.id = id !== undefined ? id : -1;
+      e.t = -1;
 
       return e;
     },
@@ -104,6 +105,10 @@ Object.assign(MCG.Sweep, (function() {
       // secondary sorting on slope
       var scomp = a.scompare(b);
       if (scomp !== 0) return scomp;
+
+      // tertiary sorting on time
+      var tcomp = a.tcompare(b);
+      if (tcomp !== 0) return tcomp;
 
       // comparison based on parent extents
       var pcomp = a.pcompare(b);
@@ -171,6 +176,17 @@ Object.assign(MCG.Sweep, (function() {
       return 0;
     },
 
+    tcompare: function(other) {
+      var at = this.t, bt = other.t;
+
+      return Math.sign(at - bt);
+
+      if (at === bt) return 0;
+      else if (at === -1) return 1;
+      else if (bt === -1) return -1;
+      else return Math.sign(at - bt);
+    },
+
     // returns comparison between two left/two right events based on their
     // parent extents
     pcompare: function(other) {
@@ -203,9 +219,10 @@ Object.assign(MCG.Sweep, (function() {
           : (Math.sign(slope)==1
             ? "+"+(slope>0.5 ? "^" : ">")
             : "-"+(slope<-0.5 ? "v" : ">")));
+      var t = (this.isLeft ? this.t : "")+" ";
 
       var data =
-        [this.isLeft ? "L " : "R ", this.id, this.twin.id,
+        [t, this.isLeft ? "L " : "R ", this.id, this.twin.id,
           '(', this.p.h,
           this.p.v, ')',
           '(', this.twin.p.h,
@@ -216,7 +233,7 @@ Object.assign(MCG.Sweep, (function() {
           "d", src.depthBelowA, src.depthBelowA+src.weightA, src.depthBelowB, src.depthBelowB+src.weightB,
           src.contributing ? "t" : "f"];
       var p =
-        [1, 5, 5,
+        [5, 1, 5, 5,
           2, d+3,
           d+3, 1,
           2, d+3,
@@ -263,6 +280,10 @@ Object.assign(MCG.Sweep, (function() {
     this.weightB = 0;
 
     this.contributing = true;
+
+    // time at which the event occurs; used as a tiebreaker to position more
+    // recent events above past events
+    this.t = -1;
   }
 
   LeftSweepEvent.prototype = Object.create(SweepEvent.prototype);
@@ -270,6 +291,12 @@ Object.assign(MCG.Sweep, (function() {
   Object.assign(LeftSweepEvent.prototype, {
 
     constructor: LeftSweepEvent,
+
+    setT: function(t) {
+      this.t = t;
+
+      return this;
+    },
 
     setDepthFromBelow: function(below) {
       this.depthBelowA = below !== null ? below.depthBelowA + below.weightA : 0;
@@ -339,9 +366,9 @@ Object.assign(MCG.Sweep, (function() {
       else s.addPointPair(pf, ps);
     },
 
-    // compare the time at which two left events occur with respect to the
-    // scanline
-    timeCompare: function(other) {
+    // compare the "time" at which two left events occur with respect to the
+    // left-right/bottom-top scanline sequence
+    seqcompare: function(other) {
       var pt = this.p, po = other.p;
 
       if (pt.h < po.h) return -1;

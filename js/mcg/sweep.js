@@ -52,15 +52,21 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      printEvents = dbg;// && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
+      printEvents = ct > 50000 && ct < 50050;// && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       drawEvents = false;
-      incr = 0.1;
+      incr = 0.000005;
 
-      if (dbg) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.00005, axis);
-      if (dbg && ev.id===21038) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.000025, axis);
+      //if (ct >= 18840 && ct <= 18855) printEvents = true;
+
+      //if (dbg) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.00005, axis);
+      //if (dbg && ev.id===21038) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.000025, axis);
 
       if (ev.isLeft) {
         if (!ev.contributing) continue;
+
+        //if (ct === 18849) statusPrint();
+
+        ev.setT(ct);
 
         var ins = insert(ev);
 
@@ -71,9 +77,8 @@ Object.assign(MCG.Sweep, (function() {
         //handlePastEvent(ev);
 
         eventPrint(ev);
-        eventDraw(ev, o, 0x999999);
 
-        if (ev.id === 21073) {
+        if (false && ev.id === 21073) {
           statusPrint(ev.p.h);
           statusDraw(ev, 10, 10, true);
         }
@@ -86,8 +91,11 @@ Object.assign(MCG.Sweep, (function() {
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
 
+        //eventDraw(ev, o+incr, 0x999999, printEvents);
+        if (printEvents) o += incr;
+
         if (ev.p.h >= 134075 && ev.p.h <= 134123) {
-          statusPrint(ev.p.h, -542794, -536778);
+          //statusPrint(ev.p.h, -542794, -536778);
         }
 
         //depthValidate();
@@ -97,8 +105,8 @@ Object.assign(MCG.Sweep, (function() {
 
         if (tev.contributing) eventPrint(ev);
         if (ev.id === 21076) {
-          if (tev.contributing) statusPrint(ev.p.h);
-          statusDraw(ev, 10, 9.995, true);
+          //if (tev.contributing) statusPrint(ev.p.h);
+          //statusDraw(ev, 10, 9.995, true);
         }
 
         //if (tev.contributing) statusPrint(ev.p.h);
@@ -193,11 +201,6 @@ Object.assign(MCG.Sweep, (function() {
       var compare = vertical ? ev.p.vcompare(tev.p) : ev.p.hcompare(tev.p);
       if (compare < 0) return ev;
 
-      if (printEvents) {
-        console.log("handled swapped pair");
-        eventPrint(ev);
-      }
-
       var rm = eventInvalidate(ev);
 
       var el = createPointPair(tev.p, ev.p);
@@ -213,6 +216,11 @@ Object.assign(MCG.Sweep, (function() {
 
       if (!el.vertical()) {
         if (rm) insert(el);
+      }
+
+      if (printEvents) {
+        console.log("handled swapped pair");
+        eventPrint(ev);
       }
 
       return el;
@@ -233,6 +241,7 @@ Object.assign(MCG.Sweep, (function() {
         }
         if (present) {
           statusPrint(undefined, undefined, undefined, true);
+          console.log(store);
           if (!dbg) throw "failed to find event in status " + ev.id + " " + ev.twin.id;
           console.log("failed to find event in status", ev.id, ev.twin.id);
         }
@@ -265,6 +274,8 @@ Object.assign(MCG.Sweep, (function() {
     }
 
     function insert(e) {
+      if (!e.contributing) return;
+
       var ins = status.insert(e);
 
       if (!ins && printEvents) {
@@ -314,7 +325,7 @@ Object.assign(MCG.Sweep, (function() {
       var c, p = e;
 
       while ((c = iter.next()) !== null) {
-        if (c.timeCompare(e) !== -1) {
+        if (c.seqcompare(e) !== -1) {
           c.setDepthFromBelow(p);
           if (printEvents) console.log("corrected depth", p.id, c.id, "from", e.id);
         }
@@ -329,7 +340,7 @@ Object.assign(MCG.Sweep, (function() {
         return;
       }
 
-      var tc = e.timeCompare(front);
+      var tc = e.seqcompare(front);
 
       if (tc === 1) front = e;
       else depthCorrect(e);
@@ -359,14 +370,16 @@ Object.assign(MCG.Sweep, (function() {
       // if collinear, need to do special handling
       if (intersection === flags.collinear) {
         // verify that the event pairs actually overlap
-        if (a.horizontal() || b.horizontal()) {
+        /*if (a.horizontal() || b.horizontal()) {
           if (Math.max(pa.h, pta.h) <= Math.min(pb.h, ptb.h)) return null;
           if (Math.max(pb.h, ptb.h) <= Math.min(pa.h, pta.h)) return null;
         }
         else {
           if (Math.max(pa.v, pta.v) <= Math.min(pb.v, ptb.v)) return null;
           if (Math.max(pb.v, ptb.v) <= Math.min(pa.v, pta.v)) return null;
-        }
+        }*/
+
+        if (pa.vectorTo(pta).dot(pb.vectorTo(pb)) < 0) return null;
 
         // Collinear intersection may look like this (or one may be entirely
         // contained in the other or one or both endpoints may be coincident):
@@ -389,9 +402,7 @@ Object.assign(MCG.Sweep, (function() {
         var vertical = a.vertical() || b.vertical();
 
         // compare bounds for left events and right events
-        var hcomp = pa.hcompare(pb), htcomp = pta.hcompare(ptb);
-        var lcomp = hcomp !== 0 ? hcomp : pa.vcompare(pb);
-        var rcomp = htcomp !== 0 ? htcomp : pta.vcompare(ptb);
+        var lcomp = a.hvcompare(b), rcomp = ta.hvcompare(tb);
         //var lcomp = vertical ? pa.vcompare(pb) : pa.hcompare(pb);
         //var rcomp = vertical ? pta.vcompare(ptb) : pta.hcompare(ptb);
 
@@ -419,8 +430,8 @@ Object.assign(MCG.Sweep, (function() {
         var lsplit = null;
         if (lcomp !== 0) {
           lsplit = eventSplit(lf, pl);
-          eventPrint(lf, "lf");
-          eventPrint(ls, "ls");
+          //eventPrint(lf, "lf");
+          //eventPrint(ls, "ls");
           eventPrint(lf.twin, "lr");
           eventPrint(lsplit, "ll");
         }
@@ -430,8 +441,8 @@ Object.assign(MCG.Sweep, (function() {
         // right split left event
         var rsplit = null;
         if (rcomp !== 0) {
-          eventPrint(rf, "rf");
-          eventPrint(rs, "rs");
+          //eventPrint(rf, "rf");
+          //eventPrint(rs, "rs");
           var rst = rs.twin;
           rsplit = eventSplit(rst, pr);
           queue(rsplit);
@@ -503,6 +514,15 @@ Object.assign(MCG.Sweep, (function() {
 
         if (pi && (!a.contains(pi) && !b.contains(pi))) pi = null;
 
+        if (a.horizontal() || b.horizontal()) {
+          if (Math.max(pa.h, pta.h) < Math.min(pb.h, ptb.h)) pi = null;
+          if (Math.max(pb.h, ptb.h) < Math.min(pa.h, pta.h)) pi = null;
+        }
+        else {
+          if (Math.max(pa.v, pta.v) < Math.min(pb.v, ptb.v)) pi = null;
+          if (Math.max(pb.v, ptb.v) < Math.min(pa.v, pta.v)) pi = null;
+        }
+
         if (pi && printEvents) {
           console.log("intersection (", pi.h, pi.v, ")", intersection);
 
@@ -531,15 +551,17 @@ Object.assign(MCG.Sweep, (function() {
           // in the status structure while having only one point of vertical
           // overlap; requeue the second event so that the first half of the
           // split event can leave first
-          if (ca) queue(a);
-          if (cb) queue(b);
+          //if (ca) queue(a);
+          //if (cb) queue(b);
+
+          var anew = a, bnew = b;
 
           if (!(ca || cta)) {
             ita = eventSplit(a, pi);
 
             // if vertical status changed for either segment, it's possible that
             // the left and right events swapped
-            a = handleSwappedEventPair(a);
+            anew = handleSwappedEventPair(a);
             ita = handleSwappedEventPair(ita);
 
             queue(ita);
@@ -547,14 +569,19 @@ Object.assign(MCG.Sweep, (function() {
           if (!(cb || ctb)) {
             itb = eventSplit(b, pi);
 
-            b = handleSwappedEventPair(b);
+            bnew = handleSwappedEventPair(b);
             itb = handleSwappedEventPair(itb);
 
             queue(itb);
           }
 
-          if (rma && !cb) insert(a);
-          if (rmb && !ca) insert(b);
+          // if a was replaced due to being swapped, need to queue it;
+          // else, todo
+          if (anew !== a || ca) queue(anew);
+          else if (rma) insert(a);
+
+          if (bnew !== b || cb) queue(bnew);
+          else if (rmb) insert(b);
 
           eventPrint(a, "a ");
           eventPrint(b, "b ");
@@ -706,7 +733,7 @@ Object.assign(MCG.Sweep, (function() {
 
       offset = offset || 0;
       color = color || eventColor(e);
-      debug.oneline(e.p.toVector3(), e.twin.p.toVector3(), offset, axis, color);
+      debug.oneline(e.p.toVector3(THREE.Vector3, context), e.twin.p.toVector3(THREE.Vector3, context), offset, axis, color);
     }
 
     function eventColor(e) {
