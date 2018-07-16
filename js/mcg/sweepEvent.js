@@ -128,6 +128,15 @@ Object.assign(MCG.Sweep, (function() {
       return pa.vcompare(pb);
     },
 
+    hvcomparept: function(pt) {
+      var pa = this.p;
+
+      var hcomp = pa.hcompare(pt);
+      if (hcomp !== 0) return hcomp;
+
+      return pa.vcompare(pt);
+    },
+
     // return left-right comparison for two events (right goes first)
     lrcompare: function(other) {
       if (!this.isLeft && other.isLeft) return -1;
