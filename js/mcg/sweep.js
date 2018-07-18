@@ -52,17 +52,16 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
+      if (ev.p.h==="733380") console.log(ev.p, ct);
+
       updateFront(ev);
 
-      //printEvents = dbg && ct > 3340 && ct < 3360;
       //printEvents = dbg && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       //printEvents = dbg && inRange(ev.p.h, 6.0*p, 7.1*p) && inRange(ev.p.v, -1.0*p, -0.5*p);
       //printEvents = dbg && inRange(ct, 1202-4, 1202+4);
-      printEvents = dbg && inRange(ct, 1000, 1087);
+      printEvents = dbg && inRange(ct, 540, 597);
       drawEvents = false;
       incr = 0.0005;
-
-      //if (ct >= 18840 && ct <= 18855) printEvents = true;
 
       //if (dbg) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.00005, axis);
       //if (dbg && ev.id===21038) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.000025, axis);
@@ -487,8 +486,8 @@ Object.assign(MCG.Sweep, (function() {
 
         // remove both events - due to numeric imprecision, their place in the
         // status structure may change after splitting
-        remove(a);
-        remove(b);
+        var rma = remove(a);
+        var rmb = remove(b);
 
         // new events formed by a split
         var ita = null, itb = null;
@@ -538,15 +537,15 @@ Object.assign(MCG.Sweep, (function() {
         // if a's twin is before or at the front, a is entirely in the past, so
         // handle its right event immediately
         if (front.hvcompare(ta) >= 0) handleRightEvent(ta);
-        // else, if b is vertical and a split it, requeue a to correct depth
+        // else, if a split b, it may not have the correct depth, so requeue it
         else if (ca) queue(a);
         // else, just insert it back
-        else insert(a);
+        else if (rma) insert(a);
 
         // likewise for b
         if (front.hvcompare(tb) >= 0) handleRightEvent(tb);
         else if (cb) queue(b);
-        else insert(b);
+        else if (rmb) insert(b);
       }
 
       return pi;
