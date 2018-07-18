@@ -99,7 +99,7 @@ Object.assign(MCG.Sweep, (function() {
 
       // primary sorting on vertical coordinate at the start of the later event
       // (y if up axis is z)
-      var vcomp = a.vcompare(b);
+      var vcomp = a.vlinecompare(b);
       if (vcomp !== 0) return vcomp;
 
       // secondary sorting on slope
@@ -115,6 +115,16 @@ Object.assign(MCG.Sweep, (function() {
       if (pcomp !== 0) return pcomp;
 
       return Math.sign(a.id - b.id);
+    },
+
+    // return horizontal comparison
+    hcompare: function(other) {
+      return this.p.hcompare(other.p);
+    },
+
+    // return vertical comparison
+    vcompare: function(other) {
+      return this.p.vcompare(other.p);
     },
 
     // return horizontal comparison if unequal; else, return vertical comparison
@@ -186,14 +196,7 @@ Object.assign(MCG.Sweep, (function() {
     },
 
     tcompare: function(other) {
-      var at = this.t, bt = other.t;
-
-      return Math.sign(at - bt);
-
-      if (at === bt) return 0;
-      else if (at === -1) return 1;
-      else if (bt === -1) return -1;
-      else return Math.sign(at - bt);
+      return Math.sign(this.t - other.t);
     },
 
     // returns comparison between two left/two right events based on their
@@ -375,43 +378,40 @@ Object.assign(MCG.Sweep, (function() {
       else s.addPointPair(pf, ps);
     },
 
-    // compare the "time" at which two left events occur with respect to the
-    // left-right/bottom-top scanline sequence
-    seqcompare: function(other) {
-      var pt = this.p, po = other.p;
-
-      if (pt.h < po.h) return -1;
-      if (pt.h > po.h) return 1;
-      if (pt.v < po.v) return -1;
-      if (pt.v > po.v) return 1;
-      return 0;
-    },
-
     // return vertical axis comparison for two left events at the later event's
     // horizontal coordinate
-    vcompare: function(other) {
+    vlinecompare: function(other) {
       var a = this, b = other;
       var pa = a.p, pb = b.p;
+      var pta = a.twin.p, ptb = b.twin.p;
       var pah = pa.h, pbh = pb.h;
+      var ptah = pta.h, ptbh = ptb.h;
       var pav = pa.v, pbv = pb.v;
 
       // if events horizontally coincident, just test the vertical coordinate
       if (pah === pbh) return pa.vcompare(pb);
 
-      var patv = a.twin.p.v, pbtv = b.twin.p.v;
+      // if the end of one is horizontally coincident with the other's start,
+      // test that directly
+      if (pah === ptbh) return pa.vcompare(ptb);
+      if (ptah === pbh) return pta.vcompare(pb);
 
-      // if no horizontal overlap, decide by which is higher/lower
-      if (Math.max(pav, patv) < Math.min(pbv, pbtv)) return -1;
-      if (Math.max(pbv, pbtv) < Math.min(pav, patv)) return 1;
+      var ptav = a.twin.p.v, ptbv = b.twin.p.v;
+
+      // if no vertical overlap, decide by which is higher/lower
+      if (Math.max(pav, ptav) < Math.min(pbv, ptbv)) return -1;
+      if (Math.max(pbv, ptbv) < Math.min(pav, ptav)) return 1;
 
       // first and second events by horizontal coordinate
       var f = pah < pbh ? a : b;
       var s = pah < pbh ? b : a;
       var ps = s.p;
 
-      //var lc = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
-      //if (pah < pbh) lc *= -1;
-      //return lc;
+      if (1) {
+        var lc = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
+        if (pah < pbh) lc *= -1;
+        return lc;
+      }
 
       var v = f.interpolate(ps.h).v;
 
