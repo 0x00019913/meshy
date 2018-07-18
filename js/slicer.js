@@ -300,6 +300,8 @@ Slicer.prototype.setPreviewLevel = function() {
       debug.line(v1, v2, 1, false, 0.0, axis);
     });
 
+    // contour 1
+
     var o1 = base.foffset(-0.025, this.resolution);
     o1.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3(THREE.Vector3, context);
@@ -307,14 +309,14 @@ Slicer.prototype.setPreviewLevel = function() {
       //debug.line(v1, v2, 1, false, -0.05, axis);
     });
     var u1 = MCG.Boolean.union(o1,undefined,{idx:level, dbg:false}).union;
+    var adj = u1.makeAdjacencyMap();
+    var key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(1, key);
     u1.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3(THREE.Vector3, context);
       var v2 = p2.toVector3(THREE.Vector3, context);
       //debug.line(v1, v2, 1, false, -0.1, axis);
     });
-    var adj = u1.makeAdjacencyMap();
-    var key = adj.getKeyWithNoPredecessors();
-    if (key) console.log(key);
     var c1 = u1.toPolygonSet();
     c1.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3(THREE.Vector3, context);
@@ -322,13 +324,24 @@ Slicer.prototype.setPreviewLevel = function() {
       debug.line(v1, v2, 1, false, 0.0, axis);
     });
 
+    // contour 2
+
     var o2 = c1.foffset(-0.05, this.resolution);
     o2.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3(THREE.Vector3, context);
       var v2 = p2.toVector3(THREE.Vector3, context);
-      //debug.line(v1, v2, 1, false, -0.10, axis);
+      //debug.line(v1, v2, 1, false, -0.05, axis);
     });
-    var c2 = MCG.Boolean.union(o2,undefined,{idx:level, dbg:false}).union.toPolygonSet();
+    var u2 = MCG.Boolean.union(o2,undefined,{idx:level, dbg:false}).union;
+    adj = u2.makeAdjacencyMap();
+    key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(2, key);
+    u2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.1, axis);
+    });
+    var c2 = u2.toPolygonSet();
     c2.forEachPointPair(function(p1, p2) {
       var v1 = p1.toVector3(THREE.Vector3, context);
       var v2 = p2.toVector3(THREE.Vector3, context);
