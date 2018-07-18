@@ -203,7 +203,7 @@ Object.assign(MCG.Math, (function() {
     },
 
     // calculate intersection point of a0-a1 segment and b0-b1 segment
-    intersection: function(a0, a1, b0, b1, ignoreBounds) {
+    intersection: function(a0, a1, b0, b1) {
       // denominator
       var d = a0.h * (b1.v - b0.v) + a1.h * (b0.v - b1.v) +
               b1.h * (a1.v - a0.v) + b0.h * (a0.v - a1.v);
@@ -217,15 +217,13 @@ Object.assign(MCG.Math, (function() {
       n = a0.h * (b1.v - b0.v) + b0.h * (a0.v - b1.v) + b1.h * (b0.v - a0.v);
       var pa = n / d;
 
-      if (!ignoreBounds) {
-        if (pa < 0 || pa > 1) return null;
-        // calculate pb
-        n = a0.h * (a1.v - b0.v) + a1.h * (b0.v - a0.v) + b0.h * (a0.v - a1.v);
-        var pb = n / d;
-        if (pb < 0 || pb > 1) return null;
-      }
+      var ixn = a0.clone().addScaledVector(a0.vectorTo(a1), pa);
 
-      return a0.clone().addScaledVector(a0.vectorTo(a1), pa);
+      // if intersection is outside segment a's bounds, it's invalid
+      if (!inRange(ixn.h, Math.min(a0.h, a1.h), Math.max(a0.h, a1.h))) return null;
+      if (!inRange(ixn.v, Math.min(a0.v, a1.v), Math.max(a0.v, a1.v))) return null;
+
+      return ixn;
     },
 
     orthogonalRightVector: orthogonalRightVector,
