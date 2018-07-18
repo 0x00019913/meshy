@@ -68,7 +68,7 @@ Stage = function() {
   // standard notifications
   this.printout.log("Meshy is freely available under the MIT license. Thanks for using!");
   this.printout.log("Supported import formats: OBJ, STL.");
-  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe)");
+  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe), B (build volume)");
 
   // undo stack
   this.undoStack = new UndoStack(this.printout);
@@ -701,6 +701,7 @@ Stage.prototype.initViewport = function() {
       if (k=="f") _this.cameraToModel();
       else if (k=="c") _this.toggleCOM();
       else if (k=="w") _this.toggleWireframe();
+      else if (k=="b") _this.toggleBuildVolume();
     }
   }
 
@@ -887,12 +888,8 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 41;//71;
+  this.currentSliceLevel = 150;//193;//135;
   this.setSliceLevel();
-  //this.currentSliceLevel = 43;//71;
-  //this.setSliceLevel();
-  //this.currentSliceLevel = 46;//71;
-  //this.setSliceLevel();
 
   this.filename = this.model.filename;
   this.setMeshMaterial();
