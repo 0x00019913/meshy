@@ -290,6 +290,55 @@ Slicer.prototype.setPreviewLevel = function() {
   var axis = context.axis;
   var vertices = [];
 
+  if (1) {
+    var sd = layer.source.toPolygonSet().fdecimate(this.resolution);
+    var base = MCG.Boolean.union(sd,undefined,{idx:level, dbg:false}).union.toPolygonSet();
+
+    base.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    var o1 = base.foffset(-0.025, this.resolution);
+    o1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.05, axis);
+    });
+    var u1 = MCG.Boolean.union(o1,undefined,{idx:level, dbg:false}).union;
+    u1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.1, axis);
+    });
+    var adj = u1.makeAdjacencyMap();
+    var key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(key);
+    var c1 = u1.toPolygonSet();
+    c1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    var o2 = c1.foffset(-0.05, this.resolution);
+    o2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.10, axis);
+    });
+    var c2 = MCG.Boolean.union(o2,undefined,{idx:level, dbg:false}).union.toPolygonSet();
+    c2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    debug.lines();
+    return;
+  }
+
   if (level >= this.numRaftLayers) {
     var printContours = layer.getPrintContours();
 
@@ -301,8 +350,30 @@ Slicer.prototype.setPreviewLevel = function() {
       });
     }
 
+    // debugging for basic infill contour
+    if (0) {
+      var contour = layer.getBase().foffset(-0.1, this.resolution);
+      contour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.0, axis);
+      });
+      var ucontour = MCG.Boolean.union(contour, undefined, {dbg:true}).union;
+      ucontour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.2, axis);
+      });
+      ucontour.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.3, axis);
+      });
+    }
+
     var infill = layer.getInfill();
 
+    // debugging for calculating disjoint infill contours wrt k neighboring layers
     if (0) {
       var idx0 = layer.params.idx0, idxk = layers.length - 1;
       var contour = layer.getInfillContour();
@@ -311,17 +382,33 @@ Slicer.prototype.setPreviewLevel = function() {
       for (var i = 1; i <= layer.params.numTopLayers; i++) {
         if (level + i <= idxk) {
           neighborContours.merge(layers[level + i].getInfillContour());
+          layers[level+i].getInfillContour().forEachPointPair(function(p1, p2) {
+            var v1 = p1.toVector3(THREE.Vector3, context);
+            var v2 = p2.toVector3(THREE.Vector3, context);
+            debug.line(v1, v2, 1, false, 4+0.1*(i+1), axis);
+          });
         }
         if (level - i >= idx0) {
           neighborContours.merge(layers[level - i].getInfillContour());
+          layers[level-i].getInfillContour().forEachPointPair(function(p1, p2) {
+            var v1 = p1.toVector3(THREE.Vector3, context);
+            var v2 = p2.toVector3(THREE.Vector3, context);
+            debug.line(v1, v2, 1, false, 4-0.1*(i+1), axis);
+          });
         }
       }
+
+      contour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 4.0, axis);
+      });
+
       contour.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
         debug.line(v1, v2, 1, false, 1.0, axis);
       });
-
       neighborContours.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
@@ -387,161 +474,6 @@ Slicer.prototype.setPreviewLevel = function() {
       debug.line(v1, v2, 1, false, 0.0, axis);
     });
 
-  }
-
-
-  if (0) {
-    var below = layer.getBelow();
-    var above = layer.getAbove();
-
-    /*if (below) {
-      below.getPrintContours()[this.numWalls-1].forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 1.0, axis);
-      });
-    }
-    layer.getPrintContours()[this.numWalls-1].forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 1.2, axis);
-    });
-    if (above) {
-      above.getPrintContours()[this.numWalls-1].forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 1.4, axis);
-      });
-    }*/
-
-    if (below) {
-      below.base.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.9, axis);
-      });
-      below.base.foffset(-0.1, this.resolution).forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.925, axis);
-      });
-    }
-    layer.base.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 1.0, axis);
-    });
-    layer.base.foffset(-0.1, this.resolution).forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 1.025, axis);
-    });
-    if (above) {
-      above.base.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 1.1, axis);
-      });
-      above.base.foffset(-0.1, this.resolution).forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 1.125, axis);
-      });
-    }
-
-
-
-    // 3: 3 infill contours
-
-    if (below) {
-      below.infillContour.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 3.0, axis);
-      });
-    }
-    layer.infillContour.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 3.2, axis);
-    });
-    if (above) {
-      above.infillContour.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 3.4, axis);
-      });
-    }
-
-    // 5: 2 differences
-
-    layer.layerDifferences.AminusB.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 5.0, axis);
-    });
-
-    if (above) {
-      above.layerDifferences.BminusA.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 5.2, axis);
-      });
-    }
-
-    // 7: 2 intersections
-
-    layer.layerDifferences.intersection.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 7.0, axis);
-    });
-
-    if (above) {
-      above.layerDifferences.intersection.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.2, axis);
-      });
-    }
-
-    // 7: recalculated intersection of intersections
-
-    if (0 && above) {
-      var int = MCG.Boolean.intersection(
-        above.layerDifferences.intersection, layer.layerDifferences.intersection, true
-      ).intersection;
-
-      var adj = int.makeAdjacencyMap();
-      console.log(adj.getKeyWithNoPredecessors());
-      debug.point(new MCG.Vector(int.context, -2820128, 523229).toVector3(), 7.025, context.axis);
-
-      int.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.015, axis);
-      });
-
-      int.toPolygonSet().forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 7.02, axis);
-      });
-    }
-
-    // 9: infill contours
-
-    layer.disjointInfillContours.inner.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 5, true, 9.0, axis);
-    });
-
-    layer.disjointInfillContours.solid.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 5, true, 9.2, axis);
-    });
   }
 
   debug.lines();
@@ -860,7 +792,7 @@ Layer.prototype.computeBase = function() {
   var resolution = this.params.resolution;
 
   var sourceDecimated = this.source.toPolygonSet().fdecimate(resolution);
-  var base = MCG.Boolean.union(sourceDecimated).union.toPolygonSet();
+  var base = MCG.Boolean.union(sourceDecimated, undefined, {idx:this.idx}).union.toPolygonSet();
 
   this.base = base;
 }
@@ -947,41 +879,14 @@ Layer.prototype.computeDisjointInfillContours = function() {
 
   var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
     minDepthB: numTopLayers * 2,
-    idx: this.idx // todo: remove
+    idx: this.idx, // todo: remove
+    dbg: false // todo: remove
   });
 
   this.disjointInfillContours = {
     inner: fullDifference.intersection.toPolygonSet().filter(sliverFilterFn),
     solid: fullDifference.AminusB.toPolygonSet().filter(sliverFilterFn)
   };
-
-  /*return;
-
-  var above = this.getAbove();
-
-  var diffAbove, intAbove;
-  if (above !== null) {
-    var layerDifferencesAbove = above.getLayerDifferences();
-    diffAbove = layerDifferencesAbove.BminusA;
-    intAbove = layerDifferencesAbove.intersection;
-  }
-  else {
-    diffAbove = new MCG.SegmentSet(this.context);
-    intAbove = new MCG.SegmentSet(this.context);
-  }
-
-  var diffBelow, intBelow;
-  var layerDifferences = this.getLayerDifferences();
-  diffBelow = layerDifferences.AminusB;
-  intBelow = layerDifferences.intersection;
-
-  var inner = MCG.Boolean.intersection(intAbove, intBelow).intersection;
-  var solid = MCG.Boolean.union(diffAbove, diffBelow).union;
-
-  this.disjointInfillContours = {
-    inner: inner.toPolygonSet().filter(sliverFilterFn),
-    solid: solid.toPolygonSet().filter(sliverFilterFn)
-  };*/
 
   function sliverFilterFn(poly) { return !poly.isSliver(); }
 }
@@ -1046,6 +951,16 @@ Layer.prototype.computeInfill = function() {
 }
 
 Layer.prototype.writeToVerts = function(vertices) {
+  // todo: remove
+  var base = this.getBase();
+
+  base.forEachPointPair(function(p1, p2) {
+    //vertices.push(p1.toVector3(THREE.Vector3, context));
+    //vertices.push(p2.toVector3(THREE.Vector3, context));
+  });
+
+  //return;
+
   // write print contours
   var contours = this.getPrintContours();
   var context = this.context;
