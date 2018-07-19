@@ -135,12 +135,12 @@ Stage.prototype.generateUI = function() {
     .title("Build volume size on z.")
     .onChange(this.makeBuildVolume.bind(this));
 
-  var transformFolder = this.gui.addFolder("Transform", "Mesh transformations: translation, scaling, rotations, normals.");
+  var editFolder = this.gui.addFolder("Edit", "Mesh edit functions: translation, scaling, rotation, normals.");
 
-  transformFolder.add(this, "autoCenter").name("Autocenter")
+  editFolder.add(this, "autoCenter").name("Autocenter")
     .title("Center the mesh on x and y; snap to the floor on z.");
 
-  var translateFolder = transformFolder.addFolder("Translate");
+  var translateFolder = editFolder.addFolder("Translate");
   this.xTranslation = 0;
   translateFolder.add(this, "xTranslation").name("x translation");
   translateFolder.add(this, "translateX").name("Translate on x");
@@ -151,7 +151,7 @@ Stage.prototype.generateUI = function() {
   translateFolder.add(this, "zTranslation").name("z translation");
   translateFolder.add(this, "translateZ").name("Translate on z");
 
-  var rotateFolder = transformFolder.addFolder("Rotate");
+  var rotateFolder = editFolder.addFolder("Rotate");
   this.xRotation = 0;
   rotateFolder.add(this, "xRotation").name("x rotation");
   rotateFolder.add(this, "rotateX").name("Rotate about x");
@@ -162,7 +162,7 @@ Stage.prototype.generateUI = function() {
   rotateFolder.add(this, "zRotation").name("z rotation");
   rotateFolder.add(this, "rotateZ").name("Rotate about z");
 
-  var scaleFolder = transformFolder.addFolder("Scale");
+  var scaleFolder = editFolder.addFolder("Scale");
 
   var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
   this.xScale = 1;
@@ -200,23 +200,23 @@ Stage.prototype.generateUI = function() {
   ringSizeFolder.add(this, "scaleToRingSize").name("Scale to ring size");
   ringSizeFolder.add(this, "mDeactivate").name("End measurement");
 
-  var mirrorFolder = transformFolder.addFolder("Mirror");
+  var mirrorFolder = editFolder.addFolder("Mirror");
   mirrorFolder.add(this, "mirrorX").name("Mirror on x");
   mirrorFolder.add(this, "mirrorY").name("Mirror on y");
   mirrorFolder.add(this, "mirrorZ").name("Mirror on z");
 
-  var floorFolder = transformFolder.addFolder("Floor");
+  var floorFolder = editFolder.addFolder("Floor");
   floorFolder.add(this, "floorX").name("Floor to x");
   floorFolder.add(this, "floorY").name("Floor to y");
   floorFolder.add(this, "floorZ").name("Floor to z");
 
-  var centerFolder = transformFolder.addFolder("Center");
+  var centerFolder = editFolder.addFolder("Center");
   centerFolder.add(this, "centerAll").name("Center on all");
   centerFolder.add(this, "centerX").name("Center on x");
   centerFolder.add(this, "centerY").name("Center on y");
   centerFolder.add(this, "centerZ").name("Center on z");
 
-  transformFolder.add(this, "flipNormals").name("Flip normals");
+  editFolder.add(this, "flipNormals").name("Flip normals");
 
   var calculationFolder = this.gui.addFolder("Calculate");
   calculationFolder.add(this, "calcSurfaceArea").name("Surface area");
@@ -906,7 +906,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 210;//135;
+  this.currentSliceLevel = 217;//135;
   this.setSliceLevel();
 
   this.filename = this.model.filename;
