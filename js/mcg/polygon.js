@@ -330,6 +330,11 @@ MCG.Polygon = (function() {
         // the angles array stores the angle relative to the outward-facing
         // bisector, which may be antiparallel to the offset vector)
         var a = fdist > 0 ? angles[i] : (pi - angles[i]);
+
+        // should occur rarely - ignore this point if the angle is 0 because
+        // dividing by sin(a) gives infinity
+        if (a === 0) continue;
+
         // scale for bisector
         var d = fdist / Math.sin(a);
         // displace by this much
@@ -379,6 +384,8 @@ MCG.Polygon = (function() {
       // to its left, point is invalid
       for (var i = 0; i < points.length; i++) {
         var a = fdist > 0 ? angles[i] : (pi - angles[i]);
+
+        if (a === 0) continue;
 
         if (a > capThreshold) {
           mk[ri++] = true;
