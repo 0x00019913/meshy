@@ -38,23 +38,26 @@ Object.assign(MCG.Infill, (function() {
     if (parity !== 0) angle += pi_2;
 
     var contourRotated = contour.clone(true).rotate(angle);
+    if (false) {
+      contourRotated.forEachPointPair(function(p1, p2) {
+        debug.line(
+          p1.toVector3(THREE.Vector3, contour.context),
+          p2.toVector3(THREE.Vector3, contour.context),
+          1, false, 1.0, "z");
+      });
+    }
 
     var op = MCG.Sweep.Operations.linearInfill({
       spacing: spacing
     });
 
     var infillRotated = MCG.Sweep.sweep(op, contourRotated).infill;
+
     if (false) {
-      contourRotated.forEachPointPair(function(p1, p2) {
-        debug.line(
-          p1.toVector3(undefined, contour.context),
-          p2.toVector3(undefined, contour.context),
-          1, false, 1.0, "z");
-      });
       infillRotated.forEachPointPair(function(p1, p2) {
         debug.line(
-          p1.toVector3(undefined, contour.context),
-          p2.toVector3(undefined, contour.context),
+          p1.toVector3(THREE.Vector3, contour.context),
+          p2.toVector3(THREE.Vector3, contour.context),
           1, false, 1.0, "z");
       });
     }

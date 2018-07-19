@@ -52,16 +52,16 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      if (ev.p.h==="733380") console.log(ev.p, ct);
+      if (ev.p.h==-564133 && ev.p.v==772518) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 0.2, axis);
 
       updateFront(ev);
 
       //printEvents = dbg && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       //printEvents = dbg && inRange(ev.p.h, 6.0*p, 7.1*p) && inRange(ev.p.v, -1.0*p, -0.5*p);
       //printEvents = dbg && inRange(ct, 1202-4, 1202+4);
-      printEvents = dbg && inRange(ct, 540, 597);
+      printEvents = dbg;
       drawEvents = false;
-      incr = 0.0005;
+      incr = 0.01;
 
       //if (dbg) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.00005, axis);
       //if (dbg && ev.id===21038) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 1.000025, axis);
@@ -79,7 +79,7 @@ Object.assign(MCG.Sweep, (function() {
 
         eventPrint(ev);
 
-        //if (ct === 3) statusPrint(ev.p.h);
+        //if (ct === 3) statusPrint();
 
         if (dn) eventPrint(dn, "dn");
         if (up) eventPrint(up, "up");
@@ -87,7 +87,7 @@ Object.assign(MCG.Sweep, (function() {
         handleEventIntersection(ev, dn);
         handleEventIntersection(up, ev);
 
-        eventDraw(ev, o+incr, 0x999999, printEvents);
+        //eventDraw(ev, o+incr, 0x999999, printEvents);
         if (printEvents) o += incr;
 
         //depthValidate();
@@ -98,12 +98,8 @@ Object.assign(MCG.Sweep, (function() {
         if (!tev.contributing) continue;
 
         eventPrint(ev);
-        if (ev.id === 21076) {
-          //if (tev.contributing) statusPrint(ev.p.h);
-          //statusDraw(ev, 10, 9.995, true);
-        }
 
-        //if (tev.contributing) statusPrint(ev.p.h);
+        handleRightEvent(ev);
 
         var up = null, dn = null;
 
@@ -114,22 +110,6 @@ Object.assign(MCG.Sweep, (function() {
 
         // handle possible intersection
         handleEventIntersection(up, dn);
-
-        handleRightEvent(ev);
-
-        /*// if intersection between adjacent events happens earlier in time
-        // (special case that can occur when points snap to the grid), return
-        // the current event and its twin to the queue and reprocess them to
-        // maintain correct depth
-        if (false && pi && pi.h < ev.p.h) {
-          if (printEvents) console.log("removal created past event");
-          queue(tev);
-          queue(ev);
-        }
-        // else, just handle the right event
-        else {
-          handleRightEvent(ev);
-        }*/
 
         eventDraw(ev, o);
       }
@@ -231,7 +211,8 @@ Object.assign(MCG.Sweep, (function() {
           }
         }
         if (present) {
-          statusPrint(undefined, undefined, undefined, true);
+          statusPrint(undefined, undefined, true);
+          eventPrint(ev, "ev", true);
           console.log(store);
           debug.point(ev.p.toVector3(THREE.Vector3, context), 0.25, context.axis);
           debug.point(ev.twin.p.toVector3(THREE.Vector3, context), 0.25, context.axis);
@@ -416,6 +397,12 @@ Object.assign(MCG.Sweep, (function() {
         console.log(intersection, labc, labd, lcda, lcdb, dabc, dabd, dcda, dcdb);
       }
 
+      // if events are not horizontal and have no vertical overlap, return
+      if (!a.horizontal() && !b.horizontal()) {
+        if (Math.max(pa.v, pta.v) < Math.min(pb.v, ptb.v)) return null;
+        if (Math.max(pb.v, ptb.v) < Math.min(pa.v, pta.v)) return null;
+      }
+
       // point of intersection
       var pi = null;
 
@@ -457,14 +444,17 @@ Object.assign(MCG.Sweep, (function() {
       // that it's at least in the present
       var fphvcomp = front.hvcomparept(pi);
       if (fphvcomp > 0) {
+        if (printEvents) console.log("adjust intersection", "(", pi.h, pi.v, ") (", pi.h+1, pi.v, ")");
 
-        pi = b.interpolate(pi.h + 1);
+        var h = Math.max(pi.h, front.p.h) + 1;
+
+        pi = (b.vertical() ? a : b).interpolate(h);
 
         ca = coincident(pi, pa), cta = coincident(pi, pta);
         cb = coincident(pi, pb), ctb = coincident(pi, ptb);
 
         if (front.hvcomparept(pi) > 0) {
-          console.log("intersection in past", intersection);
+          console.log("intersection in past", intersection, store);
           eventPrint(a, "a ", true);
           eventPrint(b, "b ", true);
           console.log(a.p.h-pi.h, b.p.h-pi.h, pi);
@@ -866,7 +856,7 @@ Object.assign(MCG.Sweep, (function() {
       console.log(statusString());
     }
 
-    function statusPrint(h, vmin, vmax, force) {
+    function statusPrint(vmin, vmax, force) {
       if (!printEvents && !force) return;
 
       if (vmin === undefined) vmin = -Infinity;
@@ -879,15 +869,15 @@ Object.assign(MCG.Sweep, (function() {
           var f = p.p.h < e.p.h ? p : e;
           var s = p.p.h < e.p.h ? e : p;
           var ps = s.p;
-          var lc = MCG.Math.leftCompareStrict;
+          var lc = MCG.Math.leftCompare;
           console.log(
             p.linecompare(e), e.linecompare(p),
-            p.vcompare(e), e.vcompare(p),
+            p.vlinecompare(e), e.vlinecompare(p),
             p.scompare(e), e.scompare(p),
             lc(p.p, p.twin.p, e.twin.p), lc(e.p, e.twin.p, p.twin.p),
             lc(p.p, p.twin.p, e.p), lc(e.p, e.twin.p, p.p),
             e.intersects(p),
-            e.interpolate(h!==undefined ? h : p.p.h).v, e.interpolate(p.p.h).v
+            e.interpolate(p.p.h).h, e.interpolate(p.p.h).v
           );
         }
         eventPrint(e, ">N", force);
