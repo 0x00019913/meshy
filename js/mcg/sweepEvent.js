@@ -407,7 +407,7 @@ Object.assign(MCG.Sweep, (function() {
       var s = pah < pbh ? b : a;
       var ps = s.p;
 
-      if (1) {
+      if (0) {
         var lc = MCG.Math.leftCompare(f.p, f.twin.p, s.p);
         if (pah < pbh) lc *= -1;
         return lc;
