@@ -81,47 +81,64 @@ Stage = function() {
 // initializes build volume.
 Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
-  this.gui.add(this, "import").name("Import");
+  this.gui.add(this, "import").name("Import").title("Import a mesh.");
 
-  var exportFolder = this.gui.addFolder("Export");
+  var exportFolder = this.gui.addFolder("Export", "Mesh export.");
   this.filename = "meshy";
-  this.filenameController = exportFolder.add(this, "filename").name("Filename");
-  exportFolder.add(this, "exportOBJ").name("Export OBJ");
-  exportFolder.add(this, "exportSTL").name("Export STL");
-  exportFolder.add(this, "exportSTLascii").name("Export ASCII STL");
+  this.filenameController = exportFolder.add(this, "filename").name("Filename")
+    .title("Filename for the exported mesh.");
+  exportFolder.add(this, "exportOBJ").name("Export OBJ")
+    .title("Export as OBJ file.");
+  exportFolder.add(this, "exportSTL").name("Export STL")
+    .title("Export as binary STL file.");
+  exportFolder.add(this, "exportSTLascii").name("Export ASCII STL")
+    .title("Export as ASCII STL file");
 
-  var settingsFolder = this.gui.addFolder("Settings");
+  var settingsFolder = this.gui.addFolder("Settings", "Settings for computation.");
 
-  settingsFolder.add(this, "isLittleEndian").name("Little endian");
-  settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this));
+  settingsFolder.add(this, "isLittleEndian").name("Little endian")
+    .title("Endianness toggle for imports and exports.");
+  settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this))
+    .title("Precision p; 10^p is used as a conversion factor between floating-point and fixed-point coordinates.");
 
-  var displayFolder = this.gui.addFolder("Display");
+  var displayFolder = this.gui.addFolder("Display", "Mesh and build volume display settings.");
 
-  displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget");
-  displayFolder.add(this, "toggleCOM").name("Toggle center of mass");
-  displayFolder.add(this, "toggleWireframe").name("Toggle wireframe");
-  displayFolder.add(this, "cameraToModel").name("Camera to model");
+  displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget")
+    .title("Toggle axis widget visibility.");
+  displayFolder.add(this, "toggleWireframe").name("Toggle wireframe")
+    .title("Toggle mesh wireframe.");
+  displayFolder.add(this, "cameraToModel").name("Camera to model")
+    .title("Snap camera to model.");
   this.meshColor = "#662828"; // todo: reset to 0xffffff
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
   this.meshColorController =
-    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshMaterial.bind(this));
-  displayFolder.add(this, "meshRoughness", 0, 1).onChange(this.setMeshMaterial.bind(this));
-  displayFolder.add(this, "meshMetalness", 0, 1).onChange(this.setMeshMaterial.bind(this));
-  var buildVolumeFolder = displayFolder.addFolder("Build Volume");
-  buildVolumeFolder.add(this, "toggleBuildVolume").name("Toggle volume");
+    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshMaterial.bind(this))
+    .title("Set mesh color.");
+  displayFolder.add(this, "meshRoughness", 0, 1).name("Mesh roughness").onChange(this.setMeshMaterial.bind(this))
+    .title("Set mesh roughness.");
+  displayFolder.add(this, "meshMetalness", 0, 1).name("Mesh metalness").onChange(this.setMeshMaterial.bind(this))
+    .title("Set mesh metalness.");
+  var buildVolumeFolder = displayFolder.addFolder("Build Volume", "Size and visibility settings for the build volume.");
+  buildVolumeFolder.add(this, "toggleBuildVolume").name("Toggle volume")
+    .title("Toggle build volume visibility.");
   buildVolumeFolder.add(this, "centerOriginOnBuildPlate").name("Center origin")
+    .title("Center the origin on the floor of the build volume or place it in the corner.")
     .onChange(this.makeBuildVolume.bind(this));
   buildVolumeFolder.add(this.buildVolumeSize, "x", 0).name("Build volume x")
+    .title("Build volume size on x.")
     .onChange(this.makeBuildVolume.bind(this));
   buildVolumeFolder.add(this.buildVolumeSize, "y", 0).name("Build volume y")
+    .title("Build volume size on y.")
     .onChange(this.makeBuildVolume.bind(this));
   buildVolumeFolder.add(this.buildVolumeSize, "z", 0).name("Build volume z")
+    .title("Build volume size on z.")
     .onChange(this.makeBuildVolume.bind(this));
 
-  var transformFolder = this.gui.addFolder("Transform");
+  var transformFolder = this.gui.addFolder("Transform", "Mesh transformations: translation, scaling, rotations, normals.");
 
-  transformFolder.add(this, "autoCenter").name("Autocenter");
+  transformFolder.add(this, "autoCenter").name("Autocenter")
+    .title("Center the mesh on x and y; snap to the floor on z.");
 
   var translateFolder = transformFolder.addFolder("Translate");
   this.xTranslation = 0;
@@ -205,6 +222,7 @@ Stage.prototype.generateUI = function() {
   calculationFolder.add(this, "calcSurfaceArea").name("Surface area");
   calculationFolder.add(this, "calcVolume").name("Volume");
   calculationFolder.add(this, "calcCenterOfMass").name("Center of mass");
+  calculationFolder.add(this, "toggleCOM").name("Toggle center of mass");
 
   var measurementFolder = this.gui.addFolder("Measure");
   measurementFolder.add(this, "mLength").name("Length");
@@ -888,7 +906,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 150;//193;//135;
+  this.currentSliceLevel = 210;//135;
   this.setSliceLevel();
 
   this.filename = this.model.filename;
