@@ -187,10 +187,10 @@ Object.assign(MCG.Math, (function() {
 
       // if one segment registers as collinear with the other, say both segments
       // are collinear
-      if (result & flags.a0 && result & flags.a1) return flags.collinear;
-      if (result & flags.b0 && result & flags.b1) return flags.collinear;
-      if (result & flags.a0 && result & flags.b1) return flags.collinear;
-      if (result & flags.a1 && result & flags.b0) return flags.collinear;
+      //if (result & flags.a0 && result & flags.a1) return flags.collinear;
+      //if (result & flags.b0 && result & flags.b1) return flags.collinear;
+      //if (result & flags.a0 && result & flags.b1) return flags.collinear;
+      //if (result & flags.a1 && result & flags.b0) return flags.collinear;
 
       // possible intersection on intermediate points
       if (result === flags.none) {
