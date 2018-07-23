@@ -419,7 +419,7 @@ Slicer.prototype.setPreviewLevel = function() {
     }
 
     // debugging for calculating disjoint infill contours wrt k neighboring layers
-    if (1) {
+    if (0) {
       var idx0 = layer.params.idx0, idxk = layers.length - 1;
       var contour = layer.getInfillContour();
       var neighborContours = new MCG.SegmentSet(context);
@@ -430,7 +430,7 @@ Slicer.prototype.setPreviewLevel = function() {
           layers[level+i].getInfillContour().forEachPointPair(function(p1, p2) {
             var v1 = p1.toVector3(THREE.Vector3, context);
             var v2 = p2.toVector3(THREE.Vector3, context);
-            //debug.line(v1, v2, 1, false, 4+0.1*(i+1), axis);
+            //debug.line(v1, v2, 1, false, 0.5, axis);
           });
         }
         if (level - i >= idx0) {
@@ -438,7 +438,7 @@ Slicer.prototype.setPreviewLevel = function() {
           layers[level-i].getInfillContour().forEachPointPair(function(p1, p2) {
             var v1 = p1.toVector3(THREE.Vector3, context);
             var v2 = p2.toVector3(THREE.Vector3, context);
-            //debug.line(v1, v2, 1, false, 4-0.1*(i+1), axis);
+            //debug.line(v1, v2, 1, false, 0.5, axis);
           });
         }
       }
@@ -446,7 +446,7 @@ Slicer.prototype.setPreviewLevel = function() {
       contour.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.1, axis);
+        //debug.line(v1, v2, 1, false, 0.50001, axis);
       });
       neighborContours.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
@@ -465,8 +465,8 @@ Slicer.prototype.setPreviewLevel = function() {
         console.log(level, adj.map, key, adj.map[key]);
         var v = adj.map[key].pt.toVector3(THREE.Vector3, context);
         debug.line(v.clone().setZ(context.d),v.clone().setZ(context.d+3.1));
-        debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(THREE.Vector3, context), 1.01, context.axis);
-        debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(THREE.Vector3, context), 1.01, context.axis);
+        debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(THREE.Vector3, context), 0.51, context.axis);
+        debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(THREE.Vector3, context), 0.51, context.axis);
       }
 
       function sliverFilterFn(poly) { return !poly.isSliver(); }
@@ -479,7 +479,7 @@ Slicer.prototype.setPreviewLevel = function() {
       fullDifference.intersection.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, layer.params.numTopLayers*this.sliceHeight, axis);
+        //debug.line(v1, v2, 1, false, 0.1, axis);
       });
       fullDifference.intersection.toPolygonSet().forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
@@ -489,7 +489,7 @@ Slicer.prototype.setPreviewLevel = function() {
       fullDifference.AminusB.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, -0.3, axis);
+        //debug.line(v1, v2, 1, false, -0.1, axis);
       });
       fullDifference.AminusB.toPolygonSet().forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
@@ -1044,7 +1044,7 @@ Layer.prototype.writeToVerts = function(vertices) {
     return;
   }
   // write only infill contour
-  else if (1) {
+  else if (0) {
     var contour = this.getInfillContour();
     contour.forEachPointPair(function(p1, p2) {
       vertices.push(p1.toVector3(THREE.Vector3, context));
@@ -1070,7 +1070,7 @@ Layer.prototype.writeToVerts = function(vertices) {
     var infill = this.getInfill();
 
     var infillInner = true ? infill.inner : null;
-    var infillSolid = true ? infill.solid : null;
+    var infillSolid = false ? infill.solid : null;
 
     // write inner infill
     if (infillInner) {

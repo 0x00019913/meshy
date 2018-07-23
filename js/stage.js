@@ -906,8 +906,16 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 217;//135;
+  this.currentSliceLevel = 10;//135;
   this.setSliceLevel();
+
+  var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
+  if (ct) {
+    this.controls.update({
+      origin: ct,
+      r: 0.01
+    });
+  }
 
   this.filename = this.model.filename;
   this.setMeshMaterial();
