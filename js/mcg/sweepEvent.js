@@ -476,14 +476,20 @@ Object.assign(MCG.Sweep, (function() {
       return false;
     },
 
+    segmentsCoincident: function(other) {
+      var coincident = MCG.Math.coincident;
+
+      return coincident(this.p, other.p) && coincident(this.twin.p, other.twin.p);
+    },
+
     // returns MCG.Math.IntersectionFlags
     intersects: function(other) {
       var a = this, b = other;
 
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
+      var pa = a.p, pta = a.twin.p;
+      var pb = b.p, ptb = b.twin.p;
 
-      return MCG.Math.intersect(pa, pat, pb, pbt);
+      return MCG.Math.intersect(pa, pta, pb, ptb);
     },
 
     intersection: function(other) {
@@ -491,10 +497,10 @@ Object.assign(MCG.Sweep, (function() {
 
       if (a.endpointsCoincident(b)) return null;
 
-      var pa = a.p, pat = a.twin.p;
-      var pb = b.p, pbt = b.twin.p;
+      var pa = a.p, pta = a.twin.p;
+      var pb = b.p, ptb = b.twin.p;
 
-      return MCG.Math.intersection(pa, pat, pb, pbt);
+      return MCG.Math.intersection(pa, pta, pb, ptb);
     },
 
     setNoncontributing: function() {
