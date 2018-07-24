@@ -3,16 +3,8 @@
 function Slicer(sourceVertices, sourceFaces, params) {
   this.sourceVertices = sourceVertices;
   this.sourceFaces = sourceFaces;
-  this.sourceVertexCount = sourceVertices.length;
-  this.sourceFaceCount = sourceFaces.length;
-
-  this.previewGeo = new THREE.Geometry();
-  this.pathGeo = new THREE.Geometry();
 
   this.setParams(params);
-
-  this.previewGeometryReady = false;
-  this.pathGeometryReady = false;
 
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
@@ -30,6 +22,10 @@ function Slicer(sourceVertices, sourceFaces, params) {
   this.numLayers = this.numSlices + this.numRaftLayers;
   this.currentLevel = this.numLayers - 1;
 
+  // contains the geometry objects that are shown on the screen
+  this.geometries = {};
+  this.makeGeometry();
+
   // construct the layers array, which contains the structures necessary for
   // computing the actual geometry
   this.makeLayers();
@@ -38,8 +34,8 @@ function Slicer(sourceVertices, sourceFaces, params) {
 }
 
 Slicer.Modes = {
-  preview: 1,
-  path: 2
+  preview: "preview",
+  full: "full"
 };
 
 Slicer.InfillTypes = {
@@ -71,7 +67,12 @@ Slicer.DefaultParams = {
   raftGap: 0.05,
   raftBaseSpacing: 0.1,
 
-  precision: 5
+  precision: 5,
+
+  // display params; these determine how much to compute
+  previewSliceMesh: false,
+  fullUpToLayer: true,
+  fullShowInfill: false
 };
 
 Slicer.prototype.setParams = function(params) {
@@ -88,6 +89,22 @@ Slicer.prototype.setParams = function(params) {
 
   this.numRaftLayers = this.makeRaft ? this.raftBaseLayers + this.raftMainLayers : 0;
   if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
+}
+
+// update slicer params and return those that were updated
+Slicer.prototype.updateParams = function(params) {
+  var updated = {};
+
+  for (var p in params) {
+    var currVal = this[p];
+    var newVal = params[p];
+
+    if (currVal !== newVal) updated[p] = newVal;
+
+    this[p] = newVal;
+  }
+
+  return updated;
 }
 
 // necessary function - called from constructor
@@ -122,8 +139,7 @@ Slicer.prototype.calculateFaceBounds = function() {
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  if (mode === Slicer.Modes.preview) this.makePreviewGeometry();
-  else if (mode === Slicer.Modes.path) this.makePathGeometry();
+  this.makeGeometry();
 
   this.setLevel(this.currentLevel);
 }
@@ -132,26 +148,8 @@ Slicer.prototype.getMode = function() {
   return this.mode;
 }
 
-Slicer.prototype.readyPreviewGeometry = function() {
-  this.previewGeometryReady = true;
-}
-Slicer.prototype.readyPathGeometry = function() {
-  this.pathGeometryReady = true;
-}
-Slicer.prototype.unreadyPreviewGeometry = function() {
-  this.previewGeometryReady = false;
-}
-Slicer.prototype.unreadyPathGeometry = function() {
-  this.pathGeometryReady = false;
-}
-
 Slicer.prototype.getGeometry = function() {
-  if (this.mode==Slicer.Modes.preview) {
-    return this.previewGeo;
-  }
-  else if (this.mode==Slicer.Modes.path) {
-    return this.pathGeo;
-  }
+  return this.geometries;
 }
 
 Slicer.prototype.getNumLayers = function() {
@@ -164,134 +162,146 @@ Slicer.prototype.getCurrentLevel = function() {
 
 Slicer.prototype.setLevel = function(level) {
   level = clamp(level, 0, this.numLayers - 1);
+  var prevLevel = this.currentLevel;
   this.currentLevel = level;
 
-  if (this.mode==Slicer.Modes.preview) this.setPreviewLevel();
-  else if (this.mode==Slicer.Modes.Path) this.setPathLevel();
-}
+  if (this.mode === Slicer.Modes.preview) {
+    var slicePos = this.min[this.axis] + (level + 0.5) * this.sliceHeight;
+    var faceBounds = this.faceBounds;
 
-Slicer.prototype.setPreviewLevel = function() {
-  var level = this.currentLevel;
+    if (this.previewSliceMesh) {
+      // array of faces that intersect the slicing plane
+      var slicedFaces = [];
 
-  var sliceLevel = this.min[this.axis] + (level-0.5) * this.sliceHeight;
-  var faceBounds = this.faceBounds;
+      for (var i = this.sourceFaces.length-1; i >= 0; i--) {
+        var bounds = faceBounds[i];
+        // if min above slice level, need to hide the face
+        if (bounds.min >= slicePos) bounds.face.materialIndex = 1;
+        // else min <= slice level
+        else {
+          // if max below slice level, need to show the face
+          if (bounds.max < slicePos) bounds.face.materialIndex = 0;
+          // else, face is cut
+          else {
+            bounds.face.materialIndex = 1;
+            slicedFaces.push(bounds.face);
+          }
+        }
+      }
 
-  /*
-  // array of faces that intersect the slicing plane
-  var slicedFaces = [];
+      // handle the sliced faces: slice them and insert them (and associated verts)
+      // into sliced mesh
 
-  if (!this.gpu) this.gpu = new GPU();
-  var compute = this.gpu.createKernel(function(a) {
-    return a[this.thread.x];
-  }).setOutput([faceBounds.length]);
+      var geos = this.geometries;
 
-  var c = compute(faceBounds);
+      // current vertices and faces
+      var vertices = geos.slicedMesh.geo.vertices;
+      var faces = geos.slicedMesh.geo.faces;
 
-  for (var i = this.sourceFaceCount-1; i >= 0; i--) {
-    var bounds = faceBounds[i];
-    // if min above slice level, need to hide the face
-    if (bounds.min >= sliceLevel) bounds.face.materialIndex = 1;
-    // else min <= slice level
-    else {
-      // if max below slice level, need to show the face
-      if (bounds.max < sliceLevel) bounds.face.materialIndex = 0;
-      // else, face is cut
-      else {
-        bounds.face.materialIndex = 1;
-        slicedFaces.push(bounds.face);
+      // local vars for ease of access
+      var vertexCount = this.sourceVertices.length;
+      var faceCount = this.sourceFaces.length;
+
+      // erase any sliced verts and faces
+      vertices.length = vertexCount;
+      faces.length = faceCount;
+
+      var axis = this.axis;
+
+      // current vertex
+      var vidx = vertexCount;
+
+      // slice the faces
+      for (var f = 0; f < slicedFaces.length; f++) {
+        var slicedFace = slicedFaces[f];
+
+        this.sliceFace(slicedFace, vertices, slicePos, axis, function(normal, ccw, A, B, C, D) {
+          if (D === undefined) {
+            var idxA = vidx;
+            var idxB = idxA + 1;
+            var idxC = idxA + 2;
+            vertices.push(A);
+            vertices.push(B);
+            vertices.push(C);
+            vidx += 3;
+
+            var newFace;
+            if (ccw) newFace = new THREE.Face3(idxA, idxB, idxC);
+            else newFace = new THREE.Face3(idxB, idxA, idxC);
+
+            newFace.normal.copy(slicedFace.normal);
+
+            // explicitly visible
+            newFace.materialIndex = 0;
+
+            faces.push(newFace);
+          }
+          else {
+            var idxA = vidx;
+            var idxB = idxA + 1;
+            var idxC = idxA + 2;
+            var idxD = idxA + 3;
+            vertices.push(A);
+            vertices.push(B);
+            vertices.push(C);
+            vertices.push(D);
+            vidx += 4;
+
+            // create the new faces and push it into the faces array
+            var newFace1, newFace2;
+            if (ccw) {
+              newFace1 = new THREE.Face3(idxA, idxB, idxC);
+              newFace2 = new THREE.Face3(idxC, idxB, idxD);
+            }
+            else {
+              newFace1 = new THREE.Face3(idxB, idxA, idxC);
+              newFace2 = new THREE.Face3(idxB, idxC, idxD);
+            }
+            newFace1.normal.copy(slicedFace.normal);
+            newFace2.normal.copy(slicedFace.normal);
+
+            // explicitly visible
+            newFace1.materialIndex = 0;
+            newFace2.materialIndex = 0;
+
+            faces.push(newFace1);
+            faces.push(newFace2);
+          }
+        });
       }
     }
+
+    debug.cleanup();
+
+    var layers = this.layers;
+    var layer = layers[level];
+    var context = layer.context;
+    var axis = context.axis;
+
+    var geos = this.geometries;
+    var currentLayerBaseGeo = geos.currentLayerBase.geo;
+    var currentLayerContourGeo = geos.currentLayerContours.geo;
+    var currentLayerInfillGeo = geos.currentLayerInfill.geo;
+
+    var baseVertices = currentLayerBaseGeo.vertices;
+    baseVertices.length = 0;
+    layer.writeBase(baseVertices);
+
+    var contourVertices = currentLayerContourGeo.vertices;
+    contourVertices.length = 0;
+    layer.writePrintContours(contourVertices);
+
+    var infillVertices = currentLayerInfillGeo.vertices;
+    infillVertices.length = 0;
+    layer.writeInfill(infillVertices);
+
+    //debug.lines();
+  }
+  else if (this.mode === Slicer.Modes.full) {
+    // todo
   }
 
-  // handle the sliced faces: slice them and insert them (and associated verts)
-  // into previewMesh
-
-  // current vertices and faces
-  var vertices = this.previewVertices;
-  var faces = this.previewFaces;
-
-  // local vars for ease of access
-  var vertexCount = this.sourceVertexCount;
-  var faceCount = this.sourceFaceCount;
-
-  // erase any sliced verts and faces
-  vertices.length = vertexCount;
-  faces.length = faceCount;
-
-  var axis = this.axis;
-
-  // current vertex
-  var vidx = vertexCount;
-
-  // slice the faces
-  for (var f = 0; f < slicedFaces.length; f++) {
-    var slicedFace = slicedFaces[f];
-
-    this.sliceFace(slicedFace, vertices, sliceLevel, axis, function(normal, ccw, A, B, C, D) {
-      if (D === undefined) {
-        var idxA = vidx;
-        var idxB = idxA + 1;
-        var idxC = idxA + 2;
-        vertices.push(A);
-        vertices.push(B);
-        vertices.push(C);
-        vidx += 3;
-
-        var newFace;
-        if (ccw) newFace = new THREE.Face3(idxA, idxB, idxC);
-        else newFace = new THREE.Face3(idxB, idxA, idxC);
-
-        newFace.normal.copy(slicedFace.normal);
-
-        // explicitly visible
-        newFace.materialIndex = 0;
-
-        faces.push(newFace);
-      }
-      else {
-        var idxA = vidx;
-        var idxB = idxA + 1;
-        var idxC = idxA + 2;
-        var idxD = idxA + 3;
-        vertices.push(A);
-        vertices.push(B);
-        vertices.push(C);
-        vertices.push(D);
-        vidx += 4;
-
-        // create the new faces and push it into the faces array
-        var newFace1, newFace2;
-        if (ccw) {
-          newFace1 = new THREE.Face3(idxA, idxB, idxC);
-          newFace2 = new THREE.Face3(idxC, idxB, idxD);
-        }
-        else {
-          newFace1 = new THREE.Face3(idxB, idxA, idxC);
-          newFace2 = new THREE.Face3(idxB, idxC, idxD);
-        }
-        newFace1.normal.copy(slicedFace.normal);
-        newFace2.normal.copy(slicedFace.normal);
-
-        // explicitly visible
-        newFace1.materialIndex = 0;
-        newFace2.materialIndex = 0;
-
-        faces.push(newFace1);
-        faces.push(newFace2);
-      }
-    });
-  }*/
-
-  debug.cleanup();
-
-  var layers = this.layers;
-  var layer = layers[level];
-  var context = layer.context;
-  var axis = context.axis;
-  var vertices = [];
-
-  if (0) {
-
+  /*if (0) {
     var sd = layer.source.toPolygonSet().fdecimate(this.resolution);
     var u = MCG.Boolean.union(sd,undefined,{idx:level, dbg:false}).union;
     var adj = u.makeAdjacencyMap();
@@ -546,62 +556,42 @@ Slicer.prototype.setPreviewLevel = function() {
         });
       }
     }
-  }
-  else {
-    layer.base.forEachPointPair(function(p1, p2) {
-      var v1 = p1.toVector3(THREE.Vector3, context);
-      var v2 = p2.toVector3(THREE.Vector3, context);
-      debug.line(v1, v2, 1, false, 0.0, axis);
-    });
-
-  }
-
-  debug.lines();
-
-  return;
+  }*/
 }
 
-Slicer.prototype.setPathLevel = function() {
-  var slice = this.currentLevel;
-  // todo
-}
+Slicer.prototype.makeGeometry = function() {
+  var geos = this.geometries;
 
-Slicer.prototype.makePreviewGeometry = function() {
-  if (this.previewGeometryReady) return;
+  geos.currentLayerContours = {
+    geo: new THREE.Geometry()
+  };
+  geos.currentLayerBase = {
+    geo: new THREE.Geometry()
+  };
+  geos.currentLayerInfill = {
+    geo: new THREE.Geometry()
+  };
+  geos.allContours = {
+    geo: new THREE.Geometry()
+  };
+  geos.slicedMesh = {
+    geo: new THREE.Geometry()
+  };
 
-  this.previewGeo.vertices = this.sourceVertices.slice();
-  this.previewGeo.faces = [];
+  var geoSlicedMesh = geos.slicedMesh.geo;
+
+  var vertices = this.sourceVertices.slice();
+  var faces = [];
 
   // set the face array on the mesh
-  for (var i=0; i<this.faceBounds.length; i++) {
+  for (var i = 0; i < this.faceBounds.length; i++) {
     var face = this.faceBounds[i].face;
-    face.materialIndex = 0; // explicitly set as visible by default
-    this.previewGeo.faces.push(face);
+    face.materialIndex = 0;
+    faces.push(face);
   }
 
-  this.previewGeometryReady = true;
-}
-
-Slicer.prototype.makePathGeometry = function() {
-  if (this.pathGeometryReady) return;
-
-  var layers = this.layers;
-  var pathVertices = [];
-
-  for (var l = 0; l < layers.length; l++) {
-    var layer = layers[l];
-    if (layer === undefined) continue;
-
-    layer.computePrintContours();
-    layer.computeInfill();
-
-    layer.writeToVerts(pathVertices);
-  }
-
-  debug.lines();
-
-  this.pathGeo.vertices = pathVertices;
-  this.pathGeometryReady = true;
+  geoSlicedMesh.vertices = vertices;
+  geoSlicedMesh.faces = faces;
 }
 
 Slicer.prototype.makeLayers = function() {
@@ -678,7 +668,7 @@ Slicer.prototype.buildLayerFaceLists = function() {
   for (var i = 0; i < numSlices; i++) layerLists[i] = [];
 
   // bucket the faces
-  for (var i = 0; i < this.sourceFaceCount; i++) {
+  for (var i = 0; i < this.sourceFaces.length; i++) {
     var bounds = faceBounds[i];
     var idx;
 
@@ -1030,62 +1020,62 @@ Layer.prototype.computeInfill = function() {
   function filterFn(segment) { return segment.lengthSq() >= iressq / 4; }
 }
 
-Layer.prototype.writeToVerts = function(vertices) {
+Layer.prototype.writeBase = function(vertices) {
   var context = this.context;
+  var base = this.getBase();
+  var count = 0;
 
-  // todo: remove
-  // write only base
-  if (0) {
-    var base = this.getBase();
+  if (base) {
     base.forEachPointPair(function(p1, p2) {
       vertices.push(p1.toVector3(THREE.Vector3, context));
       vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
     });
-    return;
   }
-  // write only infill contour
-  else if (0) {
-    var contour = this.getInfillContour();
-    contour.forEachPointPair(function(p1, p2) {
+
+  return count;
+}
+
+Layer.prototype.writePrintContours = function(vertices) {
+  var context = this.context;
+  var contours = this.getPrintContours();
+  var count = 0;
+
+  if (contours) {
+    for (var c = 0; c < contours.length; c++) {
+      contours[c].forEachPointPair(function(p1, p2) {
+        vertices.push(p1.toVector3(THREE.Vector3, context));
+        vertices.push(p2.toVector3(THREE.Vector3, context));
+        count += 2;
+      });
+    }
+  }
+
+  return count;
+}
+
+Layer.prototype.writeInfill = function(vertices) {
+  var context = this.context;
+  var infill = this.getInfill();
+  var infillInner = infill.inner;
+  var infillSolid = infill.solid;
+  var count = 0;
+
+  if (infillInner) {
+    infillInner.forEachPointPair(function(p1, p2) {
       vertices.push(p1.toVector3(THREE.Vector3, context));
       vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
     });
-    return;
   }
-  // write only print contours
-  else if (0) {
-    var contours = this.getPrintContours();
 
-    if (contours) {
-      for (var c = 0; c < contours.length; c++) {
-        contours[c].forEachPointPair(function(p1, p2) {
-          vertices.push(p1.toVector3(THREE.Vector3, context));
-          vertices.push(p2.toVector3(THREE.Vector3, context));
-        });
-      }
-    }
+  if (infillSolid) {
+    infillSolid.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, context));
+      vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
+    });
   }
-  // write only infill
-  else if (1) {
-    var infill = this.getInfill();
 
-    var infillInner = true ? infill.inner : null;
-    var infillSolid = false ? infill.solid : null;
-
-    // write inner infill
-    if (infillInner) {
-      infillInner.forEachPointPair(function(p1, p2) {
-        vertices.push(p1.toVector3(THREE.Vector3, context));
-        vertices.push(p2.toVector3(THREE.Vector3, context));
-      });
-    }
-
-    // write solid infill
-    if (infillSolid) {
-      infillSolid.forEachPointPair(function(p1, p2) {
-        vertices.push(p1.toVector3(THREE.Vector3, context));
-        vertices.push(p2.toVector3(THREE.Vector3, context));
-      });
-    }
-  }
+  return count;
 }

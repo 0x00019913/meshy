@@ -128,7 +128,7 @@ Object.assign(MCG.Sweep, (function() {
       if (drawEvents) o += incr*10;
     }
 
-    debug.lines();
+    //debug.lines();
 
     return store.result;
 

@@ -42,8 +42,12 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.mode = "base";
   this.baseMesh = null;
   this.slicer = null; // instance of module responsible for slicing
-  this.slicePreviewMesh = null;
-  this.slicePathMesh = null;
+  this.sliceOneLayerBaseMesh = null;
+  this.sliceOneLayerContourMesh = null;
+  this.sliceOneLayerInfillMesh = null;
+  this.sliceAllContourMesh = null;
+  this.slicePreviewSlicedMesh = null;
+  this.slicePreviewGhostMesh = null;
 
   // will contain the bounds of distinct components in the geometry (main mesh
   // geometry, patch, supports)
@@ -66,31 +70,38 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       roughness: 0.3,
       metalness: 0.5
     }),
-    slicePreviewMesh: new THREE.MeshStandardMaterial({
-      side: THREE.FrontSide,
+    sliceOneLayerBase: new THREE.LineBasicMaterial({
+      color: 0x999999,
+      linewidth: 1
+    }),
+    sliceOneLayerContour: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
+    }),
+    sliceOneLayerInfill: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
+    }),
+    sliceAllContours: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
+    }),
+    slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
+      side: THREE.DoubleSide,
       color: 0x0f0f30,
-      roughness: 1,
-      metalness: 0
+      roughness: 0.8,
+      metalness: 0.3
     }),
     slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0
     }),
-    slicePreviewMeshSliceSurface: new THREE.MeshStandardMaterial({
-      color: 0x6666ff
-    }),
     slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
       color: 0x0f0f30,
       transparent: true,
-      opacity: 0.3
-    }),
-    slicePathMesh: new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      linewidth: 1
-    }),
-    slicePathMeshSecondary: new THREE.LineBasicMaterial({
-      color: 0xdddddd,
-      linewidth: 1
+      opacity: 0.3,
+      roughness: 0.7,
+      metalness: 0.3
     }),
     patch: new THREE.MeshStandardMaterial({
       color: 0x44ff44,
@@ -735,6 +746,7 @@ Model.prototype.setMode = function(mode, params) {
   this.mode = mode;
   // remove any current meshes in the scene
   removeMeshByName(this.scene, "model");
+  removeMeshByName(this.scene, "slice");
 
   // base mode - display the normal, plain mesh
   if (mode == "base") {
@@ -745,8 +757,8 @@ Model.prototype.setMode = function(mode, params) {
   else if (mode == "slice") {
     this.slicer = new Slicer(this.vertices, this.faces, params);
 
-    this.makeSliceMesh();
-    this.addSliceMesh();
+    this.makeSliceMeshes();
+    this.addSliceMeshesToScene();
   }
 }
 
@@ -789,23 +801,69 @@ Model.prototype.makeBaseMesh = function() {
   this.baseMesh.frustumCulled = false;
 }
 
-// Create a slice mesh for the current slice mode.
-Model.prototype.makeSliceMesh = function() {
-  if (this.slicer.mode === Slicer.Modes.preview) this.makeSlicePreviewMesh();
-  else if (this.slicer.mode === Slicer.Modes.path) this.makeSlicePathMesh();
+Model.prototype.addSliceMeshesToScene = function() {
+  if (!this.slicer) return;
 
-  this.setSliceMeshGeometry();
-}
+  removeMeshByName(this.scene, "slice");
 
-Model.prototype.addSliceMesh = function() {
+  // add meshes for current layer contours and infill, unless mode is full and
+  // showing all layers at once
+  if (!this.slicer.mode === Slicer.Modes.full || this.slicer.fullUpToLayer) {
+    this.scene.add(this.sliceOneLayerBaseMesh);
+    this.scene.add(this.sliceOneLayerContourMesh);
+    this.scene.add(this.sliceOneLayerInfillMesh);
+  }
+
+  // if preview, either add sliced mesh or ghost mesh
   if (this.slicer.mode === Slicer.Modes.preview) {
-    if (this.slicePreviewMesh) this.scene.add(this.slicePreviewMesh);
+    if (this.slicer.previewSliceMesh) this.scene.add(this.slicePreviewSlicedMesh);
+    else this.scene.add(this.slicePreviewGhostMesh);
   }
-  else if (this.slicer.mode === Slicer.Modes.path) {
-    if (this.slicePathMesh) this.scene.add(this.slicePathMesh);
+  // else, if full, add all-contour mesh
+  else if (this.slicer.mode === Slicer.Modes.full) {
+    this.scene.add(this.sliceAllContourMesh);
   }
 }
 
+// mark slice meshes in the scene as needing update
+Model.prototype.updateSliceMeshesInScene = function() {
+  if (!this.slicer) return;
+
+  var geos = this.slicer.getGeometry();
+
+  if (!this.slicer.mode === Slicer.Modes.full || this.slicer.fullUpToLayer) {
+    var oneLayerBaseGeo = new THREE.Geometry();
+    oneLayerBaseGeo.vertices = geos.currentLayerBase.geo.vertices;
+    this.sliceOneLayerBaseMesh.geometry = oneLayerBaseGeo;
+
+    var oneLayerContourGeo = new THREE.Geometry();
+    oneLayerContourGeo.vertices = geos.currentLayerContours.geo.vertices;
+    this.sliceOneLayerContourMesh.geometry = oneLayerContourGeo;
+
+    var oneLayerInfillGeo = new THREE.Geometry();
+    oneLayerInfillGeo.vertices = geos.currentLayerInfill.geo.vertices;
+    this.sliceOneLayerInfillMesh.geometry = oneLayerInfillGeo;
+  }
+
+  if (this.slicer.mode === Slicer.Modes.preview) {
+    if (this.slicer.previewSliceMesh) {
+      var slicedMeshGeo = new THREE.Geometry();
+      slicedMeshGeo.vertices = geos.slicedMesh.geo.vertices;
+      slicedMeshGeo.faces = geos.slicedMesh.geo.faces;
+      this.slicePreviewSlicedMesh.geometry = slicedMeshGeo;
+
+      this.slicePreviewSlicedMesh.geometry.verticesNeedUpdate = true;
+      this.slicePreviewSlicedMesh.geometry.elementsNeedUpdate = true;
+    }
+  }
+  else if (this.slicer.mode === Slicer.Modes.full) {
+    var allContourGeo = new THREE.Geometry();
+    allContourGeo.vertices = geos.allContours.geo.vertices;
+    this.sliceAllContourMesh.geometry = allContourGeo;
+  }
+}
+
+// TODO: DEPRECATE
 // Set the geometry on the current slice mesh.
 Model.prototype.setSliceMeshGeometry = function() {
   if (!this.slicer) return;
@@ -816,24 +874,16 @@ Model.prototype.setSliceMeshGeometry = function() {
   var sliceFaces = sliceGeometry.faces;
 
   if (this.slicer.mode==Slicer.Modes.preview) {
-    var mesh = this.slicePathMesh;
+    var mesh = this.sliceFullMesh;
     if (!mesh) return;
 
     mesh.geometry.vertices = sliceVertices;
 
     mesh.geometry.verticesNeedUpdate = true;
     mesh.geometry.lineDistancesNeedUpdate = true;
-
-    return;
-
-    mesh.geometry.vertices = [];//sliceVertices;
-    mesh.geometry.faces = [];//sliceFaces;
-
-    mesh.geometry.groupsNeedUpdate = true;
-    mesh.geometry.elementsNeedUpdate = true;
   }
-  else if (this.slicer.mode==Slicer.Modes.path) {
-    var mesh = this.slicePathMesh;
+  else if (this.slicer.mode==Slicer.Modes.full) {
+    var mesh = this.sliceFullMesh;
     if (!mesh) return;
 
     mesh.geometry = new THREE.Geometry();
@@ -844,50 +894,65 @@ Model.prototype.setSliceMeshGeometry = function() {
   }
 }
 
-// Create the slice-mode preview mesh.
-Model.prototype.makeSlicePreviewMesh = function() {
-  if (this.slicePreviewMesh) return;
+// make display meshes for slice mode
+Model.prototype.makeSliceMeshes = function() {
+  if (!this.slicer) return;
 
-  this.slicePreviewMesh = this.baseMesh.clone();
-  this.slicePreviewMesh.material = this.materials.slicePreviewMeshGhost;
+  var geos = this.slicer.getGeometry();
+  var mesh;
 
-  return;
-
-  var geo = new THREE.Geometry();
-
-  // each face in the preview mesh will have one of these materials
-  var faceMaterials = [
-    // set materialIndex = 0 to make a face visible
-    this.materials.slicePreviewMesh,
-    // set materialindex = 1 to hide a face
-    this.materials.slicePreviewMeshTransparent
-  ];
-  var mesh = new THREE.Mesh(geo, faceMaterials);
-  mesh.name = "model";
+  // make mesh for current layer's base contour
+  mesh = new THREE.LineSegments(
+    geos.currentLayerBase.geo,
+    this.materials.sliceOneLayerBase
+  );
+  mesh.name = "slice";
   mesh.frustumCulled = false;
+  this.sliceOneLayerBaseMesh = mesh;
 
-  var faceMaterialsInternal = [
-    this.materials.slicePreviewMesh,
-    this.materials.slicePreviewMeshTransparent
-  ];
-  var meshInternal = new THREE.Mesh(geo, faceMaterialsInternal);
-  meshInternal.name = "model";
-  meshInternal.frustumCulled = false;
-
-  this.slicePreviewMesh = mesh;
-}
-
-// Create the slice-mode path visualization mesh.
-Model.prototype.makeSlicePathMesh = function() {
-  if (this.slicePathMesh) return;
-
-  var geo = new THREE.Geometry();
-
-  var mesh = new THREE.LineSegments(geo, this.materials.slicePathMesh);
-  mesh.name = "model";
+  // make mesh for current layer's print contours
+  mesh = new THREE.LineSegments(
+    geos.currentLayerContours.geo,
+    this.materials.sliceOneLayerContour
+  );
+  mesh.name = "slice";
   mesh.frustumCulled = false;
+  this.sliceOneLayerContourMesh = mesh;
 
-  this.slicePathMesh = mesh;
+  // make mesh for current layer's infill
+  mesh = new THREE.LineSegments(
+    geos.currentLayerInfill.geo,
+    this.materials.sliceOneLayerInfill
+  );
+  mesh.name = "slice";
+  mesh.frustumCulled = false;
+  this.sliceOneLayerInfillMesh = mesh;
+
+  // make mesh for all non-current layer contours
+  mesh = new THREE.LineSegments(
+    geos.allContours.geo,
+    this.materials.sliceAllContours
+  );
+  mesh.name = "slice";
+  mesh.frustumCulled = false;
+  this.sliceAllContourMesh = mesh;
+
+  // make mesh for sliced geometry - supports two material indices for making
+  // faces visible and invisible
+  mesh = new THREE.Mesh(
+    geos.slicedMesh.geo,
+    [this.materials.slicePreviewMeshVisible, this.materials.slicePreviewMeshTransparent]
+  );
+  mesh.name = "slice";
+  mesh.frustumCulled = false;
+  this.slicePreviewSlicedMesh = mesh;
+
+  // to make the ghost, just clone the base mesh and assign ghost material
+  mesh = this.baseMesh.clone();
+  mesh.material = this.materials.slicePreviewMeshGhost;
+  mesh.name = "slice";
+  mesh.frustumCulled = false;
+  this.slicePreviewGhostMesh = mesh;
 }
 
 
@@ -2004,7 +2069,7 @@ Model.prototype.deactivateSliceMode = function() {
   this.setMode("base");
   this.slicer = null;
   this.slicePreviewMesh = null;
-  this.slicePathMesh = null;
+  this.sliceFullMesh = null;
 }
 
 Model.prototype.getNumLayers = function() {
@@ -2027,12 +2092,9 @@ Model.prototype.setSliceMode = function(sliceMode) {
 
   removeMeshByName(this.scene, "model");
 
-  this.slicer.mode = sliceMode;
-
   this.slicer.setMode(sliceMode);
 
-  this.makeSliceMesh();
-  this.addSliceMesh();
+  this.updateSliceMeshesInScene();
 }
 
 Model.prototype.setSliceLevel = function(level) {
@@ -2040,7 +2102,17 @@ Model.prototype.setSliceLevel = function(level) {
 
   this.slicer.setLevel(level);
 
-  this.setSliceMeshGeometry();
+  this.updateSliceMeshesInScene();
+}
+
+Model.prototype.updateSlicerDisplayParams = function(params) {
+  if (!this.slicer) return;
+
+  this.slicer.updateParams(params);
+  this.setSliceLevel(this.slicer.getCurrentLevel());
+
+  this.addSliceMeshesToScene();
+  //this.updateSliceMeshesInScene();
 }
 
 Model.prototype.recalculateLayers = function(resolution, numWalls) {
@@ -2048,11 +2120,11 @@ Model.prototype.recalculateLayers = function(resolution, numWalls) {
 
   this.slicer.setResolution(resolution);
   this.slicer.setNumWalls(numWalls);
-  this.slicer.unreadyPathGeometry();
+  this.slicer.unreadyGeometry();
 
   // layer geometry is on the screen, so recalculate now
-  if (this.slicer.mode == Slicer.Modes.path) {
-    this.slicer.makePathGeometry();
+  if (this.slicer.mode == Slicer.Modes.full) {
+    this.slicer.makeFullGeometry();
     this.setSliceMeshGeometry();
   }
 }
@@ -2528,6 +2600,7 @@ Model.prototype.dispose = function() {
   this.stopIterator();
 
   removeMeshByName(this.scene, "model");
+  removeMeshByName(this.scene, "slice");
   removeMeshByName(this.scene, "targetPlane");
 
   // remove measurement markers, etc. from the scene

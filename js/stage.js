@@ -263,9 +263,12 @@ Stage.prototype.generateUI = function() {
   this.supportRadiusFnK = 0.01;
   this.sliceMode = Slicer.Modes.preview; // todo: back to preview
   this.sliceModeOn = false;
+  this.slicePreviewModeSliceMesh = true;
+  this.sliceFullModeUpToLayer = true;
+  this.sliceFullModeShowInfill = false;
   this.sliceNumWalls = 2;
   this.sliceNumTopLayers = 3;
-  this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
+  this.sliceInfillType = Slicer.InfillTypes.solid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
   this.sliceMakeRaft = false; // todo: back to true
@@ -472,6 +475,20 @@ Stage.prototype.buildSupportFolder = function(folder) {
   folder.add(this, "generateSupports").name("Generate supports");
   folder.add(this, "removeSupports").name("Remove supports");
 }
+Stage.prototype.buildSliceDisplayFolder = function(folder) {
+  this.clearFolder(folder);
+
+  if (this.sliceMode === Slicer.Modes.preview) {
+    folder.add(this, "slicePreviewModeSliceMesh", true).name("Show sliced mesh")
+      .onChange(this.updateSlicerDisplayParams.bind(this));
+  }
+  else if (this.sliceMode === Slicer.Modes.full) {
+    folder.add(this, "sliceFullModeUpToLayer").name("Up to layer")
+      .onChange(this.updateSlicerDisplayParams.bind(this));
+    folder.add(this, "sliceFullModeShowInfill").name("Show infill")
+      .onChange(this.updateSlicerDisplayParams.bind(this));
+  }
+}
 Stage.prototype.buildSliceFolder = function(folder) {
   this.clearFolder(folder);
   if (this.sliceModeOn) {
@@ -487,9 +504,12 @@ Stage.prototype.buildSliceFolder = function(folder) {
       folder.add(
         this,
         "sliceMode",
-        { "preview": Slicer.Modes.preview, "path": Slicer.Modes.path }
+        { "preview": Slicer.Modes.preview, "full": Slicer.Modes.full }
       ).name("Mode").onChange(this.setSliceMode.bind(this));
     }
+
+    this.sliceDisplayFolder = folder.addFolder("Display");
+    this.buildSliceDisplayFolder(this.sliceDisplayFolder);
   }
   this.buildLayerSettingsFolder(folder);
   this.buildRaftFolder(folder);
@@ -528,31 +548,51 @@ Stage.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
 }
 Stage.prototype.setSliceMode = function() {
-  if (this.model) this.model.setSliceMode(parseInt(this.sliceMode));
+  if (this.model) {
+    this.model.setSliceMode(this.sliceMode);
+    this.buildSliceDisplayFolder(this.sliceDisplayFolder);
+  }
+}
+Stage.prototype.updateSlicerDisplayParams = function() {
+  if (this.model) {
+    this.model.updateSlicerDisplayParams({
+      previewSliceMesh: this.slicePreviewModeSliceMesh,
+      fullUpToLayer: this.sliceFullModeUpToLayer,
+      fullShowInfill: this.sliceFullModeShowInfill
+    });
+    this.setSliceLevel();
+  }
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = true;
-    this.model.activateSliceMode({
-      mode: this.sliceMode,
-      axis: this.upAxis,
-      sliceHeight: this.verticalResolution,
-      resolution: this.planarResolution,
-      numWalls: this.sliceNumWalls,
-      numTopLayers: this.sliceNumTopLayers,
-      infillType: parseInt(this.sliceInfillType),
-      infillDensity: this.sliceInfillDensity,
-      infillOverlap: this.sliceInfillOverlap,
-      makeRaft: this.sliceMakeRaft,
-      raftMainLayers: this.sliceRaftMainLayers,
-      raftBaseLayers: this.sliceRaftBaseLayers,
-      raftOffset: this.sliceRaftOffset,
-      raftGap: this.sliceRaftGap,
-      raftBaseSpacing: this.sliceRaftBaseSpacing,
-      precision: this.vertexPrecision
-    });
+    this.model.activateSliceMode(this.makeSlicerParams());
     this.buildSliceFolder(this.supportSliceFolder);
   }
+}
+Stage.prototype.makeSlicerParams = function() {
+  return {
+    mode: this.sliceMode,
+    axis: this.upAxis,
+    sliceHeight: this.verticalResolution,
+    resolution: this.planarResolution,
+    numWalls: this.sliceNumWalls,
+    numTopLayers: this.sliceNumTopLayers,
+    infillType: parseInt(this.sliceInfillType),
+    infillDensity: this.sliceInfillDensity,
+    infillOverlap: this.sliceInfillOverlap,
+    makeRaft: this.sliceMakeRaft,
+    raftMainLayers: this.sliceRaftMainLayers,
+    raftBaseLayers: this.sliceRaftBaseLayers,
+    raftOffset: this.sliceRaftOffset,
+    raftGap: this.sliceRaftGap,
+    raftBaseSpacing: this.sliceRaftBaseSpacing,
+    precision: this.vertexPrecision,
+    // display params
+    previewSliceMesh: this.slicePreviewModeSliceMesh,
+    fullUpToLayer: this.sliceFullModeUpToLayer,
+    fullShowInfill: this.sliceFullModeShowInfill
+  };
 }
 Stage.prototype.deactivateSliceMode = function() {
   if (this.model) {
@@ -647,7 +687,7 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .001, 10000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -906,7 +946,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 10;//135;
+  this.currentSliceLevel = 150;//135;
   this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
