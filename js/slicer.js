@@ -205,33 +205,49 @@ Slicer.prototype.setLevel = function(level) {
 
     // erase any sliced verts and faces
     vertices.length = vertexCount;
-    faces.length = faceCount;
+    //faces.length = faceCount;
+
+    // current vertex
+    var vidx = vertexCount;
+    var fidx = 0;
 
     if (this.previewSliceMesh) {
+      var t = performance.now();
       // array of faces that intersect the slicing plane
       var slicedFaces = [];
 
       for (var i = this.sourceFaces.length-1; i >= 0; i--) {
         var bounds = faceBounds[i];
-        // if min above slice level, need to hide the face
-        if (bounds.min >= slicePos) bounds.face.materialIndex = 1;
+        var face = bounds.face;
+
+        if (bounds.max < slicePos) {
+          faces[fidx++] = face;
+        }
+        else if (bounds.min < slicePos) {
+          slicedFaces.push(face);
+        }
+
+        /*// if min above slice level, need to hide the face
+        if (bounds.min >= slicePos) {
+          face.materialIndex = 1;
+        }
         // else min <= slice level
         else {
           // if max below slice level, need to show the face
-          if (bounds.max < slicePos) bounds.face.materialIndex = 0;
+          if (bounds.max < slicePos) {
+            faces.push(face);
+            face.materialIndex = 0;
+          }
           // else, face is cut
           else {
-            bounds.face.materialIndex = 1;
-            slicedFaces.push(bounds.face);
+            face.materialIndex = 1;
+            slicedFaces.push(face);
           }
-        }
+        }*/
       }
 
       // handle the sliced faces: slice them and insert them (and associated verts)
       // into sliced mesh
-
-      // current vertex
-      var vidx = vertexCount;
 
       // slice the faces
       for (var f = 0; f < slicedFaces.length; f++) {
@@ -256,7 +272,8 @@ Slicer.prototype.setLevel = function(level) {
             // explicitly visible
             newFace.materialIndex = 0;
 
-            faces.push(newFace);
+            faces[fidx++] = newFace;
+            //faces.push(newFace);
           }
           else {
             var idxA = vidx;
@@ -286,10 +303,14 @@ Slicer.prototype.setLevel = function(level) {
             newFace1.materialIndex = 0;
             newFace2.materialIndex = 0;
 
-            faces.push(newFace1);
-            faces.push(newFace2);
+            faces[fidx++] = newFace1;
+            faces[fidx++] = newFace2;
+            //faces.push(newFace1);
+            //faces.push(newFace2);
           }
         });
+
+        faces.length = fidx;
       }
     }
 
@@ -590,17 +611,14 @@ Slicer.prototype.makeGeometry = function() {
   };
 
   var geoSlicedMesh = geos.slicedMesh.geo;
-
   var vertices = this.sourceVertices.slice();
   var faces = [];
-
-  // set the face array on the mesh
+  /*// set the face array on the mesh
   for (var i = 0; i < this.faceBounds.length; i++) {
     var face = this.faceBounds[i].face;
     face.materialIndex = 0;
     faces.push(face);
-  }
-
+  }*/
   geoSlicedMesh.vertices = vertices;
   geoSlicedMesh.faces = faces;
 }

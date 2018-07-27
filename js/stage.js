@@ -287,7 +287,7 @@ Stage.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
-  this.sliceMode = Slicer.Modes.full; // todo: back to preview
+  this.sliceMode = Slicer.Modes.preview; // todo: back to preview
   this.sliceModeOn = false;
   this.slicePreviewModeSliceMesh = true;
   this.sliceFullModeUpToLayer = true;
@@ -995,13 +995,13 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.generateSupports();
-  //this.activateSliceMode();
+  this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  //this.currentSliceLevel = 150;//135;
-  //this.setSliceLevel();
+  this.currentSliceLevel = 150;//135;
+  this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
   if (ct) {
