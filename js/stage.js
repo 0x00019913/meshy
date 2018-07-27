@@ -898,25 +898,25 @@ Stage.prototype.makeBuildVolume = function() {
   pushSegment(geoTertiary, x1, y1, z0, x1, y1, z1);
 
   // draw floor plane
-  geoFloor.vertices.push(new THREE.Vector3(x0, y0, z0));
+  /*geoFloor.vertices.push(new THREE.Vector3(x0, y0, z0));
   geoFloor.vertices.push(new THREE.Vector3(x0, y1, z0));
   geoFloor.vertices.push(new THREE.Vector3(x1, y1, z0));
   geoFloor.vertices.push(new THREE.Vector3(x1, y0, z0));
   geoFloor.faces.push(new THREE.Face3(0, 1, 2));
-  geoFloor.faces.push(new THREE.Face3(0, 2, 3));
+  geoFloor.faces.push(new THREE.Face3(0, 2, 3));*/
 
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
   var lineSecondary = new THREE.LineSegments(geoSecondary, matSecondary);
   var lineTertiary = new THREE.LineSegments(geoTertiary, matTertiary);
-  var meshFloor = new THREE.Mesh(geoFloor, matFloor);
+  //var meshFloor = new THREE.Mesh(geoFloor, matFloor);
   linePrimary.name = "buildVolume";
   lineSecondary.name = "buildVolume";
   lineTertiary.name = "buildVolume";
-  meshFloor.name = "buildVolume";
+  //meshFloor.name = "buildVolume";
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
-  this.scene.add(meshFloor);
+  //this.scene.add(meshFloor);
 
   this.setBuildVolumeState();
 
