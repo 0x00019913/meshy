@@ -165,9 +165,47 @@ Slicer.prototype.setLevel = function(level) {
   var prevLevel = this.currentLevel;
   this.currentLevel = level;
 
+  var layers = this.layers;
+  var layer = layers[level];
+  var context = layer.context;
+  var axis = context.axis;
+
+  var geos = this.geometries;
+
+  // write the current layer if necessary for the mode and display settings
+  if (this.mode !== Slicer.Modes.full || this.fullUpToLayer) {
+    var currentLayerBaseGeo = geos.currentLayerBase.geo;
+    var currentLayerContourGeo = geos.currentLayerContours.geo;
+    var currentLayerInfillGeo = geos.currentLayerInfill.geo;
+
+    var baseVertices = currentLayerBaseGeo.vertices;
+    baseVertices.length = 0;
+    layer.writeBase(baseVertices);
+
+    var contourVertices = currentLayerContourGeo.vertices;
+    contourVertices.length = 0;
+    layer.writePrintContours(contourVertices);
+
+    var infillVertices = currentLayerInfillGeo.vertices;
+    infillVertices.length = 0;
+    layer.writeInfill(infillVertices);
+  }
+
   if (this.mode === Slicer.Modes.preview) {
     var slicePos = this.min[this.axis] + (level + 0.5) * this.sliceHeight;
     var faceBounds = this.faceBounds;
+
+    // current vertices and faces
+    var vertices = geos.slicedMesh.geo.vertices;
+    var faces = geos.slicedMesh.geo.faces;
+
+    // local vars for ease of access
+    var vertexCount = this.sourceVertices.length;
+    var faceCount = this.sourceFaces.length;
+
+    // erase any sliced verts and faces
+    vertices.length = vertexCount;
+    faces.length = faceCount;
 
     if (this.previewSliceMesh) {
       // array of faces that intersect the slicing plane
@@ -191,22 +229,6 @@ Slicer.prototype.setLevel = function(level) {
 
       // handle the sliced faces: slice them and insert them (and associated verts)
       // into sliced mesh
-
-      var geos = this.geometries;
-
-      // current vertices and faces
-      var vertices = geos.slicedMesh.geo.vertices;
-      var faces = geos.slicedMesh.geo.faces;
-
-      // local vars for ease of access
-      var vertexCount = this.sourceVertices.length;
-      var faceCount = this.sourceFaces.length;
-
-      // erase any sliced verts and faces
-      vertices.length = vertexCount;
-      faces.length = faceCount;
-
-      var axis = this.axis;
 
       // current vertex
       var vidx = vertexCount;
@@ -273,32 +295,21 @@ Slicer.prototype.setLevel = function(level) {
 
     debug.cleanup();
 
-    var layers = this.layers;
-    var layer = layers[level];
-    var context = layer.context;
-    var axis = context.axis;
-
-    var geos = this.geometries;
-    var currentLayerBaseGeo = geos.currentLayerBase.geo;
-    var currentLayerContourGeo = geos.currentLayerContours.geo;
-    var currentLayerInfillGeo = geos.currentLayerInfill.geo;
-
-    var baseVertices = currentLayerBaseGeo.vertices;
-    baseVertices.length = 0;
-    layer.writeBase(baseVertices);
-
-    var contourVertices = currentLayerContourGeo.vertices;
-    contourVertices.length = 0;
-    layer.writePrintContours(contourVertices);
-
-    var infillVertices = currentLayerInfillGeo.vertices;
-    infillVertices.length = 0;
-    layer.writeInfill(infillVertices);
-
     //debug.lines();
   }
   else if (this.mode === Slicer.Modes.full) {
-    // todo
+    var allContoursGeo = geos.allContours.geo;
+
+    var contourVertices = allContoursGeo.vertices;
+    contourVertices.length = 0;
+
+    if (this.fullUpToLayer) {
+      for (var i = 0; i < level; i++) {
+        layers[i].writePrintContours(contourVertices);
+
+        if (this.fullShowInfill) layers[i].writeInfill(contourVertices);
+      }
+    }
   }
 
   /*if (0) {

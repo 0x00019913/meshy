@@ -797,7 +797,7 @@ function functionIterator(f, n, batchSize, onDone, onProgress, onStop) {
 
 
 // timer
-Timer = function() {
+var Timer = function() {
   this.startTime = 0;
   this.endTime = 0;
   this.running = false;

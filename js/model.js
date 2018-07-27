@@ -83,7 +83,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       linewidth: 1
     }),
     sliceAllContours: new THREE.LineBasicMaterial({
-      color: 0xffffff,
+      color: 0x666666,
       linewidth: 1
     }),
     slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
@@ -808,7 +808,7 @@ Model.prototype.addSliceMeshesToScene = function() {
 
   // add meshes for current layer contours and infill, unless mode is full and
   // showing all layers at once
-  if (!this.slicer.mode === Slicer.Modes.full || this.slicer.fullUpToLayer) {
+  if (this.slicer.mode !== Slicer.Modes.full || this.slicer.fullUpToLayer) {
     this.scene.add(this.sliceOneLayerBaseMesh);
     this.scene.add(this.sliceOneLayerContourMesh);
     this.scene.add(this.sliceOneLayerInfillMesh);
@@ -831,7 +831,7 @@ Model.prototype.updateSliceMeshesInScene = function() {
 
   var geos = this.slicer.getGeometry();
 
-  if (!this.slicer.mode === Slicer.Modes.full || this.slicer.fullUpToLayer) {
+  if (!this.slicer.mode !== Slicer.Modes.full || this.slicer.fullUpToLayer) {
     var oneLayerBaseGeo = new THREE.Geometry();
     oneLayerBaseGeo.vertices = geos.currentLayerBase.geo.vertices;
     this.sliceOneLayerBaseMesh.geometry = oneLayerBaseGeo;
@@ -2090,10 +2090,11 @@ Model.prototype.getSliceMode = function() {
 Model.prototype.setSliceMode = function(sliceMode) {
   if (this.slicer.mode == sliceMode || !this.slicer) return;
 
-  removeMeshByName(this.scene, "model");
+  //removeMeshByName(this.scene, "model");
 
   this.slicer.setMode(sliceMode);
 
+  this.addSliceMeshesToScene();
   this.updateSliceMeshesInScene();
 }
 
@@ -2270,7 +2271,12 @@ Model.prototype.export = function(format, name) {
 }
 
 // Import a model from an STL or OBJ file (any capitalization).
-Model.prototype.import = function(file, callback) {
+Model.prototype.import = function(file, params, callback) {
+  params = params || {};
+  var unitsFrom = params.hasOwnProperty("unitsFrom") ? params.unitsFrom : Units.mm;
+  var unitsTo = params.hasOwnProperty("unitsTo") ? params.unitsTo : Units.mm;
+  var convertUnits = Units.getConverterV3(unitsFrom, unitsTo);
+
   var fSplit = splitFilename(file.name);
   this.filename = fSplit.name;
   this.format = fSplit.extension;
@@ -2373,7 +2379,7 @@ Model.prototype.import = function(file, callback) {
         offset += 12;
 
         for (var vert=0; vert<3; vert++) {
-          var vertex = getVector3(dv, offset, isLittleEndian);
+          var vertex = convertUnits(getVector3(dv, offset, isLittleEndian));
           var key = vertexHash(vertex, p);
           var idx = -1;
           if (vertexMap[key]===undefined) {
@@ -2432,7 +2438,7 @@ Model.prototype.import = function(file, callback) {
             // if the line doesn't begin with "vertex ", break
             if (!vline.startsWith("vertex ")) break;
 
-            var vertex = getVector3(vline.substring(7));
+            var vertex = convertUnits(getVector3(vline.substring(7)));
             var idx = vertexMapIdx(vertexMap, vertex, _this.vertices, p);
 
             face[faceGetSubscript(vert)] = idx;
@@ -2486,7 +2492,7 @@ Model.prototype.import = function(file, callback) {
         // if vertex, get vertex; relevant flags are 'v' and 'vn'
         if (line[0]=='v') {
           if (line[1]==' ') {
-            var vertex = getVector3(line.substring(2));
+            var vertex = convertUnits(getVector3(line.substring(2)));
             _this.vertices.push(vertex);
           }
           else if (line[1]=='n') {

@@ -10,11 +10,13 @@
 
 // Constructor.
 Stage = function() {
+  this.units = Units.mm;
+
   // params
   this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
   this.buildVolumeMin = null;
   this.buildVolumeMax = null;
-  this.centerOriginOnBuildPlate = true;
+  this.centerOriginOnBuildPlate = false;
   this.buildVolumeMaterials = {
     linePrimary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
@@ -27,6 +29,11 @@ Stage = function() {
     lineTertiary: new THREE.LineBasicMaterial({
       color: 0x444444,
       linewidth: 1
+    }),
+    floorPlane: new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      transparent: true,
+      opacity: 0.5
     })
   };
 
@@ -34,6 +41,9 @@ Stage = function() {
   this.importEnabled = true;
   this.importingMeshName = "";
   this.buildVolumeVisible = true;
+
+  this.importUnits = Units.mm;
+  this.autocenterOnImport = true;
 
   // geometry
   this.model = null;
@@ -83,6 +93,13 @@ Stage.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "import").name("Import").title("Import a mesh.");
 
+  var importSettingsFolder = this.gui.addFolder("Import Settings", "Defaults for the imported mesh.");
+  importSettingsFolder.add(this, "importUnits", { mm: Units.mm, cm: Units.cm, inches: Units.inches })
+    .name("Import units")
+    .title("Units of the imported mesh.");
+  importSettingsFolder.add(this, "autocenterOnImport").name("Autocenter")
+    .title("Autocenter the mesh upon importing.");
+
   var exportFolder = this.gui.addFolder("Export", "Mesh export.");
   this.filename = "meshy";
   this.filenameController = exportFolder.add(this, "filename").name("Filename")
@@ -109,12 +126,18 @@ Stage.prototype.generateUI = function() {
     .title("Toggle mesh wireframe.");
   displayFolder.add(this, "cameraToModel").name("Camera to model")
     .title("Snap camera to model.");
+  this.backgroundColor = "#222222";
   this.meshColor = "#662828"; // todo: reset to 0xffffff
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
-  this.meshColorController =
-    displayFolder.addColor(this, "meshColor").name("Mesh color").onChange(this.setMeshMaterial.bind(this))
-    .title("Set mesh color.");
+  this.backgroundColorController =
+    displayFolder.addColor(this, "backgroundColor").name("Background color")
+      .onChange(this.setBackgroundColor.bind(this))
+      .title("Set background color.");
+    this.meshColorController =
+      displayFolder.addColor(this, "meshColor").name("Mesh color")
+        .onChange(this.setMeshMaterial.bind(this))
+        .title("Set mesh color.");
   displayFolder.add(this, "meshRoughness", 0, 1).name("Mesh roughness").onChange(this.setMeshMaterial.bind(this))
     .title("Set mesh roughness.");
   displayFolder.add(this, "meshMetalness", 0, 1).name("Mesh metalness").onChange(this.setMeshMaterial.bind(this))
@@ -125,14 +148,17 @@ Stage.prototype.generateUI = function() {
   buildVolumeFolder.add(this, "centerOriginOnBuildPlate").name("Center origin")
     .title("Center the origin on the floor of the build volume or place it in the corner.")
     .onChange(this.makeBuildVolume.bind(this));
-  buildVolumeFolder.add(this.buildVolumeSize, "x", 0).name("Build volume x")
-    .title("Build volume size on x.")
+  this.buildVolumeXController = buildVolumeFolder.add(this.buildVolumeSize, "x", 0)
+    .name("Build volume x")
+    .title("Build volume size on x in mm.")
     .onChange(this.makeBuildVolume.bind(this));
-  buildVolumeFolder.add(this.buildVolumeSize, "y", 0).name("Build volume y")
-    .title("Build volume size on y.")
+  this.buildVolumeYController = buildVolumeFolder.add(this.buildVolumeSize, "y", 0)
+    .name("Build volume y")
+    .title("Build volume size on y in mm.")
     .onChange(this.makeBuildVolume.bind(this));
-  buildVolumeFolder.add(this.buildVolumeSize, "z", 0).name("Build volume z")
-    .title("Build volume size on z.")
+  this.buildVOlumeZController = buildVolumeFolder.add(this.buildVolumeSize, "z", 0)
+    .name("Build volume z")
+    .title("Build volume size on z in mm.")
     .onChange(this.makeBuildVolume.bind(this));
 
   var editFolder = this.gui.addFolder("Edit", "Mesh edit functions: translation, scaling, rotation, normals.");
@@ -222,7 +248,7 @@ Stage.prototype.generateUI = function() {
   calculationFolder.add(this, "calcSurfaceArea").name("Surface area");
   calculationFolder.add(this, "calcVolume").name("Volume");
   calculationFolder.add(this, "calcCenterOfMass").name("Center of mass");
-  calculationFolder.add(this, "toggleCOM").name("Toggle center of mass");
+  calculationFolder.add(this, "toggleCOM").name("Toggle COM");
 
   var measurementFolder = this.gui.addFolder("Measure");
   measurementFolder.add(this, "mLength").name("Length");
@@ -261,14 +287,14 @@ Stage.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
-  this.sliceMode = Slicer.Modes.preview; // todo: back to preview
+  this.sliceMode = Slicer.Modes.full; // todo: back to preview
   this.sliceModeOn = false;
   this.slicePreviewModeSliceMesh = true;
   this.sliceFullModeUpToLayer = true;
   this.sliceFullModeShowInfill = false;
   this.sliceNumWalls = 2;
   this.sliceNumTopLayers = 3;
-  this.sliceInfillType = Slicer.InfillTypes.solid; // todo: back to solid
+  this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
   this.sliceMakeRaft = false; // todo: back to true
@@ -284,6 +310,7 @@ Stage.prototype.generateUI = function() {
   this.gui.add(this, "delete").name("Delete");
 
   this.infoBox = new InfoBox();
+  this.infoBox.add("Units", this, "units");
   this.infoBox.add("Polycount", this, ["model","count"]);
   this.infoBox.addMultiple("x range", this, [["model","getxmin"], ["model","getxmax"]]);
   this.infoBox.addMultiple("y range", this, [["model","getymin"], ["model","getymax"]]);
@@ -491,6 +518,7 @@ Stage.prototype.buildSliceDisplayFolder = function(folder) {
 }
 Stage.prototype.buildSliceFolder = function(folder) {
   this.clearFolder(folder);
+
   if (this.sliceModeOn) {
     var numLayers = this.model.getNumLayers();
     if (numLayers !== 0) {
@@ -546,6 +574,9 @@ Stage.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
   sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
   sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
+}
+Stage.prototype.buildGcodeFolder = function(folder) {
+
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) {
@@ -670,6 +701,9 @@ Stage.prototype.toggleWireframe = function() {
 Stage.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
 }
+Stage.prototype.setBackgroundColor = function() {
+  if (this.scene) this.scene.background.set(this.backgroundColor);
+}
 Stage.prototype.setMeshMaterial = function() {
   if (this.model) this.model.setMeshMaterial(this.meshColor, this.meshRoughness, this.meshMetalness);
 }
@@ -687,13 +721,13 @@ Stage.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 10000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
     _this.scene = new THREE.Scene();
     debug = new Debug(_this.scene); // todo: remove
-    _this.scene.background = new THREE.Color(0x222222);
+    _this.scene.background = new THREE.Color(_this.backgroundColor);
 
     _this.controls = new Controls(
       _this.camera,
@@ -831,9 +865,11 @@ Stage.prototype.makeBuildVolume = function() {
   var geoPrimary = new THREE.Geometry();
   var geoSecondary = new THREE.Geometry();
   var geoTertiary = new THREE.Geometry();
+  var geoFloor = new THREE.Geometry();
   var matPrimary = this.buildVolumeMaterials.linePrimary;
   var matSecondary = this.buildVolumeMaterials.lineSecondary;
   var matTertiary = this.buildVolumeMaterials.lineTertiary;
+  var matFloor = this.buildVolumeMaterials.floorPlane;
 
   // draw grid
   for (var i = Math.floor(x0 + 1); i < x1; i++) {
@@ -861,15 +897,26 @@ Stage.prototype.makeBuildVolume = function() {
   pushSegment(geoTertiary, x1, y0, z0, x1, y0, z1);
   pushSegment(geoTertiary, x1, y1, z0, x1, y1, z1);
 
+  // draw floor plane
+  geoFloor.vertices.push(new THREE.Vector3(x0, y0, z0));
+  geoFloor.vertices.push(new THREE.Vector3(x0, y1, z0));
+  geoFloor.vertices.push(new THREE.Vector3(x1, y1, z0));
+  geoFloor.vertices.push(new THREE.Vector3(x1, y0, z0));
+  geoFloor.faces.push(new THREE.Face3(0, 1, 2));
+  geoFloor.faces.push(new THREE.Face3(0, 2, 3));
+
   var linePrimary = new THREE.LineSegments(geoPrimary, matPrimary);
   var lineSecondary = new THREE.LineSegments(geoSecondary, matSecondary);
   var lineTertiary = new THREE.LineSegments(geoTertiary, matTertiary);
+  var meshFloor = new THREE.Mesh(geoFloor, matFloor);
   linePrimary.name = "buildVolume";
   lineSecondary.name = "buildVolume";
   lineTertiary.name = "buildVolume";
+  meshFloor.name = "buildVolume";
   this.scene.add(linePrimary);
   this.scene.add(lineSecondary);
   this.scene.add(lineTertiary);
+  this.scene.add(meshFloor);
 
   this.setBuildVolumeState();
 
@@ -912,9 +959,14 @@ Stage.prototype.handleFile = function(file) {
     this.progressBarContainer
   );
 
+  var importParams = {
+    unitsFrom: this.importUnits,
+    unitsTo: this.units
+  };
+
   model.isLittleEndian = this.isLittleEndian;
   model.vertexPrecision = this.vertexPrecision;
-  model.import(file, this.displayMesh.bind(this));
+  model.import(file, importParams, this.displayMesh.bind(this));
 };
 
 // Callback passed to model.import; puts the mesh into the viewport.
@@ -939,15 +991,17 @@ Stage.prototype.displayMesh = function(success, model) {
     return;
   }
 
+  if (this.autocenterOnImport) this.autoCenter();
+
   // todo: remove
   //this.generateSupports();
-  this.activateSliceMode();
+  //this.activateSliceMode();
 
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 150;//135;
-  this.setSliceLevel();
+  //this.currentSliceLevel = 150;//135;
+  //this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
   if (ct) {
