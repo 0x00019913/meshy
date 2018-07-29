@@ -90,6 +90,7 @@ Object.assign(MCG.Sweep, (function() {
     var store = {
       spacing: spacing,
       hline: hline,
+      lineidx: 0,
       result: resultAddSet({}, context, "infill")
     };
 
@@ -211,6 +212,7 @@ Object.assign(MCG.Sweep, (function() {
     var result = store.result;
     var spacing = store.spacing;
     var hline = store.hline;
+    var lineidx = store.lineidx;
     var h = event.p.h, ht = event.twin.p.h;
 
     // if segment is vertical, return
@@ -225,26 +227,41 @@ Object.assign(MCG.Sweep, (function() {
       // contour, draw a segment between them
       var iter = status.iterator();
       var prev = null, curr;
+      // alternate the direction in which infill lines are drawn
+      var dir = lineidx%2 === 0 ? "next" : "prev";
 
-      while ((curr = iter.next()) !== null) {
+      while ((curr = iter[dir]()) !== null) {
         if (!curr.hcontains(hline)) continue;
 
         if (prev !== null) {
-          if (curr.depthBelowA > 0 && (prev.depthBelowA + prev.weightA) > 0) {
+          // only write segment if segments border a 0-to-positive-to-0 winding
+          // number transition
+          var writeSegment;
+          if (lineidx%2 === 0) {
+            writeSegment = curr.depthBelowA > 0 && (prev.depthBelowA + prev.weightA) > 0;
+          }
+          else {
+            writeSegment = (curr.depthBelowA + curr.weightA) > 0 && prev.depthBelowA > 0;
+          }
+
+          if (writeSegment) {
             var p1 = prev.interpolate(hline);
             var p2 = curr.interpolate(hline);
 
             result.infill.addPointPair(p1, p2);
           }
-        }
 
-        prev = curr;
+          prev = null;
+        }
+        else prev = curr;
       }
 
       hline += spacing;
+      lineidx++;
     }
 
     store.hline = hline;
+    store.lineidx = lineidx;
   }
 
 
