@@ -2072,8 +2072,13 @@ Model.prototype.deactivateSliceMode = function() {
   this.sliceFullMesh = null;
 }
 
-Model.prototype.getNumLayers = function() {
-  if (this.slicer) return this.slicer.getNumLayers();
+Model.prototype.getMaxLevel = function() {
+  if (this.slicer) return this.slicer.getMaxLevel();
+  else return 0;
+}
+
+Model.prototype.getMinLevel = function() {
+  if (this.slicer) return this.slicer.getMinLevel();
   else return 0;
 }
 

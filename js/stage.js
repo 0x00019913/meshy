@@ -297,12 +297,19 @@ Stage.prototype.generateUI = function() {
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
+  // todo: all to reasonable values
   this.sliceMakeRaft = false; // todo: back to true
-  this.sliceRaftMainLayers = 3;
+  this.sliceRaftTopLayers = 3;
+  this.sliceRaftTopHeight = 0.05;
+  this.sliceRaftTopWidth = 0.05;
+  this.sliceRaftTopDensity = 1.0;
   this.sliceRaftBaseLayers = 1;
+  this.sliceRaftBaseHeight = 0.1;
+  this.sliceRaftBaseWidth = 0.1;
+  this.sliceRaftBaseDensity = 0.5;
   this.sliceRaftOffset = 1;
   this.sliceRaftGap = 0.05;
-  this.sliceRaftBaseSpacing = 0.1;
+  this.sliceRaftWritePerimeter = false;
   this.buildSupportSliceFolder();
 
   this.gui.add(this, "undo").name("Undo");
@@ -520,21 +527,21 @@ Stage.prototype.buildSliceFolder = function(folder) {
   this.clearFolder(folder);
 
   if (this.sliceModeOn) {
-    var numLayers = this.model.getNumLayers();
-    if (numLayers !== 0) {
-      this.currentSliceLevel = this.model.getCurrentSliceLevel();
-      var sliceController = folder.add(
-        this,
-        "currentSliceLevel",
-        0, numLayers
-      ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
-      this.sliceMode = this.model.getSliceMode();
-      folder.add(
-        this,
-        "sliceMode",
-        { "preview": Slicer.Modes.preview, "full": Slicer.Modes.full }
-      ).name("Mode").onChange(this.setSliceMode.bind(this));
-    }
+    var maxLevel = this.model.getMaxLevel();
+    var minLevel = this.model.getMinLevel();
+
+    this.currentSliceLevel = this.model.getCurrentSliceLevel();
+    var sliceController = folder.add(
+      this,
+      "currentSliceLevel",
+      minLevel, maxLevel
+    ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
+    this.sliceMode = this.model.getSliceMode();
+    folder.add(
+      this,
+      "sliceMode",
+      { "preview": Slicer.Modes.preview, "full": Slicer.Modes.full }
+    ).name("Mode").onChange(this.setSliceMode.bind(this));
 
     this.sliceDisplayFolder = folder.addFolder("Display");
     this.buildSliceDisplayFolder(this.sliceDisplayFolder);
@@ -554,9 +561,9 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
   sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
-    "grid": Slicer.InfillTypes.grid,
-    "triangle": Slicer.InfillTypes.triangle,
-    "hex": Slicer.InfillTypes.hex
+    "grid": Slicer.InfillTypes.grid
+    //"triangle": Slicer.InfillTypes.triangle,
+    //"hex": Slicer.InfillTypes.hex
   }).name("Infill Type");
   sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
   sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill Overlap");
@@ -569,14 +576,20 @@ Stage.prototype.buildRaftFolder = function(folder) {
   this.clearFolder(sliceRaftFolder);
 
   sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
-  sliceRaftFolder.add(this, "sliceRaftMainLayers", 0).step(1).name("Main layers");
+  sliceRaftFolder.add(this, "sliceRaftTopLayers", 0).step(1).name("Main layers");
+  sliceRaftFolder.add(this, "sliceRaftTopHeight", 0).name("Main height");
+  sliceRaftFolder.add(this, "sliceRaftTopWidth", 0).name("Main width");
+  sliceRaftFolder.add(this, "sliceRaftTopDensity", 0, 1).name("Top density");
   sliceRaftFolder.add(this, "sliceRaftBaseLayers", 0).step(1).name("Base layers");
+  sliceRaftFolder.add(this, "sliceRaftBaseHeight", 0).name("Base height");
+  sliceRaftFolder.add(this, "sliceRaftBaseWidth", 0).name("Base width");
+  sliceRaftFolder.add(this, "sliceRaftBaseDensity", 0, 1).name("Base density");
   sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
   sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
-  sliceRaftFolder.add(this, "sliceRaftBaseSpacing", 0, 1).name("Base spacing");
+  sliceRaftFolder.add(this, "sliceRaftWritePerimeter").name("Write perimeter");
 }
 Stage.prototype.buildGcodeFolder = function(folder) {
-
+  // todo
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) {
@@ -613,11 +626,17 @@ Stage.prototype.makeSlicerParams = function() {
     infillDensity: this.sliceInfillDensity,
     infillOverlap: this.sliceInfillOverlap,
     makeRaft: this.sliceMakeRaft,
-    raftMainLayers: this.sliceRaftMainLayers,
+    raftTopLayers: this.sliceRaftTopLayers,
+    raftTopHeight: this.sliceRaftTopHeight,
+    raftTopWidth: this.sliceRaftTopWidth,
+    raftTopDensity: this.sliceRaftTopDensity,
     raftBaseLayers: this.sliceRaftBaseLayers,
+    raftBaseHeight: this.sliceRaftBaseHeight,
+    raftBaseWidth: this.sliceRaftBaseWidth,
+    raftBaseDensity: this.sliceRaftBaseDensity,
     raftOffset: this.sliceRaftOffset,
     raftGap: this.sliceRaftGap,
-    raftBaseSpacing: this.sliceRaftBaseSpacing,
+    raftWritePerimeter: this.sliceRaftWritePerimeter,
     precision: this.vertexPrecision,
     // display params
     previewSliceMesh: this.slicePreviewModeSliceMesh,
@@ -1000,8 +1019,8 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 150;//135;
-  this.setSliceLevel();
+  //this.currentSliceLevel = 78;//135;
+  //this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
   if (ct) {
