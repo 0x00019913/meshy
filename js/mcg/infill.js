@@ -12,10 +12,10 @@ Object.assign(MCG.Infill, (function() {
     params = params || {};
 
     if (type === Types.linear) {
-      return generateLinear(contour, params.angle, params.spacing, params.parity);
+      return generateLinear(contour, params.angle, params.spacing, params.parity, params.connectLines);
     }
     if (type === Types.grid) {
-      return generateGrid(contour, params.angle, params.spacing);
+      return generateGrid(contour, params.angle, params.spacing, params.connectLines);
     }
     if (type === Types.triangle) {
       return generateTriangle(contour, params.spacing);
@@ -27,11 +27,12 @@ Object.assign(MCG.Infill, (function() {
     return null;
   }
 
-  function generateLinear(contour, angle, spacing, parity) {
+  function generateLinear(contour, angle, spacing, parity, connectLines) {
     context = contour.context;
     angle = angle || 0;
     spacing = spacing || context.p;
     parity = parity || 0;
+    connectLines = connectLines || false;
 
     // constants
     var pi = Math.PI;
@@ -44,7 +45,8 @@ Object.assign(MCG.Infill, (function() {
     var contourRotated = contour.clone(true).rotate(angle);
 
     var op = MCG.Sweep.Operations.linearInfill({
-      spacing: spacing
+      spacing: spacing,
+      connectLines: connectLines
     });
 
     var infillRotated = MCG.Sweep.sweep(op, contourRotated).infill;
@@ -52,32 +54,35 @@ Object.assign(MCG.Infill, (function() {
     return infillRotated.rotate(-angle);
   }
 
-  function generateGrid(contour, angle, spacing) {
+  function generateGrid(contour, angle, spacing, connectLines) {
     context = contour.context;
     angle = angle || 0;
     spacing = spacing || context.p;
+    connectLines = connectLines || false;
 
     // constants
     var pi = Math.PI;
     var pi2 = pi * 2;
     var pi_2 = pi / 2;
 
+    // make the sweep operation
+    var op = MCG.Sweep.Operations.linearInfill({
+      spacing: spacing,
+      connectLines: connectLines
+    });
+
+    // clone and rotate the contour by the initial angle
     var contourRotated = contour.clone(true).rotate(angle);
+    // construct the infill in one direction
+    var infillRotated0 = MCG.Sweep.sweep(op, contourRotated).infill;
 
-    var op0 = MCG.Sweep.Operations.linearInfill({
-      spacing: spacing
-    });
-    var infillRotated0 = MCG.Sweep.sweep(op0, contourRotated).infill;
-
+    // rotate by pi/2 further
     contourRotated.rotate(pi_2);
-    var op1 = MCG.Sweep.Operations.linearInfill({
-      spacing: spacing
-    });
-    var infillRotated1 = MCG.Sweep.sweep(op1, contourRotated).infill;
+    // construct the infill in the orthogonal direction
+    var infillRotated1 = MCG.Sweep.sweep(op, contourRotated).infill;
 
-    infillRotated1.rotate(-pi_2).merge(infillRotated0);
-
-    return infillRotated1.rotate(-angle);
+    // unrotate second direction, merge with first direction, unrotate both
+    return infillRotated1.rotate(-pi_2).merge(infillRotated0).rotate(-angle);
   }
 
   return {
