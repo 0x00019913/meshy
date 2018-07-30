@@ -270,13 +270,13 @@ Stage.prototype.generateUI = function() {
   repairFolder.add(this, "acceptPatch").name("Accept patch");
   repairFolder.add(this, "cancelPatch").name("Cancel patch");
 
-  this.verticalResolution = .05;//todo: back to 0.1
-  this.planarResolution = 0.05;
+  this.layerHeight = .05;//todo: back to 0.1
+  this.lineWidth = 0.05;
   this.upAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
   this.supportAngle = 45;
   this.supportSpacingFactor = 6;
-  this.supportRadius = this.planarResolution * 2;
+  this.supportRadius = this.lineWidth * 2;
   this.supportTaperFactor = 0.5;
   this.supportSubdivs = 16;
   // can't set support radius fn directly from dat.gui because it returns the
@@ -298,18 +298,18 @@ Stage.prototype.generateUI = function() {
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
   // todo: all to reasonable values
-  this.sliceMakeRaft = false; // todo: back to true
-  this.sliceRaftTopLayers = 3;
-  this.sliceRaftTopHeight = 0.05;
+  this.sliceMakeRaft = true; // todo: back to true
+  this.sliceRaftNumTopLayers = 3;
+  this.sliceRaftTopLayerHeight = 0.05;
   this.sliceRaftTopWidth = 0.05;
   this.sliceRaftTopDensity = 1.0;
-  this.sliceRaftBaseLayers = 1;
-  this.sliceRaftBaseHeight = 0.1;
+  this.sliceRaftNumBaseLayers = 1;
+  this.sliceRaftBaseLayerHeight = 0.1;
   this.sliceRaftBaseWidth = 0.1;
   this.sliceRaftBaseDensity = 0.5;
-  this.sliceRaftOffset = 1;
+  this.sliceRaftOffset = 1.0;
   this.sliceRaftGap = 0.05;
-  this.sliceRaftWritePerimeter = false;
+  this.sliceRaftWriteWalls = false;
   this.buildSupportSliceFolder();
 
   this.gui.add(this, "undo").name("Undo");
@@ -458,14 +458,14 @@ Stage.prototype.cancelPatch = function() {
 }
 Stage.prototype.generateSupports = function() {
   if (this.model) {
-    if (this.supportRadius < this.planarResolution) {
+    if (this.supportRadius < this.lineWidth) {
       this.printout.warn("Support radius is lower than the planar resolution.");
     }
 
     this.model.generateSupports({
       angle: this.supportAngle,
-      resolution: this.planarResolution * this.supportSpacingFactor,
-      layerHeight: this.verticalResolution,
+      resolution: this.lineWidth * this.supportSpacingFactor,
+      layerHeight: this.layerHeight,
       radius: this.supportRadius,
       taperFactor: this.supportTaperFactor,
       subdivs: this.supportSubdivs,
@@ -487,8 +487,8 @@ Stage.prototype.buildSupportSliceFolder = function() {
     this.buildSliceFolder(supportSliceFolder);
   }
   else {
-    supportSliceFolder.add(this, "verticalResolution", .0001, 1).name("Vertical resolution");
-    supportSliceFolder.add(this, "planarResolution", .0001, 1).name("Planar resolution");
+    supportSliceFolder.add(this, "layerHeight", .0001, 1).name("Layer height");
+    supportSliceFolder.add(this, "lineWidth", .0001, 1).name("Line width");
     supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis");
 
     var supportFolder = supportSliceFolder.addFolder("Supports");
@@ -561,7 +561,8 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
   sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
-    "grid": Slicer.InfillTypes.grid
+    "grid": Slicer.InfillTypes.grid,
+    "lines": Slicer.InfillTypes.lines,
     //"triangle": Slicer.InfillTypes.triangle,
     //"hex": Slicer.InfillTypes.hex
   }).name("Infill Type");
@@ -576,17 +577,17 @@ Stage.prototype.buildRaftFolder = function(folder) {
   this.clearFolder(sliceRaftFolder);
 
   sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
-  sliceRaftFolder.add(this, "sliceRaftTopLayers", 0).step(1).name("Main layers");
-  sliceRaftFolder.add(this, "sliceRaftTopHeight", 0).name("Main height");
-  sliceRaftFolder.add(this, "sliceRaftTopWidth", 0).name("Main width");
+  sliceRaftFolder.add(this, "sliceRaftNumTopLayers", 0).step(1).name("Top layers");
+  sliceRaftFolder.add(this, "sliceRaftTopLayerHeight", 0).name("Top height");
+  sliceRaftFolder.add(this, "sliceRaftTopWidth", 0).name("Top width");
   sliceRaftFolder.add(this, "sliceRaftTopDensity", 0, 1).name("Top density");
-  sliceRaftFolder.add(this, "sliceRaftBaseLayers", 0).step(1).name("Base layers");
-  sliceRaftFolder.add(this, "sliceRaftBaseHeight", 0).name("Base height");
+  sliceRaftFolder.add(this, "sliceRaftNumBaseLayers", 0).step(1).name("Base layers");
+  sliceRaftFolder.add(this, "sliceRaftBaseLayerHeight", 0).name("Base height");
   sliceRaftFolder.add(this, "sliceRaftBaseWidth", 0).name("Base width");
   sliceRaftFolder.add(this, "sliceRaftBaseDensity", 0, 1).name("Base density");
   sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
   sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
-  sliceRaftFolder.add(this, "sliceRaftWritePerimeter").name("Write perimeter");
+  sliceRaftFolder.add(this, "sliceRaftWriteWalls").name("Write perimeter");
 }
 Stage.prototype.buildGcodeFolder = function(folder) {
   // todo
@@ -618,25 +619,25 @@ Stage.prototype.makeSlicerParams = function() {
   return {
     mode: this.sliceMode,
     axis: this.upAxis,
-    sliceHeight: this.verticalResolution,
-    resolution: this.planarResolution,
+    layerHeight: this.layerHeight,
+    lineWidth: this.lineWidth,
     numWalls: this.sliceNumWalls,
     numTopLayers: this.sliceNumTopLayers,
     infillType: parseInt(this.sliceInfillType),
     infillDensity: this.sliceInfillDensity,
     infillOverlap: this.sliceInfillOverlap,
     makeRaft: this.sliceMakeRaft,
-    raftTopLayers: this.sliceRaftTopLayers,
-    raftTopHeight: this.sliceRaftTopHeight,
+    raftNumTopLayers: this.sliceRaftNumTopLayers,
+    raftTopLayerHeight: this.sliceRaftTopLayerHeight,
     raftTopWidth: this.sliceRaftTopWidth,
     raftTopDensity: this.sliceRaftTopDensity,
-    raftBaseLayers: this.sliceRaftBaseLayers,
-    raftBaseHeight: this.sliceRaftBaseHeight,
+    raftNumBaseLayers: this.sliceRaftNumBaseLayers,
+    raftBaseLayerHeight: this.sliceRaftBaseLayerHeight,
     raftBaseWidth: this.sliceRaftBaseWidth,
     raftBaseDensity: this.sliceRaftBaseDensity,
     raftOffset: this.sliceRaftOffset,
     raftGap: this.sliceRaftGap,
-    raftWritePerimeter: this.sliceRaftWritePerimeter,
+    raftWriteWalls: this.sliceRaftWriteWalls,
     precision: this.vertexPrecision,
     // display params
     previewSliceMesh: this.slicePreviewModeSliceMesh,
@@ -658,7 +659,7 @@ Stage.prototype.setSliceLevel = function() {
 }
 Stage.prototype.recalculateLayers = function() {
   if (this.model) {
-    this.model.recalculateLayers(this.planarResolution, this.sliceNumWalls);
+    this.model.recalculateLayers(this.lineWidth, this.sliceNumWalls);
   }
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
@@ -1019,7 +1020,7 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  //this.currentSliceLevel = 78;//135;
+  //this.currentSliceLevel = -1;//135;
   //this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;

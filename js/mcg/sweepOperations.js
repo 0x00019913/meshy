@@ -86,11 +86,14 @@ Object.assign(MCG.Sweep, (function() {
     // vertical, all lines have the given spacing, and one line passes through 0
     var spacing = params.spacing;
     var hline = Math.ceil(srcA.min.h / spacing) * spacing;
+    var connectLines = params.connectLines;
 
     var store = {
       spacing: spacing,
       hline: hline,
       lineidx: 0,
+      connectLines: connectLines || false,
+      prevLineEnd: null,
       result: resultAddSet({}, context, "infill")
     };
 
@@ -210,6 +213,8 @@ Object.assign(MCG.Sweep, (function() {
 
   function linearInfillHandle(event, status, store) {
     var result = store.result;
+    var connectLines = store.connectLines;
+    var prevLineEnd = store.prevLineEnd;
     var spacing = store.spacing;
     var hline = store.hline;
     var lineidx = store.lineidx;
@@ -230,6 +235,9 @@ Object.assign(MCG.Sweep, (function() {
       // alternate the direction in which infill lines are drawn
       var dir = lineidx%2 === 0 ? "next" : "prev";
 
+      // last vertex of the line drawn at the current h position
+      var currLineEnd = null;
+
       while ((curr = iter[dir]()) !== null) {
         if (!curr.hcontains(hline)) continue;
 
@@ -245,10 +253,29 @@ Object.assign(MCG.Sweep, (function() {
           }
 
           if (writeSegment) {
+            // add point pair as usual
             var p1 = prev.interpolate(hline);
             var p2 = curr.interpolate(hline);
 
+            // if
+            // 1. we should connect the last vertex of the previous line to the
+            // first vertex of this one, and
+            // 2. this is the first segment of this line, and
+            // 3. there is a known endpoint for the previous line,
+            // then connect last known endpoint to the first current
+            if (connectLines && currLineEnd === null && prevLineEnd !== null) {
+              // additional check: if connection would be too long (angle with
+              // previous line less than 45 degrees), don't connect
+              var distsq = prevLineEnd.distanceToSq(p1);
+              if (distsq <= spacing * spacing * 2) {
+                result.infill.addPointPair(prevLineEnd.clone(), p1.clone());
+              }
+            }
+
             result.infill.addPointPair(p1, p2);
+
+            // store p2 as the current end of the line
+            currLineEnd = p2;
           }
 
           prev = null;
@@ -256,12 +283,15 @@ Object.assign(MCG.Sweep, (function() {
         else prev = curr;
       }
 
+      prevLineEnd = currLineEnd;
+
       hline += spacing;
       lineidx++;
     }
 
     store.hline = hline;
     store.lineidx = lineidx;
+    store.prevLineEnd = prevLineEnd;
   }
 
 
