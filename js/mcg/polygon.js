@@ -399,7 +399,12 @@ MCG.Polygon = (function() {
           var p = points[i];
 
           //if (rpprev.distanceToSq(rp) < tolsq / 4) mk[ri] = false;
-          mk[ri] = !(lcs(p, rp, rpprev) === -1 && lcs(p, rp, rpnext) === 1);
+
+          // validity check that's true if both neighboring offset vertices are
+          // on the correct side of the current bisector
+          mk[ri] = lcs(p, rp, rpprev) === -1 && lcs(p, rp, rpnext) === 1;
+          // reverse if inward offset
+          if (dist < 0) mk[ri] = !mk[ri];
 
           ri++;
         }
