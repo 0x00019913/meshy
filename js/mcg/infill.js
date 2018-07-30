@@ -3,8 +3,9 @@ Object.assign(MCG.Infill, (function() {
   var Types = {
     none: 0,
     linear: 1,
-    triangle: 2,
-    hex: 4
+    grid: 2,
+    triangle: 4,
+    hex: 8
   };
 
   function generate(contour, type, params) {
@@ -13,11 +14,14 @@ Object.assign(MCG.Infill, (function() {
     if (type === Types.linear) {
       return generateLinear(contour, params.angle, params.spacing, params.parity);
     }
+    if (type === Types.grid) {
+      return generateGrid(contour, params.angle, params.spacing);
+    }
     if (type === Types.triangle) {
       return generateTriangle(contour, params.spacing);
     }
     if (type === Types.hex) {
-      return generateTriangle(contour, params.spacing, params.linewidth, params.parity);
+      return generateHex(contour, params.spacing, params.linewidth, params.parity);
     }
 
     return null;
@@ -38,14 +42,6 @@ Object.assign(MCG.Infill, (function() {
     if (parity !== 0) angle += pi_2;
 
     var contourRotated = contour.clone(true).rotate(angle);
-    if (false) {
-      contourRotated.forEachPointPair(function(p1, p2) {
-        debug.line(
-          p1.toVector3(THREE.Vector3, contour.context),
-          p2.toVector3(THREE.Vector3, contour.context),
-          1, false, 1.0, "z");
-      });
-    }
 
     var op = MCG.Sweep.Operations.linearInfill({
       spacing: spacing
@@ -53,16 +49,35 @@ Object.assign(MCG.Infill, (function() {
 
     var infillRotated = MCG.Sweep.sweep(op, contourRotated).infill;
 
-    if (false) {
-      infillRotated.forEachPointPair(function(p1, p2) {
-        debug.line(
-          p1.toVector3(THREE.Vector3, contour.context),
-          p2.toVector3(THREE.Vector3, contour.context),
-          1, false, 1.0, "z");
-      });
-    }
-
     return infillRotated.rotate(-angle);
+  }
+
+  function generateGrid(contour, angle, spacing) {
+    context = contour.context;
+    angle = angle || 0;
+    spacing = spacing || context.p;
+
+    // constants
+    var pi = Math.PI;
+    var pi2 = pi * 2;
+    var pi_2 = pi / 2;
+
+    var contourRotated = contour.clone(true).rotate(angle);
+
+    var op0 = MCG.Sweep.Operations.linearInfill({
+      spacing: spacing
+    });
+    var infillRotated0 = MCG.Sweep.sweep(op0, contourRotated).infill;
+
+    contourRotated.rotate(pi_2);
+    var op1 = MCG.Sweep.Operations.linearInfill({
+      spacing: spacing
+    });
+    var infillRotated1 = MCG.Sweep.sweep(op1, contourRotated).infill;
+
+    infillRotated1.rotate(-pi_2).merge(infillRotated0);
+
+    return infillRotated1.rotate(-angle);
   }
 
   return {
