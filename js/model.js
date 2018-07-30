@@ -71,7 +71,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       metalness: 0.5
     }),
     sliceOneLayerBase: new THREE.LineBasicMaterial({
-      color: 0x999999,
+      color: 0x666666,
       linewidth: 1
     }),
     sliceOneLayerContour: new THREE.LineBasicMaterial({
