@@ -1,8 +1,11 @@
 /* slicer.js */
 
 function Slicer(sourceVertices, sourceFaces, params) {
-  this.sourceVertices = sourceVertices;
+  // copy so that we can shift the whole geometry to the baseline
+  this.sourceVertices = cloneVector3Array(sourceVertices);
   this.sourceFaces = sourceFaces;
+  this.sourceVertexCount = sourceVertices.length;
+  this.sourceFaceCount = sourceFaces.length;
 
   // set only the base parameters - need these to calculate mesh bounds and
   // slice count
@@ -75,11 +78,11 @@ Slicer.DefaultParams = {
   makeRaft: true,
   raftNumTopLayers: 3,
   raftTopLayerHeight: 0.05,
-  raftTopWidth: 0.05,
+  raftTopLineWidth: 0.05,
   raftTopDensity: 1.0,
   raftNumBaseLayers: 1,
   raftBaseLayerHeight: 0.1,
-  raftBaseWidth: 0.1,
+  raftBaseLineWidth: 0.1,
   raftBaseDensity: 0.5,
   raftOffset: 1.0,
   raftGap: 0.05,
@@ -104,6 +107,7 @@ Slicer.prototype.setParams = function(params) {
   }
 }
 
+// set only the base parameters
 Slicer.prototype.setBaseParams = function(params) {
   var defaults = Slicer.DefaultParams;
 
@@ -111,6 +115,7 @@ Slicer.prototype.setBaseParams = function(params) {
   this.layerHeight = params.layerHeight || defaults.layerHeight;
   this.lineWidth = params.lineWidth || defaults.lineWidth;
   this.precision = params.precision || defaults.precision;
+
   this.mode = params.mode || defaults.mode;
 }
 
@@ -170,13 +175,9 @@ Slicer.prototype.handleUpdatedParams = function(params) {
     raftUpdated = true;
   }
   if (params.hasOwnProperty("raftTopLayerHeight")
-    || params.hasOwnProperty("raftTopWidth")
     || params.hasOwnProperty("raftTopDensity")
-    || params.hasOwnProperty("raftTopWidth")
     || params.hasOwnProperty("raftBaseLayerHeight")
-    || params.hasOwnProperty("raftBaseWidth")
     || params.hasOwnProperty("raftBaseDensity")
-    || params.hasOwnProperty("raftBaseWidth")
     || params.hasOwnProperty("raftGap")
     || params.hasOwnProperty("raftOffset")) {
     raftUpdated = true;
@@ -184,10 +185,12 @@ Slicer.prototype.handleUpdatedParams = function(params) {
 
   if (raftUpdated) {
     this.calculateBaseline();
+    this.floorToBaseline();
     this.makeRaftLayers();
   }
 }
 
+// map a function to all slice layers
 Slicer.prototype.forEachSliceLayer = function(f) {
   if (!this.sliceLayers) return;
 
@@ -196,15 +199,29 @@ Slicer.prototype.forEachSliceLayer = function(f) {
   }
 }
 
-// necessary function - called from constructor
-// calculates min and max for every face on the axis
+// map a function to all raft layers
+Slicer.prototype.forEachRaftLayer = function(f) {
+  if (!this.raftLayers) return;
+
+  for (var i = 0; i < this.raftLayers.length; i++) {
+    f(this.raftLayers[i]);
+  }
+}
+
+// map a function to all layers
+Slicer.prototype.forEachLayer = function(f) {
+  this.forEachSliceLayer(f);
+  this.forEachRaftLayer(f);
+}
+
+// called from constructor, calculates min and max for every face on the axis
 Slicer.prototype.calculateFaceBounds = function() {
   var faceBounds = [];
   var axis = this.axis;
   var min = new THREE.Vector3().setScalar(Infinity);
   var max = new THREE.Vector3().setScalar(-Infinity);
 
-  for (var i=0; i<this.sourceFaces.length; i++) {
+  for (var i = 0; i < this.sourceFaceCount; i++) {
     var face = this.sourceFaces[i];
     var bounds = faceGetBounds(face, this.sourceVertices);
 
@@ -222,7 +239,7 @@ Slicer.prototype.calculateFaceBounds = function() {
   this.min = min;
   this.max = max;
 
-  this.faceBounds = faceBounds;
+  this.faceBoundsArray = faceBounds;
 }
 
 Slicer.prototype.calculateNumSlices = function() {
@@ -232,14 +249,47 @@ Slicer.prototype.calculateNumSlices = function() {
   this.numSlices = Math.floor(0.5 + (amax - amin) / this.layerHeight) + 1;
 }
 
+// calculate the lowest boundary of the print, including the raft
 Slicer.prototype.calculateBaseline = function() {
-  // lowest boundary of the print contours, including the raft
   this.baseline = this.min[this.axis];
   if (this.makeRaft) {
     var raftTopHeight = this.raftTopLayerHeight * this.raftNumTopLayers;
     var raftBaseHeight = this.raftBaseLayerHeight * this.raftNumBaseLayers;
     this.baseline -= raftTopHeight + raftBaseHeight + this.raftGap;
   }
+}
+
+Slicer.prototype.floorToBaseline = function() {
+  if (this.baseline === undefined) this.calculateBaseline();
+
+  var axis = this.axis;
+  var baseline = this.baseline;
+  var sourceVertices = this.sourceVertices;
+  var faceBounds = this.faceBoundsArray;
+
+  // shift all vertices
+  for (var i = 0; i < this.sourceVertexCount; i++) {
+    sourceVertices[i][axis] -= baseline;
+  }
+
+  // shift all computed face bounds
+  for (var i = 0; i < this.sourceFaceCount; i++) {
+    var bounds = faceBounds[i];
+    bounds.min -= baseline;
+    bounds.max -= baseline;
+  }
+
+  // shift mesh AABB
+  this.min[axis] -= baseline;
+  this.max[axis] -= baseline;
+
+  // shift the context calculated for each layer
+  this.forEachLayer(function(layer) {
+    layer.context.d -= baseline;
+  });
+
+  // b/c we just floored, the baseline is 0
+  this.baseline = 0;
 }
 
 Slicer.prototype.setMode = function(mode) {
@@ -304,8 +354,7 @@ Slicer.prototype.setLevel = function(level) {
 
     var contourVertices = currentLayerContourGeo.vertices;
     contourVertices.length = 0;
-    // if slice level, or
-    // if raft level and writing raft perimeter
+    // write walls if slice level, or if raft level and writing raft walls
     if (level >= 0 || (level < 0 && this.raftWriteWalls)) {
       layer.writeWalls(contourVertices);
     }
@@ -317,15 +366,15 @@ Slicer.prototype.setLevel = function(level) {
 
   if (this.mode === Slicer.Modes.preview) {
     var slicePos = this.getLevelPos(level);
-    var faceBounds = this.faceBounds;
+    var faceBoundsArray = this.faceBoundsArray;
 
     // current vertices and faces
     var vertices = geos.slicedMesh.geo.vertices;
     var faces = geos.slicedMesh.geo.faces;
 
     // local vars for ease of access
-    var vertexCount = this.sourceVertices.length;
-    var faceCount = this.sourceFaces.length;
+    var vertexCount = this.sourceVertexCount;
+    var faceCount = this.sourceFaceCount;
 
     // erase any sliced verts and faces
     vertices.length = vertexCount;
@@ -339,8 +388,8 @@ Slicer.prototype.setLevel = function(level) {
       // array of faces that intersect the slicing plane
       var slicedFaces = [];
 
-      for (var i = this.sourceFaces.length-1; i >= 0; i--) {
-        var bounds = faceBounds[i];
+      for (var i = this.sourceFaceCount - 1; i >= 0; i--) {
+        var bounds = faceBoundsArray[i];
         var face = bounds.face;
 
         if (bounds.max < slicePos) {
@@ -736,11 +785,11 @@ Slicer.prototype.makeGeometry = function() {
   };
 
   var geoSlicedMesh = geos.slicedMesh.geo;
-  var vertices = this.sourceVertices.slice();
+  var vertices = this.sourceVertices;
   var faces = [];
   /*// set the face array on the mesh
-  for (var i = 0; i < this.faceBounds.length; i++) {
-    var face = this.faceBounds[i].face;
+  for (var i = 0; i < this.faceBoundsArray.length; i++) {
+    var face = this.faceBoundsArray[i].face;
     face.materialIndex = 0;
     faces.push(face);
   }*/
@@ -875,7 +924,7 @@ Slicer.prototype.makeRaftLayers = function() {
 // build arrays of faces crossing each slicing plane
 Slicer.prototype.buildLayerFaceLists = function() {
   var layerHeight = this.layerHeight;
-  var faceBounds = this.faceBounds;
+  var faceBoundsArray = this.faceBoundsArray;
   var min = this.min[this.axis];
 
   var numSlices = this.numSlices;
@@ -889,8 +938,8 @@ Slicer.prototype.buildLayerFaceLists = function() {
   for (var i = 0; i < numSlices; i++) layerLists[i] = [];
 
   // bucket the faces
-  for (var i = 0; i < this.sourceFaces.length; i++) {
-    var bounds = faceBounds[i];
+  for (var i = 0; i < this.sourceFaceCount; i++) {
+    var bounds = faceBoundsArray[i];
     var idx;
 
     /*if (bounds.min < layer0) idx = 0;
@@ -911,7 +960,7 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
   // various local vars
   var numSlices = layerLists.length;
-  var faceBounds = this.faceBounds;
+  var faceBoundsArray = this.faceBoundsArray;
   var axis = this.axis;
   var min = this.min[axis];
   var layerHeight = this.layerHeight;
@@ -939,7 +988,7 @@ Slicer.prototype.buildLayerSegmentSets = function() {
     //  if it's below the slicing plane, eliminate it
     //  else, store its intersection with the slicing plane
     for (var idx of sweepSet) {
-      var bounds = faceBounds[idx];
+      var bounds = faceBoundsArray[idx];
 
       if (bounds.max < slicePos) sweepSet.delete(idx);
       else {

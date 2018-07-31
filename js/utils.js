@@ -149,6 +149,14 @@ function arrayAppend(target, source) {
   for (var i = 0; i < sourceLength; i++) target.push(source[i]);
 }
 
+function cloneVector3Array(arr) {
+  var result = [];
+
+  for (var i = 0; i < arr.length; i++) result.push(arr[i].clone());
+
+  return result;
+}
+
 // THREE.Face3- and THREE.Vector3-related functions
 // get THREE.Face3 vertices
 function faceGetVerts(face, vertices) {

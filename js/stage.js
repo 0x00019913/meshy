@@ -302,11 +302,11 @@ Stage.prototype.generateUI = function() {
   this.sliceMakeRaft = true; // todo: back to true
   this.sliceRaftNumTopLayers = 3;
   this.sliceRaftTopLayerHeight = 0.05;
-  this.sliceRaftTopWidth = 0.05;
+  this.sliceRaftTopLineWidth = 0.05;
   this.sliceRaftTopDensity = 1.0;
   this.sliceRaftNumBaseLayers = 1;
   this.sliceRaftBaseLayerHeight = 0.1;
-  this.sliceRaftBaseWidth = 0.1;
+  this.sliceRaftBaseLineWidth = 0.1;
   this.sliceRaftBaseDensity = 0.5;
   this.sliceRaftOffset = 1.0;
   this.sliceRaftGap = 0.05;
@@ -589,11 +589,11 @@ Stage.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
   sliceRaftFolder.add(this, "sliceRaftNumTopLayers", 0).step(1).name("Top layers");
   sliceRaftFolder.add(this, "sliceRaftTopLayerHeight", 0).name("Top height");
-  sliceRaftFolder.add(this, "sliceRaftTopWidth", 0).name("Top width");
+  sliceRaftFolder.add(this, "sliceRaftTopLineWidth", 0).name("Top width");
   sliceRaftFolder.add(this, "sliceRaftTopDensity", 0, 1).name("Top density");
   sliceRaftFolder.add(this, "sliceRaftNumBaseLayers", 0).step(1).name("Base layers");
   sliceRaftFolder.add(this, "sliceRaftBaseLayerHeight", 0).name("Base height");
-  sliceRaftFolder.add(this, "sliceRaftBaseWidth", 0).name("Base width");
+  sliceRaftFolder.add(this, "sliceRaftBaseLineWidth", 0).name("Base width");
   sliceRaftFolder.add(this, "sliceRaftBaseDensity", 0, 1).name("Base density");
   sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
   sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
@@ -660,11 +660,11 @@ Stage.prototype.makeSlicerParams = function() {
     makeRaft: this.sliceMakeRaft,
     raftNumTopLayers: this.sliceRaftNumTopLayers,
     raftTopLayerHeight: this.sliceRaftTopLayerHeight,
-    raftTopWidth: this.sliceRaftTopWidth,
+    raftTopLineWidth: this.sliceRaftTopLineWidth,
     raftTopDensity: this.sliceRaftTopDensity,
     raftNumBaseLayers: this.sliceRaftNumBaseLayers,
     raftBaseLayerHeight: this.sliceRaftBaseLayerHeight,
-    raftBaseWidth: this.sliceRaftBaseWidth,
+    raftBaseLineWidth: this.sliceRaftBaseLineWidth,
     raftBaseDensity: this.sliceRaftBaseDensity,
     raftOffset: this.sliceRaftOffset,
     raftGap: this.sliceRaftGap,
