@@ -2111,7 +2111,7 @@ Model.prototype.setSliceLevel = function(level) {
   this.updateSliceMeshesInScene();
 }
 
-Model.prototype.updateSlicerDisplayParams = function(params) {
+Model.prototype.updateSlicerParams = function(params) {
   if (!this.slicer) return;
 
   this.slicer.updateParams(params);
@@ -2119,20 +2119,6 @@ Model.prototype.updateSlicerDisplayParams = function(params) {
 
   this.addSliceMeshesToScene();
   //this.updateSliceMeshesInScene();
-}
-
-Model.prototype.recalculateLayers = function(resolution, numWalls) {
-  if (!this.slicer) return;
-
-  this.slicer.setResolution(resolution);
-  this.slicer.setNumWalls(numWalls);
-  this.slicer.unreadyGeometry();
-
-  // layer geometry is on the screen, so recalculate now
-  if (this.slicer.mode == Slicer.Modes.full) {
-    this.slicer.makeFullGeometry();
-    this.setSliceMeshGeometry();
-  }
 }
 
 

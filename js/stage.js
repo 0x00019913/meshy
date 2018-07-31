@@ -297,6 +297,7 @@ Stage.prototype.generateUI = function() {
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
+  // raft options
   // todo: all to reasonable values
   this.sliceMakeRaft = true; // todo: back to true
   this.sliceRaftNumTopLayers = 3;
@@ -310,6 +311,14 @@ Stage.prototype.generateUI = function() {
   this.sliceRaftOffset = 1.0;
   this.sliceRaftGap = 0.05;
   this.sliceRaftWriteWalls = false;
+  // gcode options
+  this.gcodeFilename = this.filename;
+  this.gcodeExtension = "gcode";
+  this.gcodeTemperature = 200;
+  this.gcodeFilamentDiameter = 2.5;
+  this.gcodePrintSpeed = 70;
+  this.gcodeRaftBasePrintSpeed = 25;
+  this.gcodeRaftTopPrintSpeed = 30;
   this.buildSupportSliceFolder();
 
   this.gui.add(this, "undo").name("Undo");
@@ -548,6 +557,7 @@ Stage.prototype.buildSliceFolder = function(folder) {
   }
   this.buildLayerSettingsFolder(folder);
   this.buildRaftFolder(folder);
+  this.buildGcodeFolder(folder);
 
   if (this.sliceModeOn) folder.add(this, "deactivateSliceMode").name("Slice mode off")
   else folder.add(this, "activateSliceMode").name("Slice mode on");
@@ -569,7 +579,7 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
   sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
   sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill Overlap");
   if (this.sliceModeOn) {
-    sliceLayerSettingsFolder.add(this, "recalculateLayers").name("Recalculate layers");
+    sliceLayerSettingsFolder.add(this, "updateSlicerParams").name("Update params");
   }
 }
 Stage.prototype.buildRaftFolder = function(folder) {
@@ -588,9 +598,24 @@ Stage.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
   sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
   sliceRaftFolder.add(this, "sliceRaftWriteWalls").name("Write perimeter");
+  if (this.sliceModeOn) {
+    sliceRaftFolder.add(this, "updateSlicerParams").name("Update params");
+  }
 }
 Stage.prototype.buildGcodeFolder = function(folder) {
-  // todo
+  var gcodeFolder = folder.addFolder("G-code");
+  this.clearFolder(gcodeFolder);
+
+  gcodeFolder.add(this, "gcodeFilename").name("Filename");
+  gcodeFolder.add(this, "gcodeExtension", { gcode: "gcode" }).name("Extension");
+  gcodeFolder.add(this, "gcodeTemperature", 0).name("Temperature");
+  gcodeFolder.add(this, "gcodeFilamentDiameter", 0.1, 5).name("Filament diameter");
+  gcodeFolder.add(this, "gcodePrintSpeed", 0).name("Print speed");
+  gcodeFolder.add(this, "gcodeRaftBasePrintSpeed", 0).name("Raft base speed");
+  gcodeFolder.add(this, "gcodeRaftTopPrintSpeed", 0).name("Raft top speed");
+  if (this.sliceModeOn) {
+    gcodeFolder.add(this, "gcodeSave", 0).name("Save G-code");
+  }
 }
 Stage.prototype.setSliceMode = function() {
   if (this.model) {
@@ -600,13 +625,19 @@ Stage.prototype.setSliceMode = function() {
 }
 Stage.prototype.updateSlicerDisplayParams = function() {
   if (this.model) {
-    this.model.updateSlicerDisplayParams({
+    this.model.updateSlicerParams({
       previewSliceMesh: this.slicePreviewModeSliceMesh,
       fullUpToLayer: this.sliceFullModeUpToLayer,
       fullShowInfill: this.sliceFullModeShowInfill
     });
     this.setSliceLevel();
   }
+}
+Stage.prototype.updateSlicerParams = function() {
+  if (this.model) {
+    this.model.updateSlicerParams(this.makeSlicerParams());
+  }
+  this.setSliceLevel();
 }
 Stage.prototype.activateSliceMode = function() {
   if (this.model) {
@@ -657,10 +688,8 @@ Stage.prototype.setSliceLevel = function() {
     this.model.setSliceLevel(this.currentSliceLevel);
   }
 }
-Stage.prototype.recalculateLayers = function() {
-  if (this.model) {
-    this.model.recalculateLayers(this.lineWidth, this.sliceNumWalls);
-  }
+Stage.prototype.gcodeSave = function() {
+  // todo
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearFolder(this.scaleToMeasurementFolder);
