@@ -122,12 +122,19 @@ Slicer.prototype.updateParams = function(params) {
   var updated = {};
 
   for (var p in defaults) {
-    var oldVal = this[p];
-    var newVal = params.hasOwnProperty(p) ? params[p] : defaults[p];
+    var hasParam = params.hasOwnProperty(p);
+    var val = undefined;
 
-    if (oldVal !== newVal) updated[p] = newVal;
+    // if no initial value set, definitely get one - from params if present,
+    // else, from defaults
+    if (this[p] === undefined) val = hasParam ? params[p] : defaults[p];
+    // else, if initial value set, only update if present in params
+    else if (hasParam) val = params[p];
 
-    this[p] = newVal;
+    if (val !== undefined) {
+      this[p] = val;
+      updated[p] = val;
+    }
   }
 
   this.handleUpdatedParams(updated);
@@ -273,6 +280,7 @@ Slicer.prototype.getLevelPos = function(level) {
 }
 
 Slicer.prototype.setLevel = function(level) {
+  if (level === undefined) level = this.getCurrentLevel();
   level = clamp(level, this.getMinLevel(), this.getMaxLevel());
   var prevLevel = this.currentLevel;
   this.currentLevel = level;

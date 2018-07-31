@@ -2115,7 +2115,7 @@ Model.prototype.updateSlicerDisplayParams = function(params) {
   if (!this.slicer) return;
 
   this.slicer.updateParams(params);
-  this.setSliceLevel(this.slicer.getCurrentLevel());
+  this.setSliceLevel();
 
   this.addSliceMeshesToScene();
   //this.updateSliceMeshesInScene();
