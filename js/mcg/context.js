@@ -18,6 +18,16 @@ MCG.Context = (function() {
     this.type = MCG.Types.context;
   }
 
+  Object.assign(Context.prototype, {
+
+    constructor: Context,
+
+    clone: function() {
+      return new this.constructor(this.axis, this.d, this.precision);
+    }
+
+  });
+
   return Context;
 
 })();
