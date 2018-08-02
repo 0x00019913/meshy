@@ -153,20 +153,35 @@ Slicer.prototype.handleUpdatedParams = function(params) {
   var raftUpdated = false;
 
   if (params.hasOwnProperty("numWalls")) {
-    this.forEachSliceLayer(function(layer) { layer.unreadyWalls(); });
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyWalls();
+      layer.params.numWalls = params.numWalls;
+    });
   }
   if (params.hasOwnProperty("numTopLayers")) {
-    this.forEachSliceLayer(function(layer) { layer.unreadyInfillContour(); });
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfillContour();
+      layer.params.numTopLayers = params.numTopLayers;
+    });
   }
   if (params.hasOwnProperty("infillType")) {
-    this.forEachSliceLayer(function(layer) { layer.unreadyInfill(); });
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfill();
+      layer.params.infillType = params.infillType;
+    });
   }
   if (params.hasOwnProperty("infillDensity")) {
     if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
-    this.forEachSliceLayer(function(layer) { layer.unreadyInfill(); });
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfill();
+      layer.params.infillDensity = params.infillDensity;
+    });
   }
   if (params.hasOwnProperty("infillOverlap")) {
-    this.forEachSliceLayer(function(layer) { layer.unreadyInfillContour(); });
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfillContour();
+      layer.params.infillOverlap = params.infillOverlap;
+    });
   }
   if (params.hasOwnProperty("makeRaft")
     || params.hasOwnProperty("raftNumTopLayers")
@@ -290,6 +305,128 @@ Slicer.prototype.floorToBaseline = function() {
 
   // b/c we just floored, the baseline is 0
   this.baseline = 0;
+}
+
+Slicer.prototype.gcodeSave = function(params) {
+  var filamentDiameter = params.filamentDiameter;
+  var filamentCrossSection = filamentDiameter * filamentDiameter * Math.PI / 4;
+  var axis = this.axis;
+  var coincident = MCG.Math.coincident;
+
+  var exporter = new GcodeExporter();
+
+  exporter.setFilename(params.filename);
+  exporter.setExtension(params.extension);
+  exporter.setTravelSpeed(params.travelSpeed);
+  exporter.setCoordPrecision(params.coordPrecision);
+  exporter.setExtruderPrecision(params.extruderPrecision);
+
+  exporter.init();
+
+  exporter.writeHeader();
+  exporter.writeNewline();
+
+  exporter.writeHeatExtruder(params.temperature);
+  exporter.writeAbsolutePositionionMode();
+  exporter.writeNewline();
+  exporter.writeComment("PRIME EXTRUDER");
+  exporter.writePrimingSequence(params.primeExtrusion);
+
+  var extruderPosition = exporter.e;
+
+  var level0 = this.getMinLevel(), levelk = this.getMaxLevel();
+
+  // write geometry for every layer
+  for (var level = level0; level <= levelk; level++) {
+    var layer = this.getLayer(level);
+
+    var isRaft = level < 0;
+    var isRaftBase = level < (level0 + this.raftNumBaseLayers);
+
+    var layerHeight, lineWidth;
+    var wallSpeed, infillSpeed;
+
+    if (isRaft) {
+      if (isRaftBase) {
+        layerHeight = this.raftBaseLayerHeight;
+        lineWidth = this.raftBaseLineWidth;
+        wallSpeed = params.wallSpeed;
+        infillSpeed = params.raftBasePrintSpeed;
+      }
+      else {
+        layerHeight = this.raftTopLayerHeight;
+        lineWidth = this.raftTopLineWidth;
+        wallSpeed = params.wallSpeed;
+        infillSpeed = params.raftTopPrintSpeed;
+      }
+    }
+    else {
+      layerHeight = this.layerHeight;
+      lineWidth = this.lineWidth;
+      wallSpeed = params.wallSpeed;
+      infillSpeed = params.infillSpeed;
+    }
+
+    // ratio of cross-sections of printed line and filament; multiply by length
+    // of segment to get how much to extrude
+    var printCrossSection = layerHeight * lineWidth;
+    var extrusionFactor = params.extrusionMultiplier * printCrossSection / filamentCrossSection;
+
+    // duplicate context and shift its recorded position up by half a layer
+    // height above the center line b/c that's where the extruder will be
+    var context = layer.context.clone();
+    context.d += layerHeight / 2;
+    // constructor for converting intger-space vectors to physical vectors
+    var constr = THREE.Vector3;
+
+    // current position in integer-space coordinates; when encountering a new
+    // segment to print and current position is not the same as its start point,
+    // travel there first
+    var ipos = null;
+
+    exporter.writeNewline();
+    exporter.writeComment("LAYER " + level);
+    if (isRaft) exporter.writeComment("RAFT");
+    exporter.writeNewline();
+
+    var infill = layer.getInfill();
+    var infillInner = infill.inner;
+    var infillSolid = infill.solid;
+
+    // write inner infill
+    writeContour(infillInner, infillSpeed);
+    // write solid infill
+    writeContour(infillSolid, infillSpeed);
+
+    if (!isRaft || this.raftWriteWalls) {
+      var walls = layer.getWalls();
+      // write walls
+      for (var w = walls.length - 1; w >= 0; w--) {
+        writeContour(walls[w], wallSpeed);
+      }
+    }
+  }
+
+  exporter.saveToFile();
+
+  function writeContour(contour, speed) {
+    if (!contour) return;
+
+    contour.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(constr, context);
+      var v2 = p2.toVector3(constr, context);
+      var extrusion = v1.distanceTo(v2) * extrusionFactor;
+      extruderPosition += extrusion;
+
+      if (ipos === null || !coincident(ipos, p1)) {
+        exporter.writeTravel(v1);
+      }
+
+      exporter.writePrint(v2, extruderPosition, speed);
+
+      ipos = p2;
+    });
+  }
 }
 
 Slicer.prototype.setMode = function(mode) {
@@ -1325,19 +1462,15 @@ Layer.prototype.computeInfill = function() {
     });
   }
 
-  // remove infill segments that are too short if infill consists of
-  // disconnected lines
-  if (type & Slicer.InfillTypes.disconnectedLineType) {
-    //if (infillInner !== null) infillInner.filter(filterFn);
-    //if (infillSolid !== null) infillSolid.filter(filterFn);
-  };
+  if (infillInner !== null) infillInner.filter(lengthFilterFn);
+  if (infillSolid !== null) infillSolid.filter(lengthFilterFn);
 
   this.infill = {
     inner: infillInner,
     solid: infillSolid
   };
 
-  function filterFn(segment) { return segment.lengthSq() >= iLineWidthsq / 4; }
+  function lengthFilterFn(segment) { return segment.lengthSq() >= iLineWidthsq / 4; }
 }
 
 Layer.prototype.writeBase = function(vertices) {

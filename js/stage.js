@@ -316,9 +316,15 @@ Stage.prototype.generateUI = function() {
   this.gcodeExtension = "gcode";
   this.gcodeTemperature = 200;
   this.gcodeFilamentDiameter = 2.5;
-  this.gcodePrintSpeed = 70;
+  this.gcodePrimeExtrusion = 3;
+  this.gcodeExtrusionMultiplier = 1.0;
+  this.gcodeInfillSpeed = 70;
+  this.gcodeWallSpeed = 30;
   this.gcodeRaftBasePrintSpeed = 25;
   this.gcodeRaftTopPrintSpeed = 30;
+  this.gcodeTravelSpeed = 150;
+  this.gcodeCoordinatePrecision = 3;
+  this.gcodeExtruderPrecision = 5;
   this.buildSupportSliceFolder();
 
   this.gui.add(this, "undo").name("Undo");
@@ -606,13 +612,19 @@ Stage.prototype.buildGcodeFolder = function(folder) {
   var gcodeFolder = folder.addFolder("G-code");
   this.clearFolder(gcodeFolder);
 
-  gcodeFolder.add(this, "gcodeFilename").name("Filename");
+  this.gcodeFilenameController = gcodeFolder.add(this, "gcodeFilename").name("Filename");
   gcodeFolder.add(this, "gcodeExtension", { gcode: "gcode" }).name("Extension");
   gcodeFolder.add(this, "gcodeTemperature", 0).name("Temperature");
   gcodeFolder.add(this, "gcodeFilamentDiameter", 0.1, 5).name("Filament diameter");
-  gcodeFolder.add(this, "gcodePrintSpeed", 0).name("Print speed");
+  gcodeFolder.add(this, "gcodePrimeExtrusion", 0).name("Prime extrusion");
+  gcodeFolder.add(this, "gcodeExtrusionMultiplier", 0).name("Extrusion multiplier");
+  gcodeFolder.add(this, "gcodeInfillSpeed", 0).name("Infill speed");
+  gcodeFolder.add(this, "gcodeWallSpeed", 0).name("Wall speed");
   gcodeFolder.add(this, "gcodeRaftBasePrintSpeed", 0).name("Raft base speed");
   gcodeFolder.add(this, "gcodeRaftTopPrintSpeed", 0).name("Raft top speed");
+  gcodeFolder.add(this, "gcodeTravelSpeed", 0).name("Travel speed");
+  gcodeFolder.add(this, "gcodeCoordinatePrecision", 0).name("Coord precision");
+  gcodeFolder.add(this, "gcodeExtruderPrecision", 0).name("Extruder precision");
   if (this.sliceModeOn) {
     gcodeFolder.add(this, "gcodeSave", 0).name("Save G-code");
   }
@@ -676,6 +688,23 @@ Stage.prototype.makeSlicerParams = function() {
     fullShowInfill: this.sliceFullModeShowInfill
   };
 }
+Stage.prototype.makeGcodeParams = function() {
+  return {
+    filename: this.gcodeFilename,
+    extension: this.gcodeExtension,
+    temperature: this.gcodeTemperature,
+    filamentDiameter: this.gcodeFilamentDiameter,
+    primeExtrusion: this.gcodePrimeExtrusion,
+    extrusionMultiplier: this.gcodeExtrusionMultiplier,
+    infillSpeed: this.gcodeInfillSpeed,
+    wallSpeed: this.gcodeWallSpeed,
+    raftBasePrintSpeed: this.gcodeRaftBasePrintSpeed,
+    raftTopPrintSpeed: this.gcodeRaftTopPrintSpeed,
+    travelSpeed: this.gcodeTravelSpeed,
+    coordPrecision: this.gcodeCoordinatePrecision,
+    extruderPrecision: this.gcodeExtruderPrecision
+  };
+}
 Stage.prototype.deactivateSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = false;
@@ -689,7 +718,9 @@ Stage.prototype.setSliceLevel = function() {
   }
 }
 Stage.prototype.gcodeSave = function() {
-  // todo
+  if (this.model) {
+    this.model.gcodeSave(this.makeGcodeParams());
+  }
 }
 Stage.prototype.buildScaleToMeasurementFolder = function() {
   this.clearFolder(this.scaleToMeasurementFolder);
@@ -1040,17 +1071,22 @@ Stage.prototype.displayMesh = function(success, model) {
     return;
   }
 
+  this.filename = this.model.filename;
+  this.gcodeFilename = this.filename;
+  this.gcodeFilenameController.updateDisplay();
+
   if (this.autocenterOnImport) this.autoCenter();
 
   // todo: remove
   //this.generateSupports();
   this.activateSliceMode();
+  //this.gcodeSave();
 
   this.cameraToModel();
 
   // todo: remove
-  //this.currentSliceLevel = -1;//135;
-  //this.setSliceLevel();
+  this.currentSliceLevel = 113;//135;
+  this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
   if (ct) {
@@ -1060,7 +1096,6 @@ Stage.prototype.displayMesh = function(success, model) {
     });
   }
 
-  this.filename = this.model.filename;
   this.setMeshMaterial();
   this.updateUI();
 }

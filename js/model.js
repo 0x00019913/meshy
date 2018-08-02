@@ -2118,7 +2118,12 @@ Model.prototype.updateSlicerParams = function(params) {
   this.setSliceLevel();
 
   this.addSliceMeshesToScene();
-  //this.updateSliceMeshesInScene();
+}
+
+Model.prototype.gcodeSave = function(params) {
+  if (!this.slicer) return;
+
+  this.slicer.gcodeSave(params);
 }
 
 
