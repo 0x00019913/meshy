@@ -1082,7 +1082,7 @@ Stage.prototype.displayMesh = function(success, model) {
 
   // todo: remove
   //this.generateSupports();
-  this.activateSliceMode();
+  //this.activateSliceMode();
   //this.gcodeSave();
 
   this.cameraToModel();
