@@ -71,6 +71,7 @@ Slicer.DefaultParams = {
 
   numWalls: 2,
   numTopLayers: 3,
+  optimizeTopLayers: true,
   infillType: Slicer.InfillTypes.none,
   infillDensity: 0.1,
   infillOverlap: 0.5,
@@ -130,13 +131,13 @@ Slicer.prototype.updateParams = function(params) {
     var hasParam = params.hasOwnProperty(p);
     var val = undefined;
 
-    // if no initial value set, definitely get one - from params if present,
-    // else, from defaults
+    // if no initial value set, get one from params if present, else, from
+    // defaults
     if (this[p] === undefined) val = hasParam ? params[p] : defaults[p];
     // else, if initial value set, only update if present in params
     else if (hasParam) val = params[p];
 
-    if (val !== undefined) {
+    if (val !== undefined && this[p] !== val) {
       this[p] = val;
       updated[p] = val;
     }
@@ -152,49 +153,50 @@ Slicer.prototype.updateParams = function(params) {
 Slicer.prototype.handleUpdatedParams = function(params) {
   var raftUpdated = false;
 
-  if (params.hasOwnProperty("numWalls")) {
+  if (hasProp("numWalls")) {
     this.forEachSliceLayer(function(layer) {
       layer.unreadyWalls();
       layer.params.numWalls = params.numWalls;
     });
   }
-  if (params.hasOwnProperty("numTopLayers")) {
+  if (hasProp("numTopLayers") || hasProp("optimizeTopLayers")) {
+    var numTopLayers = this.numTopLayers;
     this.forEachSliceLayer(function(layer) {
       layer.unreadyInfillContour();
-      layer.params.numTopLayers = params.numTopLayers;
+      layer.params.numTopLayers = numTopLayers;
     });
   }
-  if (params.hasOwnProperty("infillType")) {
+  if (hasProp("infillType")) {
     this.forEachSliceLayer(function(layer) {
       layer.unreadyInfill();
       layer.params.infillType = params.infillType;
     });
   }
-  if (params.hasOwnProperty("infillDensity")) {
+  if (hasProp("infillDensity")) {
     if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
     this.forEachSliceLayer(function(layer) {
       layer.unreadyInfill();
       layer.params.infillDensity = params.infillDensity;
     });
   }
-  if (params.hasOwnProperty("infillOverlap")) {
+  if (hasProp("infillOverlap")) {
     this.forEachSliceLayer(function(layer) {
       layer.unreadyInfillContour();
       layer.params.infillOverlap = params.infillOverlap;
     });
   }
-  if (params.hasOwnProperty("makeRaft")
-    || params.hasOwnProperty("raftNumTopLayers")
-    || params.hasOwnProperty("raftNumBaseLayers")) {
+  if (hasProp("makeRaft")
+    || hasProp("raftNumTopLayers")
+    || hasProp("raftNumBaseLayers")) {
     this.numRaftLayers = this.makeRaft ? this.raftNumBaseLayers + this.raftNumTopLayers : 0;
     raftUpdated = true;
   }
-  if (params.hasOwnProperty("raftTopLayerHeight")
-    || params.hasOwnProperty("raftTopDensity")
-    || params.hasOwnProperty("raftBaseLayerHeight")
-    || params.hasOwnProperty("raftBaseDensity")
-    || params.hasOwnProperty("raftGap")
-    || params.hasOwnProperty("raftOffset")) {
+  if (hasProp("raftTopLayerHeight")
+    || hasProp("raftTopDensity")
+    || hasProp("raftBaseLayerHeight")
+    || hasProp("raftBaseDensity")
+    || hasProp("raftGap")
+    || hasProp("raftOffset")) {
     raftUpdated = true;
   }
 
@@ -203,6 +205,8 @@ Slicer.prototype.handleUpdatedParams = function(params) {
     this.floorToBaseline();
     this.makeRaftLayers();
   }
+
+  function hasProp(name) { return params.hasOwnProperty(name); }
 }
 
 // map a function to all slice layers
@@ -633,14 +637,14 @@ Slicer.prototype.setLevel = function(level) {
     var contourVertices = allContoursGeo.vertices;
     contourVertices.length = 0;
 
-    if (this.fullUpToLayer) {
-      for (var i = this.getMinLevel(); i < level; i++) {
-        var ilayer = this.getLayer(i);
+    var topLevel = this.fullUpToLayer ? level - 1 : this.getMaxLevel();
 
-        ilayer.writeWalls(contourVertices);
+    for (var i = this.getMinLevel(); i < topLevel; i++) {
+      var ilayer = this.getLayer(i);
 
-        if (this.fullShowInfill) ilayer.writeInfill(contourVertices);
-      }
+      ilayer.writeWalls(contourVertices);
+
+      if (this.fullShowInfill) ilayer.writeInfill(contourVertices);
     }
   }
 
@@ -944,6 +948,7 @@ Slicer.prototype.makeLayers = function() {
     lineWidth: this.lineWidth,
     numWalls: this.numWalls,
     numTopLayers: this.numTopLayers,
+    optimizeTopLayers: this.optimizeTopLayers,
     infillType: this.infillType,
     infillDensity: this.infillDensity,
     infillOverlap: this.infillOverlap,
@@ -1370,27 +1375,41 @@ Layer.prototype.computeDisjointInfillContours = function() {
       solid: new MCG.SegmentSet(context)
     };
   }
-  //
+  // else, if the layer is within numTopLayers of the top or bottom, fill the
+  // whole layer with solid infill
   else if ((idx < numTopLayers) || (idx > idxk - numTopLayers)) {
     this.disjointInfillContours = {
       inner: new MCG.SegmentSet(context),
       solid: contour
     };
   }
+  // else, it has at least numTopLayers layers above and below, calculate infill
+  // from those
   else {
     var neighborContours = new MCG.SegmentSet(context);
+    var numLayers = 0;
 
-    for (var i = 1; i <= numTopLayers; i++) {
-      //if (idx + i <= idxk) {
+    // if optimizing top layer computation (and there are more than 2 top
+    // layers), only use the adjacent layers and the farthest layers
+    if (this.params.optimizeTopLayers && numTopLayers > 2) {
+      neighborContours.merge(layers[idx + 1].getInfillContour());
+      neighborContours.merge(layers[idx - 1].getInfillContour());
+      neighborContours.merge(layers[idx + numTopLayers].getInfillContour());
+      neighborContours.merge(layers[idx - numTopLayers].getInfillContour());
+
+      numLayers = 4;
+    }
+    else {
+      for (var i = 1; i <= numTopLayers; i++) {
         neighborContours.merge(layers[idx + i].getInfillContour());
-      //}
-      //if (idx - i >= idx0) {
         neighborContours.merge(layers[idx - i].getInfillContour());
-      //}
+      }
+
+      numLayers = numTopLayers * 2;
     }
 
     var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
-      minDepthB: numTopLayers * 2
+      minDepthB: numLayers
     });
 
     this.disjointInfillContours = {

@@ -293,7 +293,8 @@ Stage.prototype.generateUI = function() {
   this.sliceFullModeUpToLayer = true;
   this.sliceFullModeShowInfill = false;
   this.sliceNumWalls = 2;
-  this.sliceNumTopLayers = 3;
+  this.sliceNumTopLayers = 10;
+  this.sliceOptimizeTopLayers = true;
   this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
@@ -574,6 +575,7 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
 
   sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1, 10).name("Walls").step(1);
   sliceLayerSettingsFolder.add(this, "sliceNumTopLayers", 1, 10).name("Top layers").step(1);
+  sliceLayerSettingsFolder.add(this, "sliceOptimizeTopLayers").name("Optimize top layers");
   sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
@@ -666,6 +668,7 @@ Stage.prototype.makeSlicerParams = function() {
     lineWidth: this.lineWidth,
     numWalls: this.sliceNumWalls,
     numTopLayers: this.sliceNumTopLayers,
+    optimizeTopLayers: this.sliceOptimizeTopLayers,
     infillType: parseInt(this.sliceInfillType),
     infillDensity: this.sliceInfillDensity,
     infillOverlap: this.sliceInfillOverlap,
@@ -1085,8 +1088,8 @@ Stage.prototype.displayMesh = function(success, model) {
   this.cameraToModel();
 
   // todo: remove
-  this.currentSliceLevel = 113;//135;
-  this.setSliceLevel();
+  //this.currentSliceLevel = 39;
+  //this.setSliceLevel();
 
   var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
   if (ct) {
