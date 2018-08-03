@@ -112,7 +112,10 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       transparent: true,
       opacity: 0.3,
       roughness: 0.7,
-      metalness: 0.3
+      metalness: 0.3,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
     }),
     patch: new THREE.MeshStandardMaterial({
       color: 0x44ff44,
