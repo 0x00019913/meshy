@@ -98,7 +98,10 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       side: THREE.DoubleSide,
       color: 0x0f0f30,
       roughness: 0.8,
-      metalness: 0.3
+      metalness: 0.3,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
     }),
     slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
       transparent: true,
