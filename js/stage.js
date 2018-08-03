@@ -128,6 +128,7 @@ Stage.prototype.generateUI = function() {
     .title("Snap camera to model.");
   this.backgroundColor = "#222222";
   this.meshColor = "#662828"; // todo: reset to 0xffffff
+  this.wireframeColor = "#000000";
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
   this.backgroundColorController =
@@ -142,6 +143,10 @@ Stage.prototype.generateUI = function() {
     .title("Set mesh roughness.");
   displayFolder.add(this, "meshMetalness", 0, 1).name("Mesh metalness").onChange(this.setMeshMaterial.bind(this))
     .title("Set mesh metalness.");
+  this.meshColorController =
+  displayFolder.addColor(this, "wireframeColor").name("Wireframe color")
+    .onChange(this.setWireframeMaterial.bind(this))
+    .title("Set wireframe color.");
   var buildVolumeFolder = displayFolder.addFolder("Build Volume", "Size and visibility settings for the build volume.");
   buildVolumeFolder.add(this, "toggleBuildVolume").name("Toggle volume")
     .title("Toggle build volume visibility.");
@@ -789,6 +794,9 @@ Stage.prototype.setBackgroundColor = function() {
 }
 Stage.prototype.setMeshMaterial = function() {
   if (this.model) this.model.setMeshMaterial(this.meshColor, this.meshRoughness, this.meshMetalness);
+}
+Stage.prototype.setWireframeMaterial = function() {
+  if (this.model) this.model.setWireframeMaterial(this.wireframeColor);
 }
 
 // Initialize the viewport, set up everything with WebGL including the

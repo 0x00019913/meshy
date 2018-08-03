@@ -65,7 +65,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // all materials used in the model
   this.materials = {
-    baseMesh: new THREE.MeshStandardMaterial({
+    base: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: THREE.FaceColors,
       roughness: 0.3,
@@ -684,11 +684,16 @@ Model.prototype.getMeshColor = function() {
   if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
 Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
-  var mat = this.materials.baseMesh;
+  var mat = this.materials.base;
 
   mat.color.set(color);
   mat.roughness = roughness;
   mat.metalness = metalness;
+}
+Model.prototype.setWireframeMaterial = function(color) {
+  var mat = this.materials.wireframe;
+
+  mat.color.set(color);
 }
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then
@@ -815,7 +820,7 @@ Model.prototype.makeBaseMesh = function() {
   var geo = new THREE.Geometry();
   geo.vertices = this.vertices;
   geo.faces = this.faces;
-  this.baseMesh = new THREE.Mesh(geo, this.materials.baseMesh);
+  this.baseMesh = new THREE.Mesh(geo, this.materials.base);
   this.baseMesh.name = "model";
   this.baseMesh.frustumCulled = false;
 }
