@@ -166,70 +166,100 @@ Stage.prototype.generateUI = function() {
     .title("Build volume size on z in mm.")
     .onChange(this.makeBuildVolume.bind(this));
 
-  var editFolder = this.gui.addFolder("Edit", "Mesh edit functions: translation, scaling, rotation, normals.");
+  var editFolder = this.gui.addFolder("Edit",
+    "Mesh edit functions: translation, scaling, rotation, normals.");
 
   editFolder.add(this, "autoCenter").name("Autocenter")
     .title("Center the mesh on x and y; snap to the floor on z.");
 
   var translateFolder = editFolder.addFolder("Translate");
   this.xTranslation = 0;
-  translateFolder.add(this, "xTranslation").name("x translation");
-  translateFolder.add(this, "translateX").name("Translate on x");
+  translateFolder.add(this, "xTranslation").name("x translation")
+    .title("Translation distance on x axis.");
+  translateFolder.add(this, "translateX").name("Translate on x")
+    .title("Translate the mesh on x.");
   this.yTranslation = 0;
-  translateFolder.add(this, "yTranslation").name("y translation");
-  translateFolder.add(this, "translateY").name("Translate on y");
+  translateFolder.add(this, "yTranslation").name("y translation")
+    .title("Translation distance on y axis.");
+  translateFolder.add(this, "translateY").name("Translate on y")
+    .title("Translate the mesh on y.");
   this.zTranslation = 0;
-  translateFolder.add(this, "zTranslation").name("z translation");
-  translateFolder.add(this, "translateZ").name("Translate on z");
+  translateFolder.add(this, "zTranslation").name("z translation")
+    .title("Translation distance on z axis.");
+  translateFolder.add(this, "translateZ").name("Translate on z")
+    .title("Translate the mesh on z.");
 
   var rotateFolder = editFolder.addFolder("Rotate");
   this.xRotation = 0;
-  rotateFolder.add(this, "xRotation").name("x rotation");
-  rotateFolder.add(this, "rotateX").name("Rotate about x");
+  rotateFolder.add(this, "xRotation").name("x rotation")
+    .title("Rotation about x axis in degrees.");
+  rotateFolder.add(this, "rotateX").name("Rotate about x")
+    .title("Rotate mesh about x axis.");
   this.yRotation = 0;
-  rotateFolder.add(this, "yRotation").name("y rotation");
-  rotateFolder.add(this, "rotateY").name("Rotate about y");
+  rotateFolder.add(this, "yRotation").name("y rotation")
+    .title("Rotation about y axis in degrees.");
+  rotateFolder.add(this, "rotateY").name("Rotate about y")
+    .title("Rotate mesh about y axis.");
   this.zRotation = 0;
-  rotateFolder.add(this, "zRotation").name("z rotation");
-  rotateFolder.add(this, "rotateZ").name("Rotate about z");
+  rotateFolder.add(this, "zRotation").name("z rotation")
+    .title("Rotation about z axis in degrees.");
+  rotateFolder.add(this, "rotateZ").name("Rotate about z")
+    .title("Rotate mesh about z axis.");
 
   var scaleFolder = editFolder.addFolder("Scale");
 
   var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
   this.xScale = 1;
-  scaleByFactorFolder.add(this, "xScale", 0).name("x scale");
-  scaleByFactorFolder.add(this, "scaleX").name("Scale on x");
+  scaleByFactorFolder.add(this, "xScale", 0).name("x scale")
+    .title("Scale factor on x axis.");
+  scaleByFactorFolder.add(this, "scaleX").name("Scale on x")
+    .title("Scale mesh on x axis.");
   this.yScale = 1;
-  scaleByFactorFolder.add(this, "yScale", 0).name("y scale");
-  scaleByFactorFolder.add(this, "scaleY").name("Scale on y");
+  scaleByFactorFolder.add(this, "yScale", 0).name("y scale")
+    .title("Scale factor on y axis.");
+  scaleByFactorFolder.add(this, "scaleY").name("Scale on y")
+    .title("Scale mesh on y axis.");
   this.zScale = 1;
-  scaleByFactorFolder.add(this, "zScale", 0).name("z scale");
-  scaleByFactorFolder.add(this, "scaleZ").name("Scale on z");
+  scaleByFactorFolder.add(this, "zScale", 0).name("z scale")
+    .title("Scale factor on z axis.");
+  scaleByFactorFolder.add(this, "scaleZ").name("Scale on z")
+    .title("Scale mesh on z axis.");
   this.allScale = 1;
   scaleByFactorFolder.add(this, "allScale", 0).name("all scale");
   scaleByFactorFolder.add(this, "scaleAll").name("Scale on all axes");
 
   var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
   this.scaleOnAllAxes = true;
-  scaleToSizeFolder.add(this, "scaleOnAllAxes").name("Scale on all axes");
+  scaleToSizeFolder.add(this, "scaleOnAllAxes").name("Scale on all axes")
+    .title("Scale the mesh by the same factor on all axes.");
   this.newXSize = 1;
-  scaleToSizeFolder.add(this, "newXSize", 0).name("New x size");
-  scaleToSizeFolder.add(this, "scaleToXSize").name("Scale to x size");
+  scaleToSizeFolder.add(this, "newXSize", 0).name("New x size")
+    .title("New size on x axis.");
+  scaleToSizeFolder.add(this, "scaleToXSize").name("Scale to x size")
+    .title("Scale mesh to given size on x axis.");
   this.newYSize = 1;
-  scaleToSizeFolder.add(this, "newYSize", 0).name("New y size");
-  scaleToSizeFolder.add(this, "scaleToYSize").name("Scale to y size");
+  scaleToSizeFolder.add(this, "newYSize", 0).name("New y size")
+    .title("New size on y axis.");
+  scaleToSizeFolder.add(this, "scaleToYSize").name("Scale to y size")
+    .title("Scale mesh to given size on y axis.");
   this.newZSize = 1;
-  scaleToSizeFolder.add(this, "newZSize", 0).name("New z size");
-  scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size");
+  scaleToSizeFolder.add(this, "newZSize", 0).name("New z size")
+    .title("New size on z axis.");
+  scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size")
+    .title("Scale mesh to given size on z axis.");
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
 
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size");
-  ringSizeFolder.add(this, "mCircle").name("Mark circle");
+  ringSizeFolder.add(this, "mCircle").name("Mark circle")
+    .title("Turn on the circle measurement tool and mark the inner diameter of the ring.");
   this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes).name("New ring size");
-  ringSizeFolder.add(this, "scaleToRingSize").name("Scale to ring size");
-  ringSizeFolder.add(this, "mDeactivate").name("End measurement");
+  ringSizeFolder.add(this, "newRingSize", ringSizes).name("New ring size")
+    .title("Select ring size.");
+  ringSizeFolder.add(this, "scaleToRingSize").name("Scale to ring size")
+    .title("Scale the ring.");
+  ringSizeFolder.add(this, "mDeactivate").name("End measurement")
+    .title("Turn off the measurement tool when not in use.");
 
   var mirrorFolder = editFolder.addFolder("Mirror");
   mirrorFolder.add(this, "mirrorX").name("Mirror on x");
@@ -339,7 +369,7 @@ Stage.prototype.generateUI = function() {
 
   this.infoBox = new InfoBox();
   this.infoBox.add("Units", this, "units");
-  this.infoBox.add("Polycount", this, ["model","count"]);
+  this.infoBox.add("Polycount", this, ["model","getPolycount"]);
   this.infoBox.addMultiple("x range", this, [["model","getxmin"], ["model","getxmax"]]);
   this.infoBox.addMultiple("y range", this, [["model","getymin"], ["model","getymax"]]);
   this.infoBox.addMultiple("z range", this, [["model","getzmin"], ["model","getzmax"]]);
@@ -886,6 +916,9 @@ Stage.prototype.initViewport = function() {
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
     }
+
+    // escape key turns off the current measurement
+    if (e.keyCode === 27) _this.mDeactivate();
   }
 
   function animate() {

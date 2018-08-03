@@ -240,6 +240,8 @@ Model.prototype.getxmax = function() { return this.max.x; }
 Model.prototype.getymax = function() { return this.max.y; }
 Model.prototype.getzmax = function() { return this.max.z; }
 
+Model.prototype.getPolycount = function() { return this.faces.length; }
+
 /* TRANSFORMATIONS */
 
 // Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
