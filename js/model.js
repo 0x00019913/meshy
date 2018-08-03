@@ -37,6 +37,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // for display
   this.wireframe = false;
+  this.wireframeMesh = null;
 
   // current mode and the meshes it switches in and out
   this.mode = "base";
@@ -68,7 +69,14 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
       color: 0xffffff,
       vertexColors: THREE.FaceColors,
       roughness: 0.3,
-      metalness: 0.5
+      metalness: 0.5,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    }),
+    wireframe: new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      wireframe: true
     }),
     sliceOneLayerBase: new THREE.LineBasicMaterial({
       color: 0x666666,
@@ -650,14 +658,22 @@ Model.prototype.faceIntersection = function(face, axis, pos) {
 
 // Toggle wireframe.
 Model.prototype.toggleWireframe = function() {
+  if (this.wireframeMesh === null) this.makeWireframeMesh();
+
   this.wireframe = !this.wireframe;
   this.printout.log("Wireframe is " + (this.wireframe ? "on" : "off") + ".");
-  if (this.baseMesh) {
-    this.baseMesh.material.wireframe = this.wireframe;
-  }
-  if (this.slicePreviewMesh) {
-    this.slicePreviewMesh.material[0].wireframe = this.wireframe;
-  }
+
+  this.wireframeMesh.visible = this.wireframe;
+  //this.baseMesh.material.wireframe = this.wireframe;
+}
+
+Model.prototype.makeWireframeMesh = function() {
+  var mesh = this.baseMesh.clone();
+  mesh.material = this.materials.wireframe;
+  mesh.visible = false;
+  this.scene.add(mesh);
+
+  this.wireframeMesh = mesh;
 }
 
 // Get and set material color.
@@ -2068,7 +2084,6 @@ Model.prototype.activateSliceMode = function(params) {
 Model.prototype.deactivateSliceMode = function() {
   this.setMode("base");
   this.slicer = null;
-  this.slicePreviewMesh = null;
   this.sliceFullMesh = null;
 }
 
