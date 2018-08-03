@@ -291,6 +291,8 @@ MCG.Polygon = (function() {
     // offset every point in the polygon by a given distance (positive for
     // outward, negative for inward, given in integer-space units)
     offset: function(dist, tol) {
+      if (dist === 0) return this;
+      
       var result = this.createNew();
 
       if (!this.valid()) return result;
