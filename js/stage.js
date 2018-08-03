@@ -109,7 +109,7 @@ Stage.prototype.generateUI = function() {
   exportFolder.add(this, "exportSTL").name("Export STL")
     .title("Export as binary STL file.");
   exportFolder.add(this, "exportSTLascii").name("Export ASCII STL")
-    .title("Export as ASCII STL file");
+    .title("Export as ASCII STL file.");
 
   var settingsFolder = this.gui.addFolder("Settings", "Settings for computation.");
 
@@ -172,7 +172,7 @@ Stage.prototype.generateUI = function() {
   editFolder.add(this, "autoCenter").name("Autocenter")
     .title("Center the mesh on x and y; snap to the floor on z.");
 
-  var translateFolder = editFolder.addFolder("Translate");
+  var translateFolder = editFolder.addFolder("Translate", "Translate the mesh on a given axis.");
   this.xTranslation = 0;
   translateFolder.add(this, "xTranslation").name("x translation")
     .title("Translation distance on x axis.");
@@ -189,7 +189,7 @@ Stage.prototype.generateUI = function() {
   translateFolder.add(this, "translateZ").name("Translate on z")
     .title("Translate the mesh on z.");
 
-  var rotateFolder = editFolder.addFolder("Rotate");
+  var rotateFolder = editFolder.addFolder("Rotate", "Rotate the mesh about a given axis.");
   this.xRotation = 0;
   rotateFolder.add(this, "xRotation").name("x rotation")
     .title("Rotation about x axis in degrees.");
@@ -206,29 +206,22 @@ Stage.prototype.generateUI = function() {
   rotateFolder.add(this, "rotateZ").name("Rotate about z")
     .title("Rotate mesh about z axis.");
 
-  var scaleFolder = editFolder.addFolder("Scale");
+  var scaleFolder = editFolder.addFolder("Scale", "Scale the mesh by given criteria.");
 
-  var scaleByFactorFolder = scaleFolder.addFolder("Scale By Factor");
-  this.xScale = 1;
-  scaleByFactorFolder.add(this, "xScale", 0).name("x scale")
-    .title("Scale factor on x axis.");
+  var scaleByFactorFolder = scaleFolder.addFolder("Scale by Factor", "Scale the mesh by a given factor ");
+  this.scaleFactor = 1;
+  scaleByFactorFolder.add(this, "scaleFactor", 0).name("Scale factor")
+    .title("Scale mesh by this factor.");
   scaleByFactorFolder.add(this, "scaleX").name("Scale on x")
     .title("Scale mesh on x axis.");
-  this.yScale = 1;
-  scaleByFactorFolder.add(this, "yScale", 0).name("y scale")
-    .title("Scale factor on y axis.");
   scaleByFactorFolder.add(this, "scaleY").name("Scale on y")
     .title("Scale mesh on y axis.");
-  this.zScale = 1;
-  scaleByFactorFolder.add(this, "zScale", 0).name("z scale")
-    .title("Scale factor on z axis.");
   scaleByFactorFolder.add(this, "scaleZ").name("Scale on z")
     .title("Scale mesh on z axis.");
-  this.allScale = 1;
-  scaleByFactorFolder.add(this, "allScale", 0).name("all scale");
-  scaleByFactorFolder.add(this, "scaleAll").name("Scale on all axes");
+  scaleByFactorFolder.add(this, "scaleAll").name("Scale on all axes")
+    .title("Scale mesh on all axes.");
 
-  var scaleToSizeFolder = scaleFolder.addFolder("Scale To Size");
+  var scaleToSizeFolder = scaleFolder.addFolder("Scale to Size", "Scale the mesh to a given size.");
   this.scaleOnAllAxes = true;
   scaleToSizeFolder.add(this, "scaleOnAllAxes").name("Scale on all axes")
     .title("Scale the mesh by the same factor on all axes.");
@@ -248,67 +241,98 @@ Stage.prototype.generateUI = function() {
   scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size")
     .title("Scale mesh to given size on z axis.");
 
-  this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale To Measurement");
+  this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
+    "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
 
-  var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size");
-  ringSizeFolder.add(this, "mCircle").name("Mark circle")
-    .title("Turn on the circle measurement tool and mark the inner diameter of the ring.");
+  var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
+    "Set up a circle measurement around the inner circumference of a ring mesh, then scale so that the mesh will have the correct measurement in mm.");
+  ringSizeFolder.add(this, "mCircle").name("1. Mark circle")
+    .title("Turn on the circle measurement tool and mark the inner circumference of the ring.");
   this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes).name("New ring size")
+  ringSizeFolder.add(this, "newRingSize", ringSizes).name("2. New ring size")
     .title("Select ring size.");
-  ringSizeFolder.add(this, "scaleToRingSize").name("Scale to ring size")
+  ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
     .title("Scale the ring.");
-  ringSizeFolder.add(this, "mDeactivate").name("End measurement")
+  ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
     .title("Turn off the measurement tool when not in use.");
 
-  var mirrorFolder = editFolder.addFolder("Mirror");
-  mirrorFolder.add(this, "mirrorX").name("Mirror on x");
-  mirrorFolder.add(this, "mirrorY").name("Mirror on y");
-  mirrorFolder.add(this, "mirrorZ").name("Mirror on z");
+  var mirrorFolder = editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
+  mirrorFolder.add(this, "mirrorX").name("Mirror on x")
+    .title("Mirror mesh on x axis.");
+  mirrorFolder.add(this, "mirrorY").name("Mirror on y")
+    .title("Mirror mesh on y axis.");
+  mirrorFolder.add(this, "mirrorZ").name("Mirror on z")
+    .title("Mirror mesh on z axis.");
 
-  var floorFolder = editFolder.addFolder("Floor");
-  floorFolder.add(this, "floorX").name("Floor to x");
-  floorFolder.add(this, "floorY").name("Floor to y");
-  floorFolder.add(this, "floorZ").name("Floor to z");
+  var floorFolder = editFolder.addFolder("Floor", "Floor the mesh on a given axis.");
+  floorFolder.add(this, "floorX").name("Floor to x")
+    .title("Floor the mesh on x axis.");
+  floorFolder.add(this, "floorY").name("Floor to y")
+    .title("Floor the mesh on y axis.");
+  floorFolder.add(this, "floorZ").name("Floor to z")
+    .title("Floor the mesh on z axis.");
 
-  var centerFolder = editFolder.addFolder("Center");
-  centerFolder.add(this, "centerAll").name("Center on all");
-  centerFolder.add(this, "centerX").name("Center on x");
-  centerFolder.add(this, "centerY").name("Center on y");
-  centerFolder.add(this, "centerZ").name("Center on z");
+  var centerFolder = editFolder.addFolder("Center", "Center the mesh on a given axis in the build volume.");
+  centerFolder.add(this, "centerAll").name("Center on all")
+    .title("Center the mesh on all axes.");
+  centerFolder.add(this, "centerX").name("Center on x")
+    .title("Center the mesh on x axis.");
+  centerFolder.add(this, "centerY").name("Center on y")
+    .title("Center the mesh on y axis.");
+  //centerFolder.add(this, "centerZ").name("Center on z")
+  //  .title("Center the mesh on z axis.");
 
-  editFolder.add(this, "flipNormals").name("Flip normals");
+  editFolder.add(this, "flipNormals").name("Flip normals")
+    .title("Flip mesh normals.");
 
-  var calculationFolder = this.gui.addFolder("Calculate");
-  calculationFolder.add(this, "calcSurfaceArea").name("Surface area");
-  calculationFolder.add(this, "calcVolume").name("Volume");
-  calculationFolder.add(this, "calcCenterOfMass").name("Center of mass");
-  calculationFolder.add(this, "toggleCOM").name("Toggle COM");
+  var calculationFolder = this.gui.addFolder("Calculate", "Calculate global mesh parameters.");
+  calculationFolder.add(this, "calcSurfaceArea").name("Surface area")
+    .title("Calculate mesh surface area.");
+  calculationFolder.add(this, "calcVolume").name("Volume")
+    .title("Calculate mesh volume.");
+  calculationFolder.add(this, "calcCenterOfMass").name("Center of mass")
+    .title("Calculate mesh center of mass.");
+  calculationFolder.add(this, "toggleCOM").name("Toggle COM")
+    .title("Toggle the center of mass indicator.");
 
-  var measurementFolder = this.gui.addFolder("Measure");
-  measurementFolder.add(this, "mLength").name("Length");
-  measurementFolder.add(this, "mAngle").name("Angle");
-  measurementFolder.add(this, "mCircle").name("Circle");
-  measurementFolder.add(this, "mCrossSectionX").name("Cross-section x");
-  measurementFolder.add(this, "mCrossSectionY").name("Cross-section y");
-  measurementFolder.add(this, "mCrossSectionZ").name("Cross-section z");
-  measurementFolder.add(this, "mDeactivate").name("End measurement");
+  var measurementFolder = this.gui.addFolder("Measure", "Make calculations based on mouse-placed markers.");
+  measurementFolder.add(this, "mLength").name("Length")
+    .title("Measure point-to-point length.");
+  measurementFolder.add(this, "mAngle").name("Angle")
+    .title("Measure angle (in degrees) between two segments formed by three consecutive points.");
+  measurementFolder.add(this, "mCircle").name("Circle")
+    .title("Circle measurement: radius, diameter, circumference, arc length.");
+  measurementFolder.add(this, "mCrossSectionX").name("Cross-section x")
+    .title("Measure cross-section on x axis.");
+  measurementFolder.add(this, "mCrossSectionY").name("Cross-section y")
+    .title("Measure cross-section on y axis.");
+  measurementFolder.add(this, "mCrossSectionZ").name("Cross-section z")
+    .title("Measure cross-section on z axis.");
+  measurementFolder.add(this, "mDeactivate").name("End measurement")
+    .title("Turn off the current measurement.");
 
-  var thicknessFolder = this.gui.addFolder("Mesh Thickness");
+  var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
   this.thicknessThreshold = 0.1;
-  thicknessFolder.add(this, "thicknessThreshold", 0).name("Threshold");
-  thicknessFolder.add(this, "viewThickness").name("View thickness");
-  thicknessFolder.add(this, "clearThicknessView").name("Clear thickness view");
+  thicknessFolder.add(this, "thicknessThreshold", 0).name("Threshold")
+    .title("Thickness threshold: parts of the mesh below this thickness are shown as too thin.");
+  thicknessFolder.add(this, "viewThickness").name("View thickness")
+    .title("Calculate mesh thickness: parts of the mesh that are too thin are shown in a color interpolated over the [threshold, 0] range.");
+  thicknessFolder.add(this, "clearThicknessView").name("Clear thickness view")
+    .title("Clear the color indicating parts of the mesh that are too thin.");
 
-  var repairFolder = this.gui.addFolder("Repair (beta)");
-  repairFolder.add(this, "generatePatch").name("Generate patch");
-  repairFolder.add(this, "acceptPatch").name("Accept patch");
-  repairFolder.add(this, "cancelPatch").name("Cancel patch");
+  var repairFolder = this.gui.addFolder("Repair (beta)", "Repair missing polygons.");
+  repairFolder.add(this, "generatePatch").name("Generate patch")
+    .title("Generate a patch of faces to make the mesh manifold.");
+  repairFolder.add(this, "acceptPatch").name("Accept patch")
+    .title("Integrate the patch into the mesh.");
+  repairFolder.add(this, "cancelPatch").name("Cancel patch")
+    .title("Remove the generated patch.");
 
   this.layerHeight = .05;//todo: back to 0.1
   this.lineWidth = 0.05;
   this.upAxis = "z";
-  this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)");
+  this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)",
+    "Generate supports, slice the mesh, and export the resulting G-code.");
   this.supportAngle = 45;
   this.supportSpacingFactor = 6;
   this.supportRadius = this.lineWidth * 2;
@@ -363,9 +387,12 @@ Stage.prototype.generateUI = function() {
   this.gcodeExtruderPrecision = 5;
   this.buildSupportSliceFolder();
 
-  this.gui.add(this, "undo").name("Undo");
-  this.gui.add(this, "redo").name("Redo");
-  this.gui.add(this, "delete").name("Delete");
+  this.gui.add(this, "undo").name("Undo")
+    .title("Undo the last edit action.");
+  this.gui.add(this, "redo").name("Redo")
+    .title("Redo the previous undo.");
+  this.gui.add(this, "delete").name("Delete")
+    .title("Delete the mesh.");
 
   this.infoBox = new InfoBox();
   this.infoBox.add("Units", this, "units");
@@ -430,10 +457,10 @@ Stage.prototype.translateZ = function() { this.transform("translate","z",this.zT
 Stage.prototype.rotateX = function() { this.transform("rotate","x",this.xRotation); }
 Stage.prototype.rotateY = function() { this.transform("rotate","y",this.yRotation); }
 Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotation); }
-Stage.prototype.scaleX = function() { this.transform("scale","x",this.xScale); }
-Stage.prototype.scaleY = function() { this.transform("scale","y",this.yScale); }
-Stage.prototype.scaleZ = function() { this.transform("scale","z",this.zScale); }
-Stage.prototype.scaleAll = function() { this.transform("scale","all",this.allScale); }
+Stage.prototype.scaleX = function() { this.transform("scale","x",this.scaleFactor); }
+Stage.prototype.scaleY = function() { this.transform("scale","y",this.scaleFactor); }
+Stage.prototype.scaleZ = function() { this.transform("scale","z",this.scaleFactor); }
+Stage.prototype.scaleAll = function() { this.transform("scale","all",this.scaleFactor); }
 Stage.prototype.scaleToXSize = function() { this.scaleToSize("x",this.newXSize); }
 Stage.prototype.scaleToYSize = function() { this.scaleToSize("y",this.newYSize); }
 Stage.prototype.scaleToZSize = function() { this.scaleToSize("z",this.newZSize); }
@@ -538,40 +565,55 @@ Stage.prototype.buildSupportSliceFolder = function() {
     this.buildSliceFolder(supportSliceFolder);
   }
   else {
-    supportSliceFolder.add(this, "layerHeight", .0001, 1).name("Layer height");
-    supportSliceFolder.add(this, "lineWidth", .0001, 1).name("Line width");
-    supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis");
+    supportSliceFolder.add(this, "layerHeight", .0001, 1).name("Layer height")
+      .title("Height of each mesh slice layer.");
+    supportSliceFolder.add(this, "lineWidth", .0001, 1).name("Line width")
+      .title("Width of the print line. Affects minimum resolvable detail size, decimation of sliced contours, and extrusion in the exported G-code.");
+    supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis")
+      .title("Axis normal to the slicing planes.");
 
-    var supportFolder = supportSliceFolder.addFolder("Supports");
+    var supportFolder = supportSliceFolder.addFolder("Supports", "Generate supports for printing the model.");
     this.buildSupportFolder(supportFolder);
 
-    var sliceFolder = supportSliceFolder.addFolder("Slice");
+    var sliceFolder = supportSliceFolder.addFolder("Slice", "Slice the mesh.");
     this.buildSliceFolder(sliceFolder);
   }
 }
 Stage.prototype.buildSupportFolder = function(folder) {
-  folder.add(this, "supportAngle", 0, 90).name("Angle");
-  folder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor");
-  folder.add(this, "supportRadius", 0.0001, 1).name("Radius");
-  folder.add(this, "supportTaperFactor", 0, 1).name("Taper factor");
-  folder.add(this, "supportSubdivs", 4).name("Subdivs");
-  folder.add(this, "supportRadiusFnName", ["constant", "sqrt"]).name("Radius function");
-  folder.add(this, "supportRadiusFnK", 0, 1).name("Function constant");
-  folder.add(this, "generateSupports").name("Generate supports");
-  folder.add(this, "removeSupports").name("Remove supports");
+  folder.add(this, "supportAngle", 0, 90).name("Angle")
+    .title("Angle defining faces that need support.");
+  folder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor")
+    .title("Greater spacing factor makes supports more sparse.");
+  folder.add(this, "supportRadius", 0.0001, 1).name("Radius")
+    .title("Base radius for supports. NB: if this radius is too low in comparison with line width, the supports may not print correctly.");
+  folder.add(this, "supportTaperFactor", 0, 1).name("Taper factor")
+    .title("Defines how much the supports taper when connected to the mesh.");
+  folder.add(this, "supportSubdivs", 4).name("Subdivs")
+    .title("Number of subdivisions in the cylindrical support struts.");
+  folder.add(this, "supportRadiusFnName", ["constant", "sqrt"]).name("Radius function")
+    .title("Function that defines how support radius grows with the volume it supports; default is square root.");
+  folder.add(this, "supportRadiusFnK", 0).name("Function constant")
+    .title("Multiplicative constant that modifies the support radius function.");
+  folder.add(this, "generateSupports").name("Generate supports")
+    .title("Generate the supports.");
+  folder.add(this, "removeSupports").name("Remove supports")
+    .title("Remove generated supports.");
 }
 Stage.prototype.buildSliceDisplayFolder = function(folder) {
   this.clearFolder(folder);
 
   if (this.sliceMode === Slicer.Modes.preview) {
     folder.add(this, "slicePreviewModeSliceMesh", true).name("Show sliced mesh")
-      .onChange(this.updateSlicerDisplayParams.bind(this));
+      .onChange(this.updateSlicerDisplayParams.bind(this))
+      .title("If checked, the mesh is shown sliced by the current slicing plane; else, the mesh is shown as a ghost.");
   }
   else if (this.sliceMode === Slicer.Modes.full) {
     folder.add(this, "sliceFullModeUpToLayer").name("Up to layer")
-      .onChange(this.updateSlicerDisplayParams.bind(this));
+      .onChange(this.updateSlicerDisplayParams.bind(this))
+      .title("Display all contours, or all contours up to a given layer.");
     folder.add(this, "sliceFullModeShowInfill").name("Show infill")
-      .onChange(this.updateSlicerDisplayParams.bind(this));
+      .onChange(this.updateSlicerDisplayParams.bind(this))
+      .title("Show infill if checked; default setting is false because infill makes the layers hard to see.");
   }
 }
 Stage.prototype.buildSliceFolder = function(folder) {
@@ -582,19 +624,19 @@ Stage.prototype.buildSliceFolder = function(folder) {
     var minLevel = this.model.getMinLevel();
 
     this.currentSliceLevel = this.model.getCurrentSliceLevel();
-    var sliceController = folder.add(
-      this,
-      "currentSliceLevel",
-      minLevel, maxLevel
-    ).name("Slice").step(1).onChange(this.setSliceLevel.bind(this));
+    var sliceController = folder.add(this, "currentSliceLevel", minLevel, maxLevel)
+      .name("Slice").step(1).onChange(this.setSliceLevel.bind(this))
+      .title("Set the current slicing plane.");
     this.sliceMode = this.model.getSliceMode();
     folder.add(
       this,
       "sliceMode",
       { "preview": Slicer.Modes.preview, "full": Slicer.Modes.full }
-    ).name("Mode").onChange(this.setSliceMode.bind(this));
+    )
+      .name("Mode").onChange(this.setSliceMode.bind(this))
+      .title("Set slicer mode: preview mode shows the mesh sliced at a particular level; full mode shows all layers simultaneously.");
 
-    this.sliceDisplayFolder = folder.addFolder("Display");
+    this.sliceDisplayFolder = folder.addFolder("Display", "Display options for the current slice mode.");
     this.buildSliceDisplayFolder(this.sliceDisplayFolder);
   }
   this.buildLayerSettingsFolder(folder);
@@ -602,15 +644,20 @@ Stage.prototype.buildSliceFolder = function(folder) {
   this.buildGcodeFolder(folder);
 
   if (this.sliceModeOn) folder.add(this, "deactivateSliceMode").name("Slice mode off")
-  else folder.add(this, "activateSliceMode").name("Slice mode on");
+    .title("Turn slice mode off.");
+  else folder.add(this, "activateSliceMode").name("Slice mode on")
+    .title("Turn slice mode on.");
 }
 Stage.prototype.buildLayerSettingsFolder = function(folder) {
-  var sliceLayerSettingsFolder = folder.addFolder("Layer Settings");
+  var sliceLayerSettingsFolder = folder.addFolder("Layer Settings", "Settings for computing layers.");
   this.clearFolder(sliceLayerSettingsFolder);
 
-  sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1, 10).name("Walls").step(1);
-  sliceLayerSettingsFolder.add(this, "sliceNumTopLayers", 1, 10).name("Top layers").step(1);
-  sliceLayerSettingsFolder.add(this, "sliceOptimizeTopLayers").name("Optimize top layers");
+  sliceLayerSettingsFolder.add(this, "sliceNumWalls", 1, 10).name("Walls").step(1)
+    .title("Number of horizontal walls between the print exterior and the interior.");
+  sliceLayerSettingsFolder.add(this, "sliceNumTopLayers", 1, 10).name("Top layers").step(1)
+    .title("Number of layers of solid infill that must be present between the print interior and exterior in the vertical direction.");
+  sliceLayerSettingsFolder.add(this, "sliceOptimizeTopLayers").name("Optimize top layers")
+    .title("Calculate the top layers in an optimized way. This may result in slightly less accurate solid infill computation but should cheapen computation.");
   sliceLayerSettingsFolder.add(this, "sliceInfillType", {
     "none": Slicer.InfillTypes.none,
     "solid": Slicer.InfillTypes.solid,
@@ -618,52 +665,83 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
     "lines": Slicer.InfillTypes.lines,
     //"triangle": Slicer.InfillTypes.triangle,
     //"hex": Slicer.InfillTypes.hex
-  }).name("Infill Type");
-  sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill Density");
-  sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill Overlap");
+  }).name("Infill type")
+    .title("Print infill type: fills the parts of each contour that aren't occupied by solid infill forming top layers. If 'none' is selected, solid top layer infill is still generated.");
+  sliceLayerSettingsFolder.add(this, "sliceInfillDensity", 0, 1).name("Infill density")
+    .title("0 density means no infill, 1 means solid.");
+  sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill overlap")
+    .title("Defines how much infill overlaps with the innermost wall. 0 gives a separation of a full line width, 1 means the printline of an infill line starts and ends on the centerline of the wall.");
   if (this.sliceModeOn) {
-    sliceLayerSettingsFolder.add(this, "updateSlicerParams").name("Update params");
+    sliceLayerSettingsFolder.add(this, "updateSlicerParams").name("Update params")
+      .title("Update the layer parameters and recalculate as necessary.");
   }
 }
 Stage.prototype.buildRaftFolder = function(folder) {
-  var sliceRaftFolder = folder.addFolder("Raft");
+  var sliceRaftFolder = folder.addFolder("Raft", "Settings for computing the raft.");
   this.clearFolder(sliceRaftFolder);
 
-  sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft");
-  sliceRaftFolder.add(this, "sliceRaftNumTopLayers", 0).step(1).name("Top layers");
-  sliceRaftFolder.add(this, "sliceRaftTopLayerHeight", 0).name("Top height");
-  sliceRaftFolder.add(this, "sliceRaftTopLineWidth", 0).name("Top width");
-  sliceRaftFolder.add(this, "sliceRaftTopDensity", 0, 1).name("Top density");
-  sliceRaftFolder.add(this, "sliceRaftNumBaseLayers", 0).step(1).name("Base layers");
-  sliceRaftFolder.add(this, "sliceRaftBaseLayerHeight", 0).name("Base height");
-  sliceRaftFolder.add(this, "sliceRaftBaseLineWidth", 0).name("Base width");
-  sliceRaftFolder.add(this, "sliceRaftBaseDensity", 0, 1).name("Base density");
-  sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset");
-  sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap");
-  sliceRaftFolder.add(this, "sliceRaftWriteWalls").name("Write perimeter");
+  sliceRaftFolder.add(this, "sliceMakeRaft").name("Make raft")
+    .title("Checked if the slicer needs to generate a raft. The raft is formed from several layers of infill to provide initial adhesion to the build plate.");
+  sliceRaftFolder.add(this, "sliceRaftNumBaseLayers", 0).step(1).name("Base layers")
+    .title("Number of raft base layers. These layers are printed slowly to ensure initial adhesion.");
+  sliceRaftFolder.add(this, "sliceRaftBaseLayerHeight", 0).name("Base height")
+    .title("Print height of the raft base layers.");
+  sliceRaftFolder.add(this, "sliceRaftBaseLineWidth", 0).name("Base width")
+    .title("Line width of the raft base layers.");
+  sliceRaftFolder.add(this, "sliceRaftBaseDensity", 0, 1).name("Base density")
+    .title("Density of the infill forming the raft base layers.");
+  sliceRaftFolder.add(this, "sliceRaftNumTopLayers", 0).step(1).name("Top layers")
+    .title("Number of additional layers on top of the raft base layers.");
+  sliceRaftFolder.add(this, "sliceRaftTopLayerHeight", 0).name("Top height")
+    .title("Print height of the raft top layers.");
+  sliceRaftFolder.add(this, "sliceRaftTopLineWidth", 0).name("Top width")
+    .title("Line width of the raft top layers.");
+  sliceRaftFolder.add(this, "sliceRaftTopDensity", 0, 1).name("Top density")
+    .title("Density of the infill forming the raft top layers.");
+  sliceRaftFolder.add(this, "sliceRaftOffset", 0).name("Offset")
+    .title("Horizontal outward offset distance of the raft from the bottom of the mesh. A wider raft will adhere to the build plate better.");
+  sliceRaftFolder.add(this, "sliceRaftGap", 0).name("Air gap")
+    .title("Small air gap between the top of the raft and the bottom of the main print to make detaching the print easier.");
+  sliceRaftFolder.add(this, "sliceRaftWriteWalls").name("Print perimeter")
+    .title("Optionally print the raft with walls around the infill.");
   if (this.sliceModeOn) {
-    sliceRaftFolder.add(this, "updateSlicerParams").name("Update params");
+    sliceRaftFolder.add(this, "updateSlicerParams").name("Update raft params")
+      .title("Update the raft parameters and recalculate as necessary.");
   }
 }
 Stage.prototype.buildGcodeFolder = function(folder) {
-  var gcodeFolder = folder.addFolder("G-code");
+  var gcodeFolder = folder.addFolder("G-code", "Settings for computing the G-code.");
   this.clearFolder(gcodeFolder);
 
-  this.gcodeFilenameController = gcodeFolder.add(this, "gcodeFilename").name("Filename");
-  gcodeFolder.add(this, "gcodeExtension", { gcode: "gcode" }).name("Extension");
-  gcodeFolder.add(this, "gcodeTemperature", 0).name("Temperature");
-  gcodeFolder.add(this, "gcodeFilamentDiameter", 0.1, 5).name("Filament diameter");
-  gcodeFolder.add(this, "gcodePrimeExtrusion", 0).name("Prime extrusion");
-  gcodeFolder.add(this, "gcodeExtrusionMultiplier", 0).name("Extrusion multiplier");
-  gcodeFolder.add(this, "gcodeInfillSpeed", 0).name("Infill speed");
-  gcodeFolder.add(this, "gcodeWallSpeed", 0).name("Wall speed");
-  gcodeFolder.add(this, "gcodeRaftBasePrintSpeed", 0).name("Raft base speed");
-  gcodeFolder.add(this, "gcodeRaftTopPrintSpeed", 0).name("Raft top speed");
-  gcodeFolder.add(this, "gcodeTravelSpeed", 0).name("Travel speed");
-  gcodeFolder.add(this, "gcodeCoordinatePrecision", 0).name("Coord precision");
-  gcodeFolder.add(this, "gcodeExtruderPrecision", 0).name("Extruder precision");
+  this.gcodeFilenameController = gcodeFolder.add(this, "gcodeFilename").name("Filename")
+    .title("Filename to save.");
+  gcodeFolder.add(this, "gcodeExtension", { gcode: "gcode" }).name("Extension")
+    .title("File extension.");
+  gcodeFolder.add(this, "gcodeTemperature", 0).name("Temperature")
+    .title("Extruder temperature.");
+  gcodeFolder.add(this, "gcodeFilamentDiameter", 0.1, 5).name("Filament diameter")
+    .title("Filament diameter (mm); affects the computation of how much to extrude.");
+  gcodeFolder.add(this, "gcodePrimeExtrusion", 0).name("Prime extrusion")
+    .title("Small length (mm) of filament to extrude for priming the nozzle.");
+  gcodeFolder.add(this, "gcodeExtrusionMultiplier", 0).name("Extrusion multiplier")
+    .title("Factor that can be used to tweak under- or over-extrusion. Directly multiplies gcode extrusion values. Default is 1.");
+  gcodeFolder.add(this, "gcodeInfillSpeed", 0).name("Infill speed")
+    .title("Speed (mm/s) at which infill is printed. Infill is less sensitive to accuracy issues, so it can be printed more quickly than the walls.");
+  gcodeFolder.add(this, "gcodeWallSpeed", 0).name("Wall speed")
+    .title("Speed (mm/s) at which the walls are printed.");
+  gcodeFolder.add(this, "gcodeRaftBasePrintSpeed", 0).name("Raft base speed")
+    .title("Speed (mm/s) at which the raft base layer should be printed. Should be slow so that the layer is thick and adheres properly.");
+  gcodeFolder.add(this, "gcodeRaftTopPrintSpeed", 0).name("Raft top speed")
+    .title("Speed (mm/s) at which the raft top layer should be printed.");
+  gcodeFolder.add(this, "gcodeTravelSpeed", 0).name("Travel speed")
+    .title("Speed (mm/s) at which the extruder travels while not printing.");
+  gcodeFolder.add(this, "gcodeCoordinatePrecision", 0).name("Coord precision")
+    .title("Number of digits used for filament position coordinates. More digits increases file size.");
+  gcodeFolder.add(this, "gcodeExtruderPrecision", 0).name("Extruder precision")
+    .title("Number of digits used for extrusion values. More digits increases file size.");
   if (this.sliceModeOn) {
-    gcodeFolder.add(this, "gcodeSave", 0).name("Save G-code");
+    gcodeFolder.add(this, "gcodeSave", 0).name("Save G-code")
+      .title("Generate g-code and save it to a file.");
   }
 }
 Stage.prototype.setSliceMode = function() {
@@ -766,9 +844,12 @@ Stage.prototype.buildScaleToMeasurementFolder = function() {
   if (this.scalableMeasurements && this.scalableMeasurements.length>0) {
     this.measurementToScale = this.scalableMeasurements[0];
     this.newMeasurementValue = 1;
-    this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements).name("Measurement to scale");
-    this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0).name("New value");
-    this.scaleToMeasurementFolder.add(this, "scaleToMeasurement").name("Scale to measurement");
+    this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements).name("Measurement to scale")
+      .title("Select an available measurement to which to scale.");
+    this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0).name("New value")
+      .title("New value by which to scale the mesh so that the measurement equals the given value.");
+    this.scaleToMeasurementFolder.add(this, "scaleToMeasurement").name("Scale to measurement")
+      .title("Scale the mesh.");
   }
 }
 Stage.prototype.clearFolder = function(folder) {
