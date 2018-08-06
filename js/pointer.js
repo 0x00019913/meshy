@@ -20,7 +20,8 @@ Pointer = function(scene, camera, domElement) {
   this.raycaster = new THREE.Raycaster();
 
   this.mouse = new THREE.Vector2();
-  this.clickCallbacks = new KeyStack();
+  this.clickCallbacks = {};
+  this.callbackCount = 0;
   // pixel difference between mousedown and mouseup for a mouse press
   // to count as a click
   this.clickAllowance = 5;
@@ -68,12 +69,15 @@ Pointer = function(scene, camera, domElement) {
   function onMouseUp(e) {
     if (!_this.active) return;
     _this.cursor.material.color.set(_this.cursorColor);
-    if (_this.clickCallbacks.empty() || !_this.intersection) return;
+    if (_this.callbackCount === 0 || !_this.intersection) return;
 
     clickLocation.x -= e.clientX;
     clickLocation.y -= e.clientY;
-    if (clickLocation.length()<_this.clickAllowance && _this.intersection) {
-      _this.clickCallbacks.callEachWithArg(_this.intersection);
+    if (clickLocation.length() < _this.clickAllowance && _this.intersection) {
+      // call each callback
+      for (var key in _this.clickCallbacks) {
+        _this.clickCallbacks[key](_this.intersection);
+      }
       _this.intersection = null;
     }
   }
@@ -102,12 +106,14 @@ Pointer.prototype.rescale = function() {
 // Adds a callback function to the callback stack; these are called by
 // clicking the mouse.
 Pointer.prototype.addClickCallback = function(callback) {
-  return this.clickCallbacks.add(callback);
+  this.clickCallbacks[this.callbackCount++] = callback;
+  this.callbackCount;
 }
 
 // Remove a click callback.
 Pointer.prototype.removeClickCallback = function(idx) {
-  this.clickCallbacks.remove(idx);
+  delete this.clickCallbacks[idx];
+
 }
 
 // Check for intersections and reposition cursor if intersecting the model.
