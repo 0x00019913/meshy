@@ -16,9 +16,6 @@
    measurements.
 */
 function Model(scene, camera, container, printout, infoOutput, progressBarContainer) {
-  // internal geometry
-  this.faces = [];
-  this.vertices = [];
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
@@ -39,10 +36,25 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.wireframe = false;
   this.wireframeMesh = null;
 
-  // current mode and the meshes it switches in and out
+  // instance of module responsible for slicing
+  this.slicer = null;
+
+  // current mode
   this.mode = "base";
+
+  // meshes
+
+  // base mesh
   this.baseMesh = null;
-  this.slicer = null; // instance of module responsible for slicing
+  this.makeBaseMesh();
+
+  // patch mesh
+  this.patchMesh = null;
+
+  // support mesh
+  this.supportMesh = null;
+
+  // slice meshes
   this.sliceOneLayerBaseMesh = null;
   this.sliceOneLayerContourMesh = null;
   this.sliceOneLayerInfillMesh = null;
@@ -63,80 +75,12 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.targetPlanes = null;
   this.showCenterOfMass = false;
 
-  // all materials used in the model
-  this.materials = {
-    base: new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      vertexColors: THREE.FaceColors,
-      roughness: 0.3,
-      metalness: 0.5,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1
-    }),
-    wireframe: new THREE.MeshBasicMaterial({
-      color: 0x000000,
-      wireframe: true
-    }),
-    sliceOneLayerBase: new THREE.LineBasicMaterial({
-      color: 0x666666,
-      linewidth: 1
-    }),
-    sliceOneLayerContour: new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      linewidth: 1
-    }),
-    sliceOneLayerInfill: new THREE.LineBasicMaterial({
-      color: 0xffffff,
-      linewidth: 1
-    }),
-    sliceAllContours: new THREE.LineBasicMaterial({
-      color: 0x666666,
-      linewidth: 1
-    }),
-    slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
-      side: THREE.DoubleSide,
-      color: 0x0f0f30,
-      roughness: 0.8,
-      metalness: 0.3,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1
-    }),
-    slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0
-    }),
-    slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
-      color: 0x0f0f30,
-      transparent: true,
-      opacity: 0.3,
-      roughness: 0.7,
-      metalness: 0.3,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1
-    }),
-    patch: new THREE.MeshStandardMaterial({
-      color: 0x44ff44,
-      wireframe: false
-    }),
-    targetPlane: new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.5
-    })
-  };
-
-  // for patching the mesh
-  this.patchMesh = null;
-
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
   this.measurement.setOutput(this.infoOutput);
 
   // for supports
   this.supportGenerator = null;
+  this.supportsGenerated = false;
 
   // currently active non-thread-blocking calculations; each is associated with
   // an iterator and a progress bar and label in the UI
@@ -144,10 +88,85 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   this.progressBarContainer = progressBarContainer;
 }
 
+Model.Materials = {
+  base: new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    vertexColors: THREE.FaceColors,
+    roughness: 0.3,
+    metalness: 0.5,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1
+  }),
+  wireframe: new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    wireframe: true
+  }),
+  sliceOneLayerBase: new THREE.LineBasicMaterial({
+    color: 0x666666,
+    linewidth: 1
+  }),
+  sliceOneLayerContour: new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    linewidth: 1
+  }),
+  sliceOneLayerInfill: new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    linewidth: 1
+  }),
+  sliceAllContours: new THREE.LineBasicMaterial({
+    color: 0x666666,
+    linewidth: 1
+  }),
+  slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
+    side: THREE.DoubleSide,
+    color: 0x0f0f30,
+    roughness: 0.8,
+    metalness: 0.3,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1
+  }),
+  slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0
+  }),
+  slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
+    color: 0x0f0f30,
+    transparent: true,
+    opacity: 0.3,
+    roughness: 0.7,
+    metalness: 0.3,
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1
+  }),
+  patch: new THREE.MeshStandardMaterial({
+    color: 0x44ff44,
+    wireframe: false
+  }),
+  targetPlane: new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.5
+  })
+};
+
 // Add a Face3 to the model.
-Model.prototype.addFace = function(face) {
+// todo: remove
+/*Model.prototype.addFace = function(face) {
   this.faces.push(face);
   this.updateBoundsF(face);
+}*/
+
+Model.prototype.computeBounds = function() {
+  this.resetBounds();
+
+  var faces = this.baseMesh.geometry.faces;
+  var vertices = this.baseMesh.geometry.vertices;
+
+  for (var f = 0; f < faces.length; f++) this.updateBoundsF(faces[f], vertices);
 }
 
 // All bounds to Infinity.
@@ -157,9 +176,9 @@ Model.prototype.resetBounds = function() {
 }
 
 // Update the bounds with a new face.
-Model.prototype.updateBoundsF = function(face) {
-  var verts = faceGetVerts(face, this.vertices);
-  for (var i=0; i<3; i++) this.updateBoundsV(verts[i]);
+Model.prototype.updateBoundsF = function(face, vertices) {
+  var verts = faceGetVerts(face, vertices);
+  for (var i = 0; i < 3; i++) this.updateBoundsV(verts[i]);
 }
 
 // Update bounds with a new vertex.
@@ -243,12 +262,19 @@ Model.prototype.getxmax = function() { return this.max.x; }
 Model.prototype.getymax = function() { return this.max.y; }
 Model.prototype.getzmax = function() { return this.max.z; }
 
-Model.prototype.getPolycount = function() { return this.faces.length; }
+Model.prototype.getPolycount = function() {
+  return this.baseMesh.geometry.faces.length;
+}
 
 /* TRANSFORMATIONS */
 
 // Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
 Model.prototype.translate = function(axis, amount) {
+  var baseMesh = this.baseMesh;
+  baseMesh.position.add(amount);
+
+  return;
+  
   // float precision for printout
   var d = 4;
 
@@ -677,7 +703,7 @@ Model.prototype.toggleWireframe = function() {
 
 Model.prototype.makeWireframeMesh = function() {
   var mesh = this.baseMesh.clone();
-  mesh.material = this.materials.wireframe;
+  mesh.material = Model.Materials.wireframe;
   mesh.visible = false;
   this.scene.add(mesh);
 
@@ -689,14 +715,14 @@ Model.prototype.getMeshColor = function() {
   if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
 Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
-  var mat = this.materials.base;
+  var mat = Model.Materials.base;
 
   mat.color.set(color);
   mat.roughness = roughness;
   mat.metalness = metalness;
 }
 Model.prototype.setWireframeMaterial = function(color) {
-  var mat = this.materials.wireframe;
+  var mat = Model.Materials.wireframe;
 
   mat.color.set(color);
 }
@@ -722,7 +748,7 @@ Model.prototype.generateTargetPlanes = function() {
     new THREE.PlaneGeometry(size,size).rotateX(Math.PI/2), // normal y
     new THREE.PlaneGeometry(size,size) // normal z
   ];
-  var planeMat = this.materials.targetPlane;
+  var planeMat = Model.Materials.targetPlane;
   var planeMeshes = [
     new THREE.Mesh(this.targetPlanes[0], planeMat),
     new THREE.Mesh(this.targetPlanes[1], planeMat),
@@ -774,17 +800,22 @@ Model.prototype.positionTargetPlanes = function(point) {
 Model.prototype.setMode = function(mode, params) {
   this.mode = mode;
   // remove any current meshes in the scene
-  removeMeshByName(this.scene, "model");
+  removeMeshByName(this.scene, "base");
+  removeMeshByName(this.scene, "support");
   removeMeshByName(this.scene, "slice");
 
   // base mode - display the normal, plain mesh
   if (mode == "base") {
-    if (!this.baseMesh) this.makeBaseMesh();
+    this.makeBaseMesh();
     this.scene.add(this.baseMesh);
+    if (this.supportsGenerated) {
+      this.makeSupportMesh();
+      this.scene.add(this.supportMesh);
+    }
   }
   // slicing mode - init slicer and display a model in preview mode by default
   else if (mode == "slice") {
-    this.slicer = new Slicer(this.vertices, this.faces, params);
+    this.slicer = new Slicer(this.baseMesh, params);
 
     this.makeSliceMeshes();
     this.addSliceMeshesToScene();
@@ -818,16 +849,36 @@ Model.prototype.removeGeometryComponent = function(name) {
 }
 
 // Create the base mesh (as opposed to another display mode).
+// todo: remove
 Model.prototype.makeBaseMesh = function() {
-  if (this.baseMesh) return;
+  if (!this.baseMesh) {
+    var geo = new THREE.Geometry();
+    this.baseMesh = new THREE.Mesh(geo, Model.Materials.base);
+    this.baseMesh.name = "model";
+    this.baseMesh.frustumCulled = false;
+  }
 
-  /* make mesh and put it into the scene */
-  var geo = new THREE.Geometry();
-  geo.vertices = this.vertices;
-  geo.faces = this.faces;
-  this.baseMesh = new THREE.Mesh(geo, this.materials.base);
-  this.baseMesh.name = "model";
-  this.baseMesh.frustumCulled = false;
+  return this.baseMesh;
+}
+Model.prototype.makeSupportMesh = function() {
+  if (!this.supportMesh) {
+    var geo = new THREE.Geometry();
+    this.supportMesh = new THREE.Mesh(geo, Model.Materials.base);
+    this.supportMesh.name = "support";
+    this.supportMesh.frustumCulled = false;
+  }
+
+  return this.supportMesh;
+}
+Model.prototype.makePatchMesh = function() {
+  if (!this.patchMesh) {
+    var geo = new THREE.Geometry();
+    this.patchMesh = new THREE.Mesh(geo, Model.Materials.patch);
+    this.patchMesh.name = "patch";
+    this.patchMesh.frustumCulled = false;
+  }
+
+  return this.patchMesh;
 }
 
 Model.prototype.addSliceMeshesToScene = function() {
@@ -933,7 +984,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's base contour
   mesh = new THREE.LineSegments(
     geos.currentLayerBase.geo,
-    this.materials.sliceOneLayerBase
+    Model.Materials.sliceOneLayerBase
   );
   mesh.name = "slice";
   mesh.frustumCulled = false;
@@ -942,7 +993,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's print contours
   mesh = new THREE.LineSegments(
     geos.currentLayerContours.geo,
-    this.materials.sliceOneLayerContour
+    Model.Materials.sliceOneLayerContour
   );
   mesh.name = "slice";
   mesh.frustumCulled = false;
@@ -951,7 +1002,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's infill
   mesh = new THREE.LineSegments(
     geos.currentLayerInfill.geo,
-    this.materials.sliceOneLayerInfill
+    Model.Materials.sliceOneLayerInfill
   );
   mesh.name = "slice";
   mesh.frustumCulled = false;
@@ -960,7 +1011,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for all non-current layer contours
   mesh = new THREE.LineSegments(
     geos.allContours.geo,
-    this.materials.sliceAllContours
+    Model.Materials.sliceAllContours
   );
   mesh.name = "slice";
   mesh.frustumCulled = false;
@@ -970,7 +1021,7 @@ Model.prototype.makeSliceMeshes = function() {
   // faces visible and invisible
   mesh = new THREE.Mesh(
     geos.slicedMesh.geo,
-    [this.materials.slicePreviewMeshVisible, this.materials.slicePreviewMeshTransparent]
+    [Model.Materials.slicePreviewMeshVisible, Model.Materials.slicePreviewMeshTransparent]
   );
   mesh.name = "slice";
   mesh.frustumCulled = false;
@@ -978,7 +1029,7 @@ Model.prototype.makeSliceMeshes = function() {
 
   // to make the ghost, just clone the base mesh and assign ghost material
   mesh = this.baseMesh.clone();
-  mesh.material = this.materials.slicePreviewMeshGhost;
+  mesh.material = Model.Materials.slicePreviewMeshGhost;
   mesh.name = "slice";
   mesh.frustumCulled = false;
   this.slicePreviewGhostMesh = mesh;
@@ -1000,7 +1051,7 @@ Model.prototype.buildOctree = function(d, nextIterator) {
 
   // create the octree; the last argument means that we will manually fill out
   // the geometry
-  this.octree = new Octree(this.faces, this.vertices);
+  this.octree = new Octree(this.baseMesh);
 
 
   // fill out the octree in a non-blocking way
@@ -1271,26 +1322,35 @@ Model.prototype.acceptPatch = function() {
   var vertices = this.patchMesh.geometry.vertices;
   var faces = this.patchMesh.geometry.faces;
 
-  var vstart = this.vertices.length;
-  var fstart = this.faces.length;
+  var baseGeo = this.baseMesh.geometry;
+  var bvertices = baseGeo.vertices;
+  var bfaces = baseGeo.faces;
+  var vstart = bvertices.length;
+  var fstart = bfaces.length;
 
   var vertexMap = {};
   var p = this.p;
 
   // add the model's existing verts into the map in order to be able to detect
   // shared vertices between the model and patch
-  vertexArrayToMap(vertexMap, this.vertices, p);
+  vertexArrayToMap(vertexMap, bvertices, p);
 
   // clone each face and update its indices into the vertex array
   for (var f=0; f<faces.length; f++) {
     var face = faces[f].clone();
-    face.a = vertexMapIdx(vertexMap, vertices[face.a], this.vertices, p);
-    face.b = vertexMapIdx(vertexMap, vertices[face.b], this.vertices, p);
-    face.c = vertexMapIdx(vertexMap, vertices[face.c], this.vertices, p);
-    this.addFace(face);
+    face.a = vertexMapIdx(vertexMap, vertices[face.a], bvertices, p);
+    face.b = vertexMapIdx(vertexMap, vertices[face.b], bvertices, p);
+    face.c = vertexMapIdx(vertexMap, vertices[face.c], bvertices, p);
+    baseGeo.faces.push(face);
   }
-  this.baseMesh.geometry.verticesNeedUpdate = true;
-  this.baseMesh.geometry.elementsNeedUpdate = true;
+  baseGeo.verticesNeedUpdate = true;
+  baseGeo.elementsNeedUpdate = true;
+
+  this.printout.log("Mesh patched.");
+
+  this.removePatchMesh();
+
+  return;
 
   // record the starts and counts for the added patch geometry
   this.addGeometryComponent(
@@ -1300,10 +1360,6 @@ Model.prototype.acceptPatch = function() {
     fstart,
     this.faces.length - fstart
   );
-
-  this.printout.log("Mesh patched.");
-
-  this.removePatchMesh();
 }
 
 Model.prototype.cancelPatch = function() {
@@ -1330,7 +1386,11 @@ Model.prototype.generatePatch = function() {
   this.removePatchMesh();
 
   // get the hash table detailing vertex adjacency
-  var adjacencyMap = this.generateAdjacencyMap(this.vertices, this.faces, true, true);
+  var adjacencyMap = this.generateAdjacencyMap(
+    this.baseMesh.geometry.vertices,
+    this.baseMesh.geometry.faces,
+    true, true
+  );
 
   // vertex precision factor
   var p = this.p;
@@ -1351,11 +1411,10 @@ Model.prototype.generatePatch = function() {
   var patchVertexMap = {};
 
   // construct THREE.Mesh and associated objects, add to scene
-  var patchGeo = new THREE.Geometry();
+  var patchMesh = this.makePatchMesh();
+  var patchGeo = patchMesh.geometry;
   patchGeo.vertices = patchVertices;
   patchGeo.faces = patchFaces;
-  this.patchMesh = new THREE.Mesh(patchGeo, this.materials.patch);
-  this.patchMesh.name = "patch";
   this.scene.add(this.patchMesh);
 
   // build an array of border edge cycles
@@ -2052,7 +2111,7 @@ Model.prototype.generateSupports = function(params) {
   this.removeSupports();
 
   if (!this.supportGenerator) {
-    this.supportGenerator = new SupportGenerator(this.faces, this.vertices);
+    this.supportGenerator = new SupportGenerator(this.baseMesh);
   }
 
   // add mesh min and max to the params and pass them to the support generator
@@ -2061,9 +2120,14 @@ Model.prototype.generateSupports = function(params) {
     max: this.max
   });
 
-  var supportGeometry = this.supportGenerator.generate(params);
+  var supportMesh = this.makeSupportMesh();
+  supportMesh.geometry = this.supportGenerator.generate(params);
+  this.scene.add(supportMesh);
+  this.supportsGenerated = true;
 
-  var geometry = this.baseMesh.geometry
+  return;
+
+  var geometry = this.baseMesh.geometry;
 
   this.addGeometryComponent(
     "support",
@@ -2080,6 +2144,12 @@ Model.prototype.generateSupports = function(params) {
 
 Model.prototype.removeSupports = function() {
   if (this.supportGenerator) this.supportGenerator.cleanup();
+
+  this.supportsGenerated = false;
+  this.supportMesh = null;
+  removeMeshByName(this.scene, "support");
+
+  return;
 
   this.removeGeometryComponent("support");
 }
@@ -2164,6 +2234,10 @@ Model.prototype.export = function(format, name) {
   var fname;
   var count = this.faces.length;
 
+  var geo = this.baseMesh.geometry;
+  var vertices = geo.vertices;
+  var faces = geo.faces;
+
   if (format=="stl") {
     var stlSize = 84 + 50 * count;
     var array = new ArrayBuffer(stlSize);
@@ -2181,13 +2255,13 @@ Model.prototype.export = function(format, name) {
     dv.setUint32(offset, count, isLittleEndian);
     offset += 4;
     for (var tri=0; tri<count; tri++) {
-      var face = this.faces[tri];
+      var face = faces[tri];
 
       setVector3(dv, offset, face.normal, isLittleEndian);
       offset += 12;
 
       for (var vert=0; vert<3; vert++) {
-        setVector3(dv, offset, this.vertices[face[faceGetSubscript(vert)]], isLittleEndian);
+        setVector3(dv, offset, vertices[face[faceGetSubscript(vert)]], isLittleEndian);
         offset += 12;
       }
 
@@ -2215,11 +2289,11 @@ Model.prototype.export = function(format, name) {
     out =  "solid " + name + '\n';
     for (var tri=0; tri<count; tri++) {
       var faceOut = "";
-      var face = this.faces[tri];
+      var face = faces[tri];
       faceOut += indent2 + "facet normal" + writeVector3(face.normal) + '\n';
       faceOut += indent4 + "outer loop" + '\n';
       for (var vert=0; vert<3; vert++) {
-        var v = this.vertices[face[faceGetSubscript(vert)]];
+        var v = vertices[face[faceGetSubscript(vert)]];
         faceOut += indent6 + "vertex" + writeVector3(v) + '\n';
       }
       faceOut += indent4 + "endloop" + '\n';
@@ -2243,15 +2317,15 @@ Model.prototype.export = function(format, name) {
 
     out =  "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
     out += "# NB: this file only stores faces and vertex positions. \n";
-    out += "# number vertices: " + this.vertices.length + "\n";
-    out += "# number triangles: " + this.faces.length + "\n";
+    out += "# number vertices: " + vertices.length + "\n";
+    out += "# number triangles: " + faces.length + "\n";
     out += "#\n";
     out += "# vertices: \n";
 
     // write the list of vertices
-    for (var vert=0; vert<this.vertices.length; vert++) {
+    for (var vert=0; vert<vertices.length; vert++) {
       var line = "v";
-      var vertex = this.vertices[vert];
+      var vertex = vertices[vert];
       for (var comp=0; comp<3; comp++) line += " " + vertex.getComponent(comp).toFixed(6);
       line += "\n";
       out += line;
@@ -2260,7 +2334,7 @@ Model.prototype.export = function(format, name) {
     out += "# faces: \n";
     for (var tri=0; tri<count; tri++) {
       var line = "f";
-      var face = this.faces[tri];
+      var face = faces[tri];
       for (var vert=0; vert<3; vert++) {
         line += " " + (face[faceGetSubscript(vert)]+1);
       }
@@ -2315,7 +2389,9 @@ Model.prototype.import = function(file, params, callback) {
       success = true;
 
       // record where the main geometry begins
-      _this.addGeometryComponent("model", 0, _this.vertices.length, 0, _this.faces.length);
+      var vcount = _this.baseMesh.geometry.vertices.length;
+      var fcount = _this.baseMesh.geometry.faces.length;
+      _this.addGeometryComponent("model", 0, vcount, 0, fcount);
 
       // set mode to base mesh, which creates the mesh and puts it in the scene
       _this.setMode("base");
@@ -2380,6 +2456,10 @@ Model.prototype.import = function(file, params, callback) {
   }
 
   function parseResult(result) {
+    var geo = new THREE.Geometry();
+    var vertices = geo.vertices;
+    var faces = geo.faces;
+
     // if binary STL
     if (_this.format=="stl") {
       // mimicking
@@ -2407,9 +2487,9 @@ Model.prototype.import = function(file, params, callback) {
           var key = vertexHash(vertex, p);
           var idx = -1;
           if (vertexMap[key]===undefined) {
-            idx = _this.vertices.length;
+            idx = vertices.length;
             vertexMap[key] = idx;
-            _this.vertices.push(vertex);
+            vertices.push(vertex);
           }
           else {
             idx = vertexMap[key];
@@ -2418,11 +2498,11 @@ Model.prototype.import = function(file, params, callback) {
           offset += 12;
         }
 
-        faceComputeNormal(face, _this.vertices);
+        faceComputeNormal(face, vertices);
 
         // ignore "attribute byte count" (2 bytes)
         offset += 2;
-        _this.addFace(face);
+        faces.push(face);
       }
 
       function getVector3(dv, offset, isLittleEndian) {
@@ -2463,7 +2543,7 @@ Model.prototype.import = function(file, params, callback) {
             if (!vline.startsWith("vertex ")) break;
 
             var vertex = convertUnits(getVector3(vline.substring(7)));
-            var idx = vertexMapIdx(vertexMap, vertex, _this.vertices, p);
+            var idx = vertexMapIdx(vertexMap, vertex, vertices, p);
 
             face[faceGetSubscript(vert)] = idx;
             numVerts++;
@@ -2475,7 +2555,7 @@ Model.prototype.import = function(file, params, callback) {
 
           getLine(); // clear the "endloop" line
           getLine(); // clear the "endfacet" line
-          _this.addFace(face);
+          faces.push(face);
         }
       }
 
@@ -2517,7 +2597,7 @@ Model.prototype.import = function(file, params, callback) {
         if (line[0]=='v') {
           if (line[1]==' ') {
             var vertex = convertUnits(getVector3(line.substring(2)));
-            _this.vertices.push(vertex);
+            vertices.push(vertex);
           }
           else if (line[1]=='n') {
             var normal = getVector3(line.substring(3)).normalize();
@@ -2526,9 +2606,9 @@ Model.prototype.import = function(file, params, callback) {
         }
         // if face, get face
         else if (line[0]=='f') {
-          hasVertNormals = (_this.vertices.length==vertexNormals.length);
+          hasVertNormals = (vertices.length==vertexNormals.length);
           var triangles = getTriangles(line.substring(2));
-          for (var tri=0; tri<triangles.length; tri++) _this.addFace(triangles[tri]);
+          for (var tri=0; tri<triangles.length; tri++) faces.push(triangles[tri]);
         }
       }
 
@@ -2568,12 +2648,12 @@ Model.prototype.import = function(file, params, callback) {
         else if (polyIndices.length==4) {
           var v = new THREE.Vector3();
           var d02 = v.subVectors(
-            _this.vertices[polyIndices[0]],
-            _this.vertices[polyIndices[2]]
+            vertices[polyIndices[0]],
+            vertices[polyIndices[2]]
           ).length();
           var d13 = v.subVectors(
-            _this.vertices[polyIndices[1]],
-            _this.vertices[polyIndices[3]]
+            vertices[polyIndices[1]],
+            vertices[polyIndices[3]]
           ).length();
           if (d02<d13) {
             triIndices.push([polyIndices[0],polyIndices[1],polyIndices[2]]);
@@ -2601,12 +2681,12 @@ Model.prototype.import = function(file, params, callback) {
           }
           else {
             var d01 = new THREE.Vector3().subVectors(
-              _this.vertices[triangle.a],
-              _this.vertices[triangle.b]
+              vertices[triangle.a],
+              vertices[triangle.b]
             );
             var d02 = new THREE.Vector3().subVectors(
-              _this.vertices[triangle.a],
-              _this.vertices[triangle.c]
+              vertices[triangle.a],
+              vertices[triangle.c]
             );
             normal.crossVectors(d01, d02);
           }
@@ -2616,6 +2696,10 @@ Model.prototype.import = function(file, params, callback) {
         return triangles;
       }
     }
+
+    //todo: store geometry
+    _this.baseMesh.geometry = geo;
+    _this.computeBounds();
   }
 }
 

@@ -1,11 +1,12 @@
 /* slicer.js */
 
-function Slicer(sourceVertices, sourceFaces, params) {
+function Slicer(mesh, params) {
+  var sourceGeo = mesh.geometry;
   // copy so that we can shift the whole geometry to the baseline
-  this.sourceVertices = cloneVector3Array(sourceVertices);
-  this.sourceFaces = sourceFaces;
-  this.sourceVertexCount = sourceVertices.length;
-  this.sourceFaceCount = sourceFaces.length;
+  this.sourceVertices = cloneVector3Array(sourceGeo.vertices);
+  this.sourceFaces = sourceGeo.faces;
+  this.sourceVertexCount = this.sourceVertices.length;
+  this.sourceFaceCount = this.sourceFaces.length;
 
   // set only the base parameters - need these to calculate mesh bounds and
   // slice count
@@ -639,7 +640,7 @@ Slicer.prototype.setLevel = function(level) {
 
     var topLevel = this.fullUpToLayer ? level - 1 : this.getMaxLevel();
 
-    for (var i = this.getMinLevel(); i < topLevel; i++) {
+    for (var i = this.getMinLevel(); i <= topLevel; i++) {
       var ilayer = this.getLayer(i);
 
       ilayer.writeWalls(contourVertices);

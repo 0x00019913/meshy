@@ -7,7 +7,12 @@
 //  size: side length; same for all sides
 //  scene: optional, used for visualizing the octree
 var Octree = (function() {
-  function Octree(faces, vertices, params) {
+  function Octree(mesh, params) {
+    if (!mesh) return;
+
+    var faces = mesh.geometry.faces;
+    var vertices = mesh.geometry.vertices;
+    
     if (!faces || !vertices) return;
     params = params || {};
 

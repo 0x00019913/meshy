@@ -7,9 +7,9 @@
 // params:
 //  faces, vertices: the geometry of the mesh for which we'll generate supports
 var SupportGenerator = (function() {
-  function SupportGenerator(faces, vertices) {
-    this.faces = faces;
-    this.vertices = vertices;
+  function SupportGenerator(mesh) {
+    this.faces = mesh.geometry.faces;
+    this.vertices = mesh.geometry.vertices;
 
     this.octree = null;
   }
@@ -124,7 +124,7 @@ var SupportGenerator = (function() {
 
     supportTreeGeometry.computeFaceNormals();
 
-    debug.lines();
+    //debug.lines();
 
     return supportTreeGeometry;
 
@@ -786,7 +786,7 @@ var SupportGenerator = (function() {
     if (this.b0) this.b0.connectProfiles(params);
     if (this.b1) this.b1.connectProfiles(params);
 
-    if (this.isRoot()) debug.lines(12);
+    //if (this.isRoot()) debug.lines(12);
   }
 
   // connect a node to one of its branch nodes
@@ -965,7 +965,7 @@ var SupportGenerator = (function() {
       this.b1.debug();
     }
 
-    if (this.isRoot()) debug.lines(12);
+    //if (this.isRoot()) debug.lines(12);
   }
 
 

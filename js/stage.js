@@ -16,7 +16,7 @@ Stage = function() {
   this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
   this.buildVolumeMin = null;
   this.buildVolumeMax = null;
-  this.centerOriginOnBuildPlate = false;
+  this.centerOriginOnBuildPlate = true; // todo: back to false
   this.buildVolumeMaterials = {
     linePrimary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
@@ -43,7 +43,7 @@ Stage = function() {
   this.buildVolumeVisible = true;
 
   this.importUnits = Units.mm;
-  this.autocenterOnImport = true;
+  this.autocenterOnImport = false; // todo: back to true
 
   // geometry
   this.model = null;
@@ -1182,6 +1182,9 @@ Stage.prototype.displayMesh = function(success, model) {
     // it's necessary to clear file input box because it blocks importing
     // a model with the same name twice in a row
     this.fileInput.value = "";
+
+    this.importEnabled = true;
+    this.importingMeshName = "";
 
     this.model = null;
     return;
