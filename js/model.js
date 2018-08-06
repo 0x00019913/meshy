@@ -270,11 +270,21 @@ Model.prototype.getPolycount = function() {
 
 // Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
 Model.prototype.translate = function(axis, amount) {
-  var baseMesh = this.baseMesh;
-  baseMesh.position.add(amount);
+  this.baseMesh.position.add(amount);
+  this.supportMesh.position.add(amount);
+
+
+  this.min.add(amount);
+  this.max.add(amount);
+
+  if (this.centerOfMass) {
+    this.centerOfMass.add(amount)
+    // transform center of mass indicator
+    this.positionTargetPlanes(this.centerOfMass);
+  }
 
   return;
-  
+
   // float precision for printout
   var d = 4;
 
@@ -815,7 +825,7 @@ Model.prototype.setMode = function(mode, params) {
   }
   // slicing mode - init slicer and display a model in preview mode by default
   else if (mode == "slice") {
-    this.slicer = new Slicer(this.baseMesh, params);
+    this.slicer = new Slicer([this.baseMesh, this.supportMesh], params);
 
     this.makeSliceMeshes();
     this.addSliceMeshesToScene();
@@ -854,7 +864,7 @@ Model.prototype.makeBaseMesh = function() {
   if (!this.baseMesh) {
     var geo = new THREE.Geometry();
     this.baseMesh = new THREE.Mesh(geo, Model.Materials.base);
-    this.baseMesh.name = "model";
+    this.baseMesh.name = "base";
     this.baseMesh.frustumCulled = false;
   }
 
@@ -1028,8 +1038,7 @@ Model.prototype.makeSliceMeshes = function() {
   this.slicePreviewSlicedMesh = mesh;
 
   // to make the ghost, just clone the base mesh and assign ghost material
-  mesh = this.baseMesh.clone();
-  mesh.material = Model.Materials.slicePreviewMeshGhost;
+  mesh = new THREE.Mesh(geos.source.geo, Model.Materials.slicePreviewMeshGhost);
   mesh.name = "slice";
   mesh.frustumCulled = false;
   this.slicePreviewGhostMesh = mesh;
@@ -2388,10 +2397,10 @@ Model.prototype.import = function(file, params, callback) {
       parseResult(fr.result);
       success = true;
 
-      // record where the main geometry begins
+      /*// record where the main geometry begins
       var vcount = _this.baseMesh.geometry.vertices.length;
       var fcount = _this.baseMesh.geometry.faces.length;
-      _this.addGeometryComponent("model", 0, vcount, 0, fcount);
+      _this.addGeometryComponent("model", 0, vcount, 0, fcount);*/
 
       // set mode to base mesh, which creates the mesh and puts it in the scene
       _this.setMode("base");
@@ -2700,6 +2709,10 @@ Model.prototype.import = function(file, params, callback) {
     //todo: store geometry
     _this.baseMesh.geometry = geo;
     _this.computeBounds();
+
+    var t = performance.now();
+    var octree = new Octree(_this.baseMesh);
+    console.log(performance.now() - t);
   }
 }
 
@@ -2713,7 +2726,7 @@ Model.prototype.dispose = function() {
   // stop any current non-blocking calculations
   this.stopIterator();
 
-  removeMeshByName(this.scene, "model");
+  removeMeshByName(this.scene, "base");
   removeMeshByName(this.scene, "slice");
   removeMeshByName(this.scene, "targetPlane");
 

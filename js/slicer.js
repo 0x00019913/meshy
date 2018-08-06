@@ -1,12 +1,22 @@
 /* slicer.js */
 
-function Slicer(mesh, params) {
-  var sourceGeo = mesh.geometry;
-  // copy so that we can shift the whole geometry to the baseline
-  this.sourceVertices = cloneVector3Array(sourceGeo.vertices);
-  this.sourceFaces = sourceGeo.faces;
-  this.sourceVertexCount = this.sourceVertices.length;
-  this.sourceFaceCount = this.sourceFaces.length;
+// src is either one THREE.Mesh or an array of them
+function Slicer(src, params) {
+  var meshes = isArray(src) ? src : [src];
+
+  var sourceGeo = new THREE.Geometry();
+
+  // merge the input meshes into the slicer's own copy of the source geometry
+  for (var m = 0; m < meshes.length; m++) {
+    var mesh = meshes[m];
+    if (!mesh) continue;
+
+    sourceGeo.merge(mesh.geometry);
+  }
+
+  this.sourceGeo = sourceGeo;
+  this.sourceVertexCount = sourceGeo.vertices.length;
+  this.sourceFaceCount = sourceGeo.faces.length;
 
   // set only the base parameters - need these to calculate mesh bounds and
   // slice count
@@ -242,8 +252,8 @@ Slicer.prototype.calculateFaceBounds = function() {
   var max = new THREE.Vector3().setScalar(-Infinity);
 
   for (var i = 0; i < this.sourceFaceCount; i++) {
-    var face = this.sourceFaces[i];
-    var bounds = faceGetBounds(face, this.sourceVertices);
+    var face = this.sourceGeo.faces[i];
+    var bounds = faceGetBounds(face, this.sourceGeo.vertices);
 
     max.max(bounds.max);
     min.min(bounds.min);
@@ -284,7 +294,7 @@ Slicer.prototype.floorToBaseline = function() {
 
   var axis = this.axis;
   var baseline = this.baseline;
-  var sourceVertices = this.sourceVertices;
+  var sourceVertices = this.sourceGeo.vertices;
   var faceBounds = this.faceBoundsArray;
 
   // shift all vertices
@@ -437,7 +447,8 @@ Slicer.prototype.gcodeSave = function(params) {
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  this.makeGeometry();
+  // unnecessary
+  //this.makeGeometry();
 
   this.setLevel(this.currentLevel);
 }
@@ -910,6 +921,9 @@ Slicer.prototype.setLevel = function(level) {
 Slicer.prototype.makeGeometry = function() {
   var geos = this.geometries;
 
+  geos.source = {
+    geo: this.sourceGeo
+  };
   geos.currentLayerContours = {
     geo: new THREE.Geometry()
   };
@@ -927,14 +941,8 @@ Slicer.prototype.makeGeometry = function() {
   };
 
   var geoSlicedMesh = geos.slicedMesh.geo;
-  var vertices = this.sourceVertices;
+  var vertices = this.sourceGeo.vertices;
   var faces = [];
-  /*// set the face array on the mesh
-  for (var i = 0; i < this.faceBoundsArray.length; i++) {
-    var face = this.faceBoundsArray[i].face;
-    face.materialIndex = 0;
-    faces.push(face);
-  }*/
   geoSlicedMesh.vertices = vertices;
   geoSlicedMesh.faces = faces;
 }
@@ -1107,8 +1115,8 @@ Slicer.prototype.buildLayerSegmentSets = function() {
   var axis = this.axis;
   var min = this.min[axis];
   var layerHeight = this.layerHeight;
-  var vertices = this.sourceVertices;
-  var faces = this.sourceFaces;
+  var vertices = this.sourceGeo.vertices;
+  var faces = this.sourceGeo.faces;
 
   var segmentSets = new Array(numSlices);
 

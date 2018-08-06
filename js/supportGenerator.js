@@ -8,6 +8,7 @@
 //  faces, vertices: the geometry of the mesh for which we'll generate supports
 var SupportGenerator = (function() {
   function SupportGenerator(mesh) {
+    this.mesh = mesh;
     this.faces = mesh.geometry.faces;
     this.vertices = mesh.geometry.vertices;
 
@@ -90,7 +91,7 @@ var SupportGenerator = (function() {
     // need an octree for raycasting
 
     if (this.octree === null) {
-      this.octree = new Octree(fs, vs);
+      this.octree = new Octree(this.mesh);
       this.octree.construct();
     }
 
