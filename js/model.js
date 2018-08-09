@@ -47,6 +47,7 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
   // base mesh
   this.baseMesh = null;
   this.makeBaseMesh();
+  this.matrix = this.baseMesh.matrix.clone();
 
   // patch mesh
   this.patchMesh = null;
@@ -266,19 +267,81 @@ Model.prototype.getPolycount = function() {
   return this.baseMesh.geometry.faces.length;
 }
 
+Model.prototype.getPosition = function() {
+  return this.baseMesh.position;
+}
+Model.prototype.getRotation = function() {
+  return this.baseMesh.rotation;
+}
+Model.prototype.getScale = function() {
+  return this.baseMesh.scale;
+}
+
 /* TRANSFORMATIONS */
 
-// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
-Model.prototype.translate = function(axis, amount) {
-  this.baseMesh.position.add(amount);
-  this.supportMesh.position.add(amount);
+Model.prototype.translate = function(pos) {
+  var diff = pos.clone().sub(this.baseMesh.position);
 
+  this.baseMesh.position.copy(pos);
+  if (this.supportMesh) this.supportMesh.position.copy(pos);
+  this.baseMesh.updateMatrix();
 
-  this.min.add(amount);
-  this.max.add(amount);
+  this.min.add(diff);
+  this.max.add(diff);
 
   if (this.centerOfMass) {
-    this.centerOfMass.add(amount)
+    this.centerOfMass.add(diff)
+    // transform center of mass indicator
+    this.positionTargetPlanes(this.centerOfMass);
+  }
+}
+Model.prototype.translateEnd = function() {
+  return;
+  var mesh = this.baseMesh;
+
+  mesh.geometry.applyMatrix(mesh.matrix);
+  mesh.position.set(0, 0, 0);
+  mesh.updateMatrix();
+}
+
+Model.prototype.rotate = function(euler) {
+  this.baseMesh.rotation.copy(euler);
+  this.baseMesh.updateMatrix();
+}
+Model.prototype.rotateEnd = function() {
+  return;
+  var mesh = this.baseMesh;
+
+  mesh.geometry.applyMatrix(mesh.matrix);
+  mesh.rotation.set(0, 0, 0);
+  mesh.updateMatrix();
+}
+
+Model.prototype.scale = function(scale) {
+  this.baseMesh.scale.copy(scale);
+  this.baseMesh.updateMatrix();
+}
+Model.prototype.scaleEnd = function() {
+  return;
+  var mesh = this.baseMesh;
+
+  mesh.geometry.applyMatrix(mesh.matrix);
+  mesh.scale.set(1, 1, 1);
+  mesh.updateMatrix();
+}
+//// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
+// Translate the model to a new position.
+/*Model.prototype.translate = function(target) {
+  var diff = target.clone().sub(this.baseMesh.position);
+
+  this.baseMesh.position.copy(target);
+  if (this.supportMesh) this.supportMesh.position.copy(target);
+
+  this.min.add(diff);
+  this.max.add(diff);
+
+  if (this.centerOfMass) {
+    this.centerOfMass.add(diff)
     // transform center of mass indicator
     this.positionTargetPlanes(this.centerOfMass);
   }
@@ -330,10 +393,10 @@ Model.prototype.translate = function(axis, amount) {
   this.clearThicknessView();
 
   this.measurement.translate(amount);
-}
+}*/
 
 // Rotate the model on axis ("x"/"y"/"z") by "amount" degrees.
-Model.prototype.rotate = function(axis, amount) {
+/*Model.prototype.rotate = function(axis, amount) {
   var degree = amount[axis]*Math.PI/180.0;
 
   this.printout.log("rotation by "+amount[axis]+" degrees about "+axis+" axis");
@@ -375,10 +438,10 @@ Model.prototype.rotate = function(axis, amount) {
   // size argument is necessary for resizing things that aren't rotationally
   // symmetric
   this.measurement.rotate(axis, degree, this.getSize());
-}
+}*/
 
 // Scale the model on axis ("x"/"y"/"z") by amount.
-Model.prototype.scale = function (axis, amount) {
+/*Model.prototype.scale = function (axis, amount) {
   // float precision for printout
   var d = 4;
 
@@ -392,8 +455,8 @@ Model.prototype.scale = function (axis, amount) {
     var amountString = amount[axis].toFixed(d);
     this.printout.log("scale by a factor of "+amountString+" units on "+axis+" axis");
   }
-  for (var v=0; v<this.vertices.length; v++) {
-    this.vertices[v].multiply(amount);
+  for (var v=0; v<this.baseMesh.geometry.vertices.length; v++) {
+    this.baseMesh.geometry.vertices[v].multiply(amount);
   }
   // normals may shift as a result of the scaling, so recompute
   this.baseMesh.geometry.computeFaceNormals();
@@ -425,7 +488,7 @@ Model.prototype.scale = function (axis, amount) {
   this.clearThicknessView();
 
   this.measurement.scale(amount);
-}
+}*/
 
 // Mirror the mesh along an axis.
 Model.prototype.mirror = function(axis) {

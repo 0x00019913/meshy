@@ -67,6 +67,47 @@ function makeAxisUnitVector(axis) {
   return v;
 }
 
+
+
+function eulerRadToDeg (euler) {
+  var eulerDeg = euler.clone();
+  var factor = 180 / Math.PI;
+
+  eulerDeg.x *= factor;
+  eulerDeg.y *= factor;
+  eulerDeg.z *= factor;
+
+  return eulerDeg;
+}
+function eulerDegToRad (euler) {
+  var eulerRad = euler.clone();
+  var factor = Math.PI / 180;
+
+  eulerRad.x *= factor;
+  eulerRad.y *= factor;
+  eulerRad.z *= factor;
+
+  return eulerRad;
+}
+function eulerRadNormalize(euler) {
+  var max = Math.PI * 2;
+
+  euler.x = ((euler.x % max) + max) % max;
+  euler.y = ((euler.y % max) + max) % max;
+  euler.z = ((euler.z % max) + max) % max;
+
+  return euler;
+}
+function eulerDegNormalize(euler) {
+  var max = 360;
+
+  euler.x = ((euler.x % max) + max) % max;
+  euler.y = ((euler.y % max) + max) % max;
+  euler.z = ((euler.z % max) + max) % max;
+
+  return euler;
+}
+
 // element max/min
 function vector3MaxElement(v) {
   return Math.max(v.x, v.y, v.z);

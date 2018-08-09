@@ -1,159 +1,111 @@
 /* transform.js
    classes:
     Transform
-    UndoStack
+    EditStack
    description:
     A class representing a transformation. Has a reference to a model and can
     apply the appropriate transformation with .apply(). Has a method to generate
     an inverse transformation, which can be pushed onto an instance of
-    UndoStack.
+    EditStack.
 */
 
-// Constructor - transformation type, axis, amount, model object, and a printout
-// to output messages for the user.
-// Amount can be either a number or a Vector3.
-function Transform(op, axis, amount, model, printout) {
-  this.printout = printout ? printout : console;
+function Transform() {
+  // start and end value of transformed parameter
+  this.startVal = null;
+  this.endVal = null;
 
-  if (!model) {
-    this.op = "noop";
-    this.reason = "Model doesn't exist.";
-    return this;
-  }
-  this.model = model;
-  this.dynamic = false;
-  this.amount = new THREE.Vector3(); // init to (0, 0, 0)
+  // true if inverse
+  this.inverse = false;
 
-  switch (op) {
-    case "floor":
-      this.op = "translate";
-      this.axis = axis;
-      if (axis==="all") {
-        this.amount.copy(model.min).multiplyScalar(-1);
-      }
-      else {
-        this.amount[axis] = -1 * model.min[axis]
-      }
-      break;
-    case "center":
-      this.op = "translate";
-      this.axis = axis;
-      if (axis==="all") {
-        this.amount.copy(model.getCenter()).multiplyScalar(-1);
-      }
-      else {
-        this.amount[axis] = -1 * model["getCenter"+axis]();
-      }
-      break;
-    case "mirror":
-      this.op = "mirror";
-      this.axis = axis;
-      break;
-    case "translate":
-      this.op = "translate";
-      this.axis = axis;
-      if (amount.isVector3) this.amount.copy(amount);
-      else this.amount[axis] = amount;
-      break;
-    case "rotate":
-      this.op = "rotate";
-      if (axis==="all") {
-        this.op = "noop";
-        this.reason = "Cannot rotate on multiple axes at once.";
-        return this;
-      }
-      this.axis = axis;
-      if (amount.isVector3) this.amount.copy(amount);
-      else this.amount[axis] = amount;
-      break;
-    case "scale":
-      var isBadScale;
-      if (amount.isVector3) isBadScale = amount.x<=0 || amount.y<=0 || amount.z<=0
-      else isBadScale = amount<=0;
+  // functions to get start value and inverse end value
+  this.startValFn = null;
+  this.inverseEndValFn = null;
 
-      if (isBadScale) {
-        this.op = "noop";
-        this.reason = "Can only scale by positive numbers: " + amount;
-        return this;
-      }
-
-      this.op = "scale";
-      this.axis = axis;
-      // if amount is vector, use it as is; else, allow scaling on all axes
-      // to be specified as a number (then scale on all axes by that number)
-      if (amount.isVector3) this.amount.copy(amount);
-      else {
-        if (axis==="all") this.amount.set(amount, amount, amount);
-        else {
-          this.amount.set(1,1,1);
-          this.amount[axis] = amount;
-        }
-      }
-      break;
-  }
-
-  if (this.op === "translate" && this.amount.length() === 0) {
-    this.op = "noop";
-    this.reason = "Translation by 0.";
-  }
-
-  return this;
+  // functions called on transform application and transform end
+  this.applyFn = null;
+  this.endFn = null;
 }
 
 Object.assign(Transform.prototype, {
+
   constructor: Transform,
 
-  // Creates and returns an inverse transform.
-  makeInverse: function() {
-    if (this.op==="noop") {
-      return null;
-    }
+  getInverse: function() {
+    var sv = this.startVal;
+    var ev = this.endVal;
 
-    var amount;
-    if (this.op==="scale") {
-      amount = new THREE.Vector3(1,1,1).divide(this.amount);
-    }
-    else { // translations and rotations
-      amount = new THREE.Vector3(-1,-1,-1).multiply(this.amount);
-    }
+    // if transformation did nothing, no inverse
+    if (ev !== null && sv !== null && sv.equals(ev)) return null;
 
-    var inv = new this.constructor(this.op, this.axis, amount, this.model);
+    var inv = new this.constructor();
+
+    // copy all properties
+    Object.assign(inv, this);
+    inv.inverse = true;
+
     return inv;
   },
 
-  // applies the transform
-  apply: function() {
-    switch (this.op) {
-      case "noop":
-        this.printout.warn(this.reason);
-        return;
-      case "translate":
-        this.model.translate(this.axis, this.amount);
-        break;
-      case "rotate":
-        this.model.rotate(this.axis, this.amount);
-        break;
-      case "scale":
-        this.model.scale(this.axis, this.amount);
-        break;
-      case "mirror":
-        this.model.mirror(this.axis);
-        break;
+  setStartValFn: function(startValFn) {
+    this.startValFn = startValFn;
+    return this;
+  },
+
+  setInverseEndValFn: function(inverseEndValFn) {
+    this.inverseEndValFn = inverseEndValFn;
+    return this;
+  },
+
+  setApplyFn: function(applyFn) {
+    this.applyFn = applyFn;
+    return this;
+  },
+
+  setEndFn: function(endFn) {
+    this.endFn = endFn;
+    return this;
+  },
+
+  apply: function(endVal) {
+    // if inverse, get new start value and compute the end value
+    if (this.inverse) {
+      var invStartVal = this.startValFn();
+      var invEndVal = this.inverseEndValFn(invStartVal, this.startVal, this.endVal);
+
+      if (this.applyFn) this.applyFn(invEndVal);
     }
+    // else, handle start and end values normally
+    else {
+      if (this.startVal === null) this.startVal = this.startValFn().clone();
+
+      // if ending value is given, record it
+      if (endVal !== undefined) this.endVal = endVal.clone();
+
+      // apply with current end value
+      if (this.applyFn) this.applyFn(this.endVal);
+    }
+
+    return this;
+  },
+
+  end: function() {
+    if (this.endFn) this.endFn();
+
+    return this;
   }
 
 });
 
 // Constructor - initialized with a printout object.
-function UndoStack(printout) {
+function EditStack(printout) {
   this.printout = printout ? printout : console;
   // stack of transformations
   this.history = [];
   this.pos = -1
 }
 
-UndoStack.prototype = {
-  constructor: UndoStack,
+EditStack.prototype = {
+  constructor: EditStack,
 
   // Get the inverse transform at current positition and apply it.
   undo: function() {
@@ -161,8 +113,15 @@ UndoStack.prototype = {
       this.printout.warn("No undo history available.");
       return;
     }
-    var inverse = this.history[this.pos--].inverse;
-    if (inverse) inverse.apply();
+
+    var entry = this.history[this.pos--];
+
+    // apply inverse
+    entry.inverse.apply();
+    entry.inverse.end();
+
+    // if update function exists, call it
+    if (entry.onTransform) entry.onTransform();
   },
 
   // Get the transform at the next position and apply it.
@@ -171,19 +130,27 @@ UndoStack.prototype = {
       this.printout.warn("No redo history available.");
       return;
     }
-    var transform = this.history[++this.pos].transform;
-    transform.apply();
+
+    var entry = this.history[++this.pos];
+
+    // apply the transform and update function if given
+    entry.transform.apply();
+    entry.transform.end();
+
+    // if update function exists, call it
+    if (entry.onTransform) entry.onTransform();
   },
 
   // Put a new inverse transform onto the stack.
-  push: function(transform, inverse) {
-    if (this.pos < this.history.length-1) {
+  push: function(transform, inverse, onTransform) {
+    if (this.pos < this.history.length - 1) {
       // effectively deletes all entries after this.pos
       this.history.length = this.pos + 1;
     }
     if (transform && inverse) this.history.push({
       transform: transform,
-      inverse: inverse
+      inverse: inverse,
+      onTransform: onTransform || null
     });
     this.pos++;
   },
