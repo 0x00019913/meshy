@@ -166,6 +166,8 @@ Stage.prototype.generateUI = function() {
     .title("Build volume size on z in mm.")
     .onChange(this.makeBuildVolume.bind(this));
 
+  this.snapTransformationsToFloor = true;
+
   this.editFolder = this.gui.addFolder("Edit",
     "Mesh edit functions: translation, scaling, rotation, normals.");
 
@@ -304,16 +306,6 @@ Stage.prototype.setVertexPrecision = function() {
   if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
 
-// Set up an arbitrary transform, create its inverse and push it onto the
-// undo stack, apply the transform.
-Stage.prototype.transform = function(op, axis, amount) {
-  this.deactivateSliceMode();
-  var transform = new Transform(op, axis, amount, this.model, this.printout);
-  var inv = transform.makeInverse();
-  if (inv) this.editStack.push(transform, inv);
-  transform.apply();
-}
-
 // Functions corresponding to buttons in the dat.gui.
 Stage.prototype.exportOBJ = function() { this.export("obj"); }
 Stage.prototype.exportSTL = function() { this.export("stl"); }
@@ -328,6 +320,9 @@ Stage.prototype.redo = function() {
   this.editStack.redo();
 }
 
+// functions for handling model transformations
+
+// possibly unnecessary
 Stage.prototype.deleteEditControllers = function() {
   this.positionXController = null;
   this.positionYController = null;
@@ -342,111 +337,132 @@ Stage.prototype.deleteEditControllers = function() {
   this.scaleZController = null;
 }
 
-Stage.prototype.onTranslate = function() {
-  if (!this.currentTransform) {
-    var transform = new Transform(), _this = this;
+Stage.prototype.makeTranslateTransform = function(invertible) {
+  var transform = new Transform(), _this = this;
 
-    transform.onApply(function(pos) { _this.model.translate(pos); });
-    transform.onEnd(function() { _this.model.translateEnd(); });
-    transform.getStartVal(function() { return _this.model.getPosition(); });
-    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
-      if (newStartVal === null || startVal === null || endVal === null) return null;
-      return newStartVal.clone().add(startVal).sub(endVal);
-    });
-    this.currentTransform = transform;
-  }
+  transform.onApply(function(pos) { _this.model.translate(pos); });
+  transform.onEnd(function() { _this.model.translateEnd(); });
+  transform.getStartVal(function() { return _this.model.getPosition(); });
+  transform.getInverseEndVal(Transform.InversionFunctions.negateVector3);
+
+  return transform;
+}
+
+Stage.prototype.makeRotateTransform = function(invertible) {
+  var transform = new Transform(), _this = this;
+
+  transform.onApply(function(euler) { _this.model.rotate(euler); });
+  transform.onEnd(function() { _this.model.rotateEnd(); });
+  transform.getStartVal(function() { return _this.model.getRotation(); });
+  transform.getInverseEndVal(Transform.InversionFunctions.negateEuler);
+
+  return transform;
+}
+
+Stage.prototype.makeScaleTransform = function(invertible) {
+  var transform = new Transform(), _this = this;
+
+  transform.onApply(function(scale) {
+    scale = scale.clone();
+    // never scale to 0
+    if (scale.x <= 0) scale.x = 1;
+    if (scale.y <= 0) scale.y = 1;
+    if (scale.z <= 0) scale.z = 1;
+    _this.model.scale(scale);
+  });
+  transform.onEnd(function() { _this.model.scaleEnd(); });
+  transform.getStartVal(function() { return _this.model.getScale(); });
+  transform.getInverseEndVal(Transform.InversionFunctions.reciprocateVector3);
+
+  return transform;
+}
+
+Stage.prototype.pushEdit = function(transform, onTransform) {
+  if (!transform) return;
+
+  var inv = transform.getInverse();
+  if (inv) this.editStack.push(transform, inv, onTransform);
+}
+
+Stage.prototype.autoCenter = function() {
+  var newCenter = this.calculateBuildPlateCenter();
+  newCenter.z += this.model.getSize().z / 2;
+  var translation = newCenter.sub(this.model.getCenter());
+
+  var transform = this.makeTranslateTransform();
+
+  transform.apply(this.position.add(translation));
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
+// called when a translation is in progress
+Stage.prototype.onTranslate = function() {
+  if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
 }
+// called on translation end
 Stage.prototype.onFinishTranslate = function() {
-  if (this.currentTransform) {
-    this.currentTransform.end();
+  if (this.currentTransform) this.currentTransform.end();
 
-    var inv = this.currentTransform.getInverse();
-    if (inv) this.editStack.push(
-      this.currentTransform, inv, this.updatePosition.bind(this)
-    );
-  }
+  this.pushEdit(this.currentTransform, this.updatePosition.bind(this));
+
   this.currentTransform = null;
   this.updatePosition();
 }
-Stage.prototype.onRotate = function() {
-  if (!this.currentTransform) {
-    var transform = new Transform(), _this = this;
 
-    transform.onApply(function(euler) { _this.model.rotate(euler); });
-    transform.onEnd(function() { _this.model.rotateEnd(); });
-    transform.getStartVal(function() { return _this.model.getRotation(); });
-    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
-      if (newStartVal === null || startVal === null || endVal === null) return null;
-      var newEndVal = newStartVal.clone();
-      newEndVal.x += startVal.x - endVal.x;
-      newEndVal.y += startVal.y - endVal.y;
-      newEndVal.z += startVal.z - endVal.z;
-      return newEndVal;
-    });
-    this.currentTransform = transform;
-  }
+// called when a rotation is in progress
+Stage.prototype.onRotate = function() {
+  if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
   this.currentTransform.apply(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
 }
+// called on rotation end
 Stage.prototype.onFinishRotate = function() {
-  if (this.currentTransform) {
-    this.currentTransform.end();
+  if (this.currentTransform) this.currentTransform.end();
 
-    var inv = this.currentTransform.getInverse();
-    if (inv) this.editStack.push(
-      this.currentTransform, inv, this.updateRotation.bind(this)
-    );
-  }
+  this.pushEdit(this.currentTransform, this.updateRotation.bind(this));
+
   this.currentTransform = null;
   this.updateRotation();
+  this.updateSize();
 }
-Stage.prototype.onScaleByFactor = function() {
-  if (!this.currentTransform) {
-    var transform = new Transform(), _this = this;
 
-    transform.onApply(function(scale) {
-      scale = scale.clone();
-      if (scale.x <= 0) scale.x = 1;
-      if (scale.y <= 0) scale.y = 1;
-      if (scale.z <= 0) scale.z = 1;
-      _this.model.scale(scale);
-    });
-    transform.onEnd(function() { _this.model.scaleEnd(); });
-    transform.getStartVal(function() { return _this.model.getScale(); });
-    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
-      if (newStartVal === null || startVal === null || endVal === null) return null;
-      return newStartVal.clone().multiply(startVal).divide(endVal);
-    });
-    this.currentTransform = transform;
-  }
+// called when scale change is in progress
+Stage.prototype.onScaleByFactor = function() {
+  if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
   this.currentTransform.apply(this.scale);
 }
+// called when scaling to size is in progress
 Stage.prototype.onScaleToSize = function() {
+  // current size - changed dynamically via gui
   var size = this.size;
+  // starting model size - only changes at the end of the transform
   var modelSize = this.model.getSize();
+
   // axis that's being scaled
   var axis = size.x !== modelSize.x ? "x" : size.y !== modelSize.y ? "y" : "z";
   // factor by which to scale (on one axis or all) - note zero-size failsafe
   var factor = size[axis] !== 0 ? size[axis] / modelSize[axis] : 1;
-  console.log(this.size, this.scale, this.model.getScale(), factor);
 
-  if (this.scaleToSizeOnAllAxes) this.scale.multiplyScalar(factor);
-  else this.scale[axis] *= factor;
+  // starting scale of model corresponding to the starting size
+  var startScale = this.currentTransform ? this.currentTransform.startVal : this.scale;
+
+  // set scale to a value that will result in the new size
+  this.scale.copy(startScale.clone().multiplyScalar(factor));
 
   this.onScaleByFactor();
 }
+// called on scale change end
 Stage.prototype.onFinishScaleByFactor = function() {
-  if (this.currentTransform) {
-    this.currentTransform.end();
+  if (this.currentTransform) this.currentTransform.end();
 
-    var inv = this.currentTransform.getInverse();
-    if (inv) this.editStack.push(
-      this.currentTransform, inv, this.updateScale.bind(this)
-    );
-  }
+  this.pushEdit(this.currentTransform, this.updateScale.bind(this));
+
   this.currentTransform = null;
   this.updateScale();
 }
@@ -494,8 +510,11 @@ Stage.prototype.updateSize = function() {
 Stage.prototype.buildEditFolder = function() {
   this.clearFolder(this.editFolder);
 
+  this.editFolder.add(this, "snapTransformationsToFloor").name("Snap to floor")
+    .title("Snap all transformations to the build volume floor.");
+
   if (!this.model) {
-    this.deleteEditControllers();
+    //this.deleteEditControllers();
     return;
   }
 
@@ -550,11 +569,8 @@ Stage.prototype.buildEditFolder = function() {
     .onChange(this.onScaleByFactor.bind(this))
     .onFinishChange(this.onFinishScaleByFactor.bind(this));
 
-  var scaleToSizeFolder = scaleFolder.addFolder("Scale to Size", "Scale the mesh to a given size.");
+  var scaleToSizeFolder = scaleFolder.addFolder("Scale to Size", "Scale the mesh uniformly to a given size.");
 
-  this.scaleToSizeOnAllAxes = true;
-  scaleToSizeFolder.add(this, "scaleToSizeOnAllAxes").name("Scale on all axes")
-    .title("Scale the mesh by the same factor on all axes.");
   this.scaleToSizeXController = scaleToSizeFolder.add(this.size, "x", 0).name("x size")
     .onChange(this.onScaleToSize.bind(this))
     .onFinishChange(this.onFinishScaleByFactor.bind(this));
@@ -564,21 +580,6 @@ Stage.prototype.buildEditFolder = function() {
   this.scaleToSizeZController = scaleToSizeFolder.add(this.size, "z", 0).name("z size")
     .onChange(this.onScaleToSize.bind(this))
     .onFinishChange(this.onFinishScaleByFactor.bind(this));
-  /*this.newXSize = 1;
-  scaleToSizeFolder.add(this, "newXSize", 0).name("New x size")
-    .title("New size on x axis.");
-  scaleToSizeFolder.add(this, "scaleToXSize").name("Scale to x size")
-    .title("Scale mesh to given size on x axis.");
-  this.newYSize = 1;
-  scaleToSizeFolder.add(this, "newYSize", 0).name("New y size")
-    .title("New size on y axis.");
-  scaleToSizeFolder.add(this, "scaleToYSize").name("Scale to y size")
-    .title("Scale mesh to given size on y axis.");
-  this.newZSize = 1;
-  scaleToSizeFolder.add(this, "newZSize", 0).name("New z size")
-    .title("New size on z axis.");
-  scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size")
-    .title("Scale mesh to given size on z axis.");*/
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
@@ -623,40 +624,6 @@ Stage.prototype.buildEditFolder = function() {
 
   this.editFolder.add(this, "flipNormals").name("Flip normals")
     .title("Flip mesh normals.");
-}
-
-Stage.prototype.autoCenter = function() {
-  var model = this.model;
-  if (!model) return;
-
-  var d = this.calculateBuildPlateCenter().sub(model.getCenter()).setZ(-model.min.z);
-  this.transform("translate","all",d);
-}
-Stage.prototype.translateX = function() { this.transform("translate","x",this.xTranslation); }
-Stage.prototype.translateY = function() { this.transform("translate","y",this.yTranslation); }
-Stage.prototype.translateZ = function() { this.transform("translate","z",this.zTranslation); }
-Stage.prototype.rotateX = function() { this.transform("rotate","x",this.xRotation); }
-Stage.prototype.rotateY = function() { this.transform("rotate","y",this.yRotation); }
-Stage.prototype.rotateZ = function() { this.transform("rotate","z",this.zRotation); }
-Stage.prototype.scaleX = function() { this.transform("scale","x",this.scaleFactor); }
-Stage.prototype.scaleY = function() { this.transform("scale","y",this.scaleFactor); }
-Stage.prototype.scaleZ = function() { this.transform("scale","z",this.scaleFactor); }
-Stage.prototype.scaleAll = function() { this.transform("scale","all",this.scaleFactor); }
-Stage.prototype.scaleToXSize = function() { this.scaleToSize("x",this.newXSize); }
-Stage.prototype.scaleToYSize = function() { this.scaleToSize("y",this.newYSize); }
-Stage.prototype.scaleToZSize = function() { this.scaleToSize("z",this.newZSize); }
-Stage.prototype.scaleToSize = function(axis, value) {
-  if (this.model) {
-    var currentSize = this.model["getSize"+axis]();
-    if (currentSize>0) {
-      var ratio = value/currentSize;
-      if (this.scaleOnAllAxes) this.transform("scale","all",ratio);
-      else this.transform("scale",axis,ratio);
-    }
-    else {
-      this.printout.error("Couldn't get current model size, try again or reload the model.");
-    }
-  }
 }
 Stage.prototype.scaleToMeasurement = function() {
   if (this.model) {

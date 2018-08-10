@@ -15,7 +15,10 @@ function Transform() {
   this.endVal = null;
 
   // true if inverse
-  this.inverse = false;
+  this._inverse = false;
+
+  // true if this transform can generate an inverse
+  this._invertible = true;
 
   // functions to get start value and inverse end value
   this._getStartVal = null;
@@ -26,6 +29,27 @@ function Transform() {
   this._onEnd = null;
 }
 
+Transform.InversionFunctions = {
+  negateVector3: function(newStartVal, startVal, endVal) {
+    if (newStartVal === null || startVal === null || endVal === null) return null;
+    return newStartVal.clone().add(startVal).sub(endVal);
+  },
+
+  reciprocateVector3: function(newStartVal, startVal, endVal) {
+    if (newStartVal === null || startVal === null || endVal === null) return null;
+    return newStartVal.clone().multiply(startVal).divide(endVal);
+  },
+
+  negateEuler: function(newStartVal, startVal, endVal) {
+    if (newStartVal === null || startVal === null || endVal === null) return null;
+    var newEndVal = newStartVal.clone();
+    newEndVal.x += startVal.x - endVal.x;
+    newEndVal.y += startVal.y - endVal.y;
+    newEndVal.z += startVal.z - endVal.z;
+    return newEndVal;
+  }
+};
+
 Object.assign(Transform.prototype, {
 
   constructor: Transform,
@@ -34,6 +58,9 @@ Object.assign(Transform.prototype, {
     var sv = this.startVal;
     var ev = this.endVal;
 
+    // if not invertible, return null
+    if (!this._invertible) return null;
+
     // if transformation did nothing, no inverse
     if (ev !== null && sv !== null && sv.equals(ev)) return null;
 
@@ -41,7 +68,7 @@ Object.assign(Transform.prototype, {
 
     // copy all properties
     Object.assign(inv, this);
-    inv.inverse = true;
+    inv._inverse = true;
 
     return inv;
   },
@@ -56,6 +83,10 @@ Object.assign(Transform.prototype, {
     return this;
   },
 
+  invertible: function(invertible) {
+    this._invertible = invertible;
+  },
+
   onApply: function(onApply) {
     this._onApply = onApply;
     return this;
@@ -68,7 +99,7 @@ Object.assign(Transform.prototype, {
 
   apply: function(endVal) {
     // if inverse, get new start value and compute the end value
-    if (this.inverse) {
+    if (this._inverse) {
       var invStartVal = this._getStartVal();
       var invEndVal = this._getInverseEndVal(invStartVal, this.startVal, this.endVal);
 
