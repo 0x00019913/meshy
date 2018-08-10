@@ -346,10 +346,10 @@ Stage.prototype.onTranslate = function() {
   if (!this.currentTransform) {
     var transform = new Transform(), _this = this;
 
-    transform.setApplyFn(function(pos) { _this.model.translate(pos); });
-    transform.setEndFn(function() { _this.model.translateEnd(); });
-    transform.setStartValFn(function() { return _this.model.getPosition(); });
-    transform.setInverseEndValFn(function(newStartVal, startVal, endVal) {
+    transform.onApply(function(pos) { _this.model.translate(pos); });
+    transform.onEnd(function() { _this.model.translateEnd(); });
+    transform.getStartVal(function() { return _this.model.getPosition(); });
+    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
       if (newStartVal === null || startVal === null || endVal === null) return null;
       return newStartVal.clone().add(startVal).sub(endVal);
     });
@@ -374,10 +374,10 @@ Stage.prototype.onRotate = function() {
   if (!this.currentTransform) {
     var transform = new Transform(), _this = this;
 
-    transform.setApplyFn(function(euler) { _this.model.rotate(euler); });
-    transform.setEndFn(function() { _this.model.rotateEnd(); });
-    transform.setStartValFn(function() { return _this.model.getRotation(); });
-    transform.setInverseEndValFn(function(newStartVal, startVal, endVal) {
+    transform.onApply(function(euler) { _this.model.rotate(euler); });
+    transform.onEnd(function() { _this.model.rotateEnd(); });
+    transform.getStartVal(function() { return _this.model.getRotation(); });
+    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
       if (newStartVal === null || startVal === null || endVal === null) return null;
       var newEndVal = newStartVal.clone();
       newEndVal.x += startVal.x - endVal.x;
@@ -402,20 +402,20 @@ Stage.prototype.onFinishRotate = function() {
   this.currentTransform = null;
   this.updateRotation();
 }
-Stage.prototype.onScale = function() {
+Stage.prototype.onScaleByFactor = function() {
   if (!this.currentTransform) {
     var transform = new Transform(), _this = this;
 
-    transform.setApplyFn(function(scale) {
+    transform.onApply(function(scale) {
       scale = scale.clone();
       if (scale.x <= 0) scale.x = 1;
       if (scale.y <= 0) scale.y = 1;
       if (scale.z <= 0) scale.z = 1;
       _this.model.scale(scale);
     });
-    transform.setEndFn(function() { _this.model.scaleEnd(); });
-    transform.setStartValFn(function() { return _this.model.getScale(); });
-    transform.setInverseEndValFn(function(newStartVal, startVal, endVal) {
+    transform.onEnd(function() { _this.model.scaleEnd(); });
+    transform.getStartVal(function() { return _this.model.getScale(); });
+    transform.getInverseEndVal(function(newStartVal, startVal, endVal) {
       if (newStartVal === null || startVal === null || endVal === null) return null;
       return newStartVal.clone().multiply(startVal).divide(endVal);
     });
@@ -424,7 +424,21 @@ Stage.prototype.onScale = function() {
 
   this.currentTransform.apply(this.scale);
 }
-Stage.prototype.onFinishScale = function() {
+Stage.prototype.onScaleToSize = function() {
+  var size = this.size;
+  var modelSize = this.model.getSize();
+  // axis that's being scaled
+  var axis = size.x !== modelSize.x ? "x" : size.y !== modelSize.y ? "y" : "z";
+  // factor by which to scale (on one axis or all) - note zero-size failsafe
+  var factor = size[axis] !== 0 ? size[axis] / modelSize[axis] : 1;
+  console.log(this.size, this.scale, this.model.getScale(), factor);
+
+  if (this.scaleToSizeOnAllAxes) this.scale.multiplyScalar(factor);
+  else this.scale[axis] *= factor;
+
+  this.onScaleByFactor();
+}
+Stage.prototype.onFinishScaleByFactor = function() {
   if (this.currentTransform) {
     this.currentTransform.end();
 
@@ -436,6 +450,8 @@ Stage.prototype.onFinishScale = function() {
   this.currentTransform = null;
   this.updateScale();
 }
+
+// position/rotation/scale GUI-updating functions
 Stage.prototype.updatePosition = function() {
   if (!this.model) return;
 
@@ -462,6 +478,17 @@ Stage.prototype.updateScale = function() {
   if (this.scaleXController) this.scaleXController.updateDisplay();
   if (this.scaleYController) this.scaleYController.updateDisplay();
   if (this.scaleZController) this.scaleZController.updateDisplay();
+
+  this.updateSize();
+}
+Stage.prototype.updateSize = function() {
+  if (!this.model) return;
+
+  this.size.copy(this.model.getSize());
+
+  if (this.scaleToSizeXController) this.scaleToSizeXController.updateDisplay();
+  if (this.scaleToSizeYController) this.scaleToSizeYController.updateDisplay();
+  if (this.scaleToSizeZController) this.scaleToSizeZController.updateDisplay();
 }
 
 Stage.prototype.buildEditFolder = function() {
@@ -475,10 +502,12 @@ Stage.prototype.buildEditFolder = function() {
   this.position = new THREE.Vector3();
   this.rotationDeg = new THREE.Euler();
   this.scale = new THREE.Vector3();
+  this.size = new THREE.Vector3();
 
   this.updatePosition();
   this.updateRotation();
   this.updateScale();
+  this.updateSize();
 
   this.editFolder.add(this, "autoCenter").name("Autocenter")
     .title("Center the mesh on x and y; snap to the floor on z.");
@@ -496,21 +525,6 @@ Stage.prototype.buildEditFolder = function() {
   this.positionZController = translateFolder.add(this.position, "z")
     .onChange(this.onTranslate.bind(this))
     .onFinishChange(this.onFinishTranslate.bind(this));
-  /*this.xTranslation = 0;
-  translateFolder.add(this, "xTranslation").name("x translation")
-    .title("Translation distance on x axis.");
-  translateFolder.add(this, "translateX").name("Translate on x")
-    .title("Translate the mesh on x.");
-  this.yTranslation = 0;
-  translateFolder.add(this, "yTranslation").name("y translation")
-    .title("Translation distance on y axis.");
-  translateFolder.add(this, "translateY").name("Translate on y")
-    .title("Translate the mesh on y.");
-  this.zTranslation = 0;
-  translateFolder.add(this, "zTranslation").name("z translation")
-    .title("Translation distance on z axis.");
-  translateFolder.add(this, "translateZ").name("Translate on z")
-    .title("Translate the mesh on z.");*/
 
   var rotateFolder = this.editFolder.addFolder("Rotate", "Rotate the mesh about a given axis.");
   this.rotationXController = rotateFolder.add(this.rotationDeg, "x", 0, 360)
@@ -522,51 +536,35 @@ Stage.prototype.buildEditFolder = function() {
   this.rotationZController = rotateFolder.add(this.rotationDeg, "z", 0, 360)
     .onChange(this.onRotate.bind(this))
     .onFinishChange(this.onFinishRotate.bind(this));
-  /*this.xRotation = 0;
-  rotateFolder.add(this, "xRotation").name("x rotation")
-    .title("Rotation about x axis in degrees.");
-  rotateFolder.add(this, "rotateX").name("Rotate about x")
-    .title("Rotate mesh about x axis.");
-  this.yRotation = 0;
-  rotateFolder.add(this, "yRotation").name("y rotation")
-    .title("Rotation about y axis in degrees.");
-  rotateFolder.add(this, "rotateY").name("Rotate about y")
-    .title("Rotate mesh about y axis.");
-  this.zRotation = 0;
-  rotateFolder.add(this, "zRotation").name("z rotation")
-    .title("Rotation about z axis in degrees.");
-  rotateFolder.add(this, "rotateZ").name("Rotate about z")
-    .title("Rotate mesh about z axis.");*/
 
   var scaleFolder = this.editFolder.addFolder("Scale", "Scale the mesh by given criteria.");
 
   var scaleByFactorFolder = scaleFolder.addFolder("Scale by Factor", "Scale the mesh by a given factor ");
   this.scaleXController = scaleByFactorFolder.add(this.scale, "x", 0)
-    .onChange(this.onScale.bind(this))
-    .onFinishChange(this.onFinishScale.bind(this));
+    .onChange(this.onScaleByFactor.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
   this.scaleYController = scaleByFactorFolder.add(this.scale, "y", 0)
-    .onChange(this.onScale.bind(this))
-    .onFinishChange(this.onFinishScale.bind(this));
+    .onChange(this.onScaleByFactor.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
   this.scaleZController = scaleByFactorFolder.add(this.scale, "z", 0)
-    .onChange(this.onScale.bind(this))
-    .onFinishChange(this.onFinishScale.bind(this));
-  /*this.scaleFactor = 1;
-  scaleByFactorFolder.add(this, "scaleFactor", 0).name("Scale factor")
-    .title("Scale mesh by this factor.");
-  scaleByFactorFolder.add(this, "scaleX").name("Scale on x")
-    .title("Scale mesh on x axis.");
-  scaleByFactorFolder.add(this, "scaleY").name("Scale on y")
-    .title("Scale mesh on y axis.");
-  scaleByFactorFolder.add(this, "scaleZ").name("Scale on z")
-    .title("Scale mesh on z axis.");
-  scaleByFactorFolder.add(this, "scaleAll").name("Scale on all axes")
-    .title("Scale mesh on all axes.");*/
+    .onChange(this.onScaleByFactor.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
 
   var scaleToSizeFolder = scaleFolder.addFolder("Scale to Size", "Scale the mesh to a given size.");
-  this.scaleOnAllAxes = true;
-  scaleToSizeFolder.add(this, "scaleOnAllAxes").name("Scale on all axes")
+
+  this.scaleToSizeOnAllAxes = true;
+  scaleToSizeFolder.add(this, "scaleToSizeOnAllAxes").name("Scale on all axes")
     .title("Scale the mesh by the same factor on all axes.");
-  this.newXSize = 1;
+  this.scaleToSizeXController = scaleToSizeFolder.add(this.size, "x", 0).name("x size")
+    .onChange(this.onScaleToSize.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+  this.scaleToSizeYController = scaleToSizeFolder.add(this.size, "y", 0).name("y size")
+    .onChange(this.onScaleToSize.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+  this.scaleToSizeZController = scaleToSizeFolder.add(this.size, "z", 0).name("z size")
+    .onChange(this.onScaleToSize.bind(this))
+    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+  /*this.newXSize = 1;
   scaleToSizeFolder.add(this, "newXSize", 0).name("New x size")
     .title("New size on x axis.");
   scaleToSizeFolder.add(this, "scaleToXSize").name("Scale to x size")
@@ -580,7 +578,7 @@ Stage.prototype.buildEditFolder = function() {
   scaleToSizeFolder.add(this, "newZSize", 0).name("New z size")
     .title("New size on z axis.");
   scaleToSizeFolder.add(this, "scaleToZSize").name("Scale to z size")
-    .title("Scale mesh to given size on z axis.");
+    .title("Scale mesh to given size on z axis.");*/
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");

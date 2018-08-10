@@ -18,12 +18,12 @@ function Transform() {
   this.inverse = false;
 
   // functions to get start value and inverse end value
-  this.startValFn = null;
-  this.inverseEndValFn = null;
+  this._getStartVal = null;
+  this._getInverseEndVal = null;
 
   // functions called on transform application and transform end
-  this.applyFn = null;
-  this.endFn = null;
+  this._onApply = null;
+  this._onEnd = null;
 }
 
 Object.assign(Transform.prototype, {
@@ -46,50 +46,50 @@ Object.assign(Transform.prototype, {
     return inv;
   },
 
-  setStartValFn: function(startValFn) {
-    this.startValFn = startValFn;
+  getStartVal: function(getStartVal) {
+    this._getStartVal = getStartVal;
     return this;
   },
 
-  setInverseEndValFn: function(inverseEndValFn) {
-    this.inverseEndValFn = inverseEndValFn;
+  getInverseEndVal: function(getInverseEndVal) {
+    this._getInverseEndVal = getInverseEndVal;
     return this;
   },
 
-  setApplyFn: function(applyFn) {
-    this.applyFn = applyFn;
+  onApply: function(onApply) {
+    this._onApply = onApply;
     return this;
   },
 
-  setEndFn: function(endFn) {
-    this.endFn = endFn;
+  onEnd: function(onEnd) {
+    this._onEnd = onEnd;
     return this;
   },
 
   apply: function(endVal) {
     // if inverse, get new start value and compute the end value
     if (this.inverse) {
-      var invStartVal = this.startValFn();
-      var invEndVal = this.inverseEndValFn(invStartVal, this.startVal, this.endVal);
+      var invStartVal = this._getStartVal();
+      var invEndVal = this._getInverseEndVal(invStartVal, this.startVal, this.endVal);
 
-      if (this.applyFn) this.applyFn(invEndVal);
+      if (this._onApply) this._onApply(invEndVal);
     }
     // else, handle start and end values normally
     else {
-      if (this.startVal === null) this.startVal = this.startValFn().clone();
+      if (this.startVal === null) this.startVal = this._getStartVal().clone();
 
       // if ending value is given, record it
       if (endVal !== undefined) this.endVal = endVal.clone();
 
       // apply with current end value
-      if (this.applyFn) this.applyFn(this.endVal);
+      if (this._onApply) this._onApply(this.endVal);
     }
 
     return this;
   },
 
   end: function() {
-    if (this.endFn) this.endFn();
+    if (this._onEnd) this._onEnd();
 
     return this;
   }

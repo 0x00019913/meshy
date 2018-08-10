@@ -164,10 +164,14 @@ Model.Materials = {
 Model.prototype.computeBounds = function() {
   this.resetBounds();
 
-  var faces = this.baseMesh.geometry.faces;
-  var vertices = this.baseMesh.geometry.vertices;
+  var mesh = this.baseMesh;
+  var faces = mesh.geometry.faces;
+  var vertices = mesh.geometry.vertices;
+  var matrix = mesh.matrix;
 
-  for (var f = 0; f < faces.length; f++) this.updateBoundsF(faces[f], vertices);
+  for (var f = 0; f < faces.length; f++) {
+    this.updateBoundsF(faces[f], vertices, matrix);
+  }
 }
 
 // All bounds to Infinity.
@@ -177,9 +181,12 @@ Model.prototype.resetBounds = function() {
 }
 
 // Update the bounds with a new face.
-Model.prototype.updateBoundsF = function(face, vertices) {
+Model.prototype.updateBoundsF = function(face, vertices, matrix) {
   var verts = faceGetVerts(face, vertices);
-  for (var i = 0; i < 3; i++) this.updateBoundsV(verts[i]);
+  for (var i = 0; i < 3; i++) {
+    var vert = matrix !== undefined ? verts[i].clone().applyMatrix4(matrix) : verts[i];
+    this.updateBoundsV(vert);
+  }
 }
 
 // Update bounds with a new vertex.
@@ -214,15 +221,15 @@ Model.prototype.boundCompareMax = function(max) {
 
 // Get a vector representing the coords of the center.
 Model.prototype.getCenter = function() {
-  return new THREE.Vector3(this.getCenterx(), this.getCentery(), this.getCenterz());
+  return this.max.clone().sub(this.min).divideScalar(2);
 }
 // Get individual coords of the center.
 Model.prototype.getCenterx = function() { return (this.max.x+this.min.x)/2; }
 Model.prototype.getCentery = function() { return (this.max.y+this.min.y)/2; }
 Model.prototype.getCenterz = function() { return (this.max.z+this.min.z)/2; }
-// Get a list representing the size of the model in every direction.
+// Get a vector representing the size of the model in every direction.
 Model.prototype.getSize = function() {
-  return new THREE.Vector3(this.getSizex(), this.getSizey(), this.getSizez());
+  return this.max.clone().sub(this.min);
 }
 // Get individual sizes of the model.
 Model.prototype.getSizex = function() { return (this.max.x-this.min.x); }
@@ -231,12 +238,12 @@ Model.prototype.getSizez = function() { return (this.max.z-this.min.z); }
 // Largest dimension of the model.
 Model.prototype.getMaxSize = function() {
   var size = this.getSize();
-  return Math.max(size.x, Math.max(size.y, size.z));
+  return Math.max(size.x, size.y, size.z);
 }
 // Smallest dimension of the model.
 Model.prototype.getMinSize = function() {
   var size = this.getSize();
-  return Math.min(size.x, Math.min(size.y, size.z));
+  return Math.min(size.x, size.y, size.z);
 }
 // Individual center of mass coords.
 Model.prototype.getCOMx = function() {
@@ -279,11 +286,12 @@ Model.prototype.getScale = function() {
 
 /* TRANSFORMATIONS */
 
-Model.prototype.translate = function(pos) {
-  var diff = pos.clone().sub(this.baseMesh.position);
+Model.prototype.translate = function(position) {
+  var diff = position.clone().sub(this.baseMesh.position);
 
-  this.baseMesh.position.copy(pos);
-  if (this.supportMesh) this.supportMesh.position.copy(pos);
+  this.baseMesh.position.copy(position);
+  if (this.supportMesh) this.supportMesh.position.copy(position);
+  if (this.wireframeMesh) this.wireframeMesh.position.copy(position);
   this.baseMesh.updateMatrix();
 
   this.min.add(diff);
@@ -296,39 +304,52 @@ Model.prototype.translate = function(pos) {
   }
 }
 Model.prototype.translateEnd = function() {
-  return;
-  var mesh = this.baseMesh;
-
-  mesh.geometry.applyMatrix(mesh.matrix);
-  mesh.position.set(0, 0, 0);
-  mesh.updateMatrix();
+  // no-op
 }
 
 Model.prototype.rotate = function(euler) {
   this.baseMesh.rotation.copy(euler);
+  if (this.wireframeMesh) this.wireframeMesh.rotation.copy(euler);
   this.baseMesh.updateMatrix();
 }
 Model.prototype.rotateEnd = function() {
-  return;
-  var mesh = this.baseMesh;
-
-  mesh.geometry.applyMatrix(mesh.matrix);
-  mesh.rotation.set(0, 0, 0);
-  mesh.updateMatrix();
+  this.computeBounds();
 }
 
 Model.prototype.scale = function(scale) {
   this.baseMesh.scale.copy(scale);
+  if (this.wireframeMesh) this.wireframeMesh.scale.copy(scale);
   this.baseMesh.updateMatrix();
 }
 Model.prototype.scaleEnd = function() {
-  return;
-  var mesh = this.baseMesh;
-
-  mesh.geometry.applyMatrix(mesh.matrix);
-  mesh.scale.set(1, 1, 1);
-  mesh.updateMatrix();
+  this.computeBounds();
 }
+
+Model.prototype.floor = function(axis) {
+  if (axis === undefined) axis = "z";
+
+  var translation = this.baseMesh.position.clone();
+  translation[axis] = -this.min[axis];
+  this.translate(translation);
+}
+
+Model.prototype.center = function(v) {
+  if (v === undefined) center = new THREE.Vector3();
+
+  var translation = v.clone().sub(this.getCenter());
+  this.translate(translation);
+}
+
+// floor on one axis after centering on the other two
+Model.prototype.autoCenter = function(v, axis) {
+  if (v === undefined) center = new THREE.Vector3();
+  if (axis === undefined) axis = "z";
+
+  var translation = v.clone().sub(this.getCenter());
+  translation[axis] = -this.min[axis];
+  this.translate(translation);
+}
+
 //// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
 // Translate the model to a new position.
 /*Model.prototype.translate = function(target) {
@@ -765,19 +786,23 @@ Model.prototype.faceIntersection = function(face, axis, pos) {
 
 // Toggle wireframe.
 Model.prototype.toggleWireframe = function() {
+  this.wireframe = !this.wireframe;
+  this.setWireframeVisibility(this.wireframe);
+}
+Model.prototype.setWireframeVisibility = function(visible) {
   if (this.wireframeMesh === null) this.makeWireframeMesh();
 
-  this.wireframe = !this.wireframe;
-  this.printout.log("Wireframe is " + (this.wireframe ? "on" : "off") + ".");
+  this.printout.log("Wireframe is " + (visible ? "on" : "off") + ".");
 
-  this.wireframeMesh.visible = this.wireframe;
-  //this.baseMesh.material.wireframe = this.wireframe;
+  this.wireframeMesh.visible = visible;
 }
 
 Model.prototype.makeWireframeMesh = function() {
   var mesh = this.baseMesh.clone();
+
   mesh.material = Model.Materials.wireframe;
   mesh.visible = false;
+  mesh.name = "wireframe";
   this.scene.add(mesh);
 
   this.wireframeMesh = mesh;
@@ -2232,11 +2257,15 @@ Model.prototype.removeSupports = function() {
 // Turn on slice mode: set mode to "slice", passing various params. Slice mode
 // defaults to preview.
 Model.prototype.activateSliceMode = function(params) {
+  this.setWireframeVisibility(false);
+
   this.setMode("slice", params);
 }
 
 // Turn off slice mode: set mode to "base".
 Model.prototype.deactivateSliceMode = function() {
+  if (this.slicer === null) return;
+
   this.setMode("base");
   this.slicer = null;
   this.sliceFullMesh = null;
