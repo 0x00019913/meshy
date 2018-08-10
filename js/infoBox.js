@@ -240,7 +240,7 @@ InfoBox.prototype.styleBox = function() {
   this.box.style.position = "absolute";
   this.box.style.left = "0";
   this.box.style.top = "0";
-  this.box.style.width = "245px";
+  this.box.style.width = "255px";
   this.box.style.marginLeft = "15px";
   this.box.style.backgroundColor = "#000";
 
