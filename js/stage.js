@@ -167,6 +167,8 @@ Stage.prototype.generateUI = function() {
     .onChange(this.makeBuildVolume.bind(this));
 
   this.snapTransformationsToFloor = true;
+  // handle the state of the transformation snap checkbox
+  this.handleSnapTransformationToFloorState();
 
   this.editFolder = this.gui.addFolder("Edit",
     "Mesh edit functions: translation, scaling, rotation, normals.");
@@ -344,6 +346,7 @@ Stage.prototype.makeTranslateTransform = function(invertible) {
   transform.onEnd(function() { _this.model.translateEnd(); });
   transform.getStartVal(function() { return _this.model.getPosition(); });
   transform.getInverseEndVal(Transform.InversionFunctions.negateVector3);
+  transform.invertible(invertible);
 
   return transform;
 }
@@ -355,6 +358,7 @@ Stage.prototype.makeRotateTransform = function(invertible) {
   transform.onEnd(function() { _this.model.rotateEnd(); });
   transform.getStartVal(function() { return _this.model.getRotation(); });
   transform.getInverseEndVal(Transform.InversionFunctions.negateEuler);
+  transform.invertible(invertible);
 
   return transform;
 }
@@ -373,6 +377,7 @@ Stage.prototype.makeScaleTransform = function(invertible) {
   transform.onEnd(function() { _this.model.scaleEnd(); });
   transform.getStartVal(function() { return _this.model.getScale(); });
   transform.getInverseEndVal(Transform.InversionFunctions.reciprocateVector3);
+  transform.invertible(invertible);
 
   return transform;
 }
@@ -384,20 +389,6 @@ Stage.prototype.pushEdit = function(transform, onTransform) {
   if (inv) this.editStack.push(transform, inv, onTransform);
 }
 
-Stage.prototype.autoCenter = function() {
-  var newCenter = this.calculateBuildPlateCenter();
-  newCenter.z += this.model.getSize().z / 2;
-  var translation = newCenter.sub(this.model.getCenter());
-
-  var transform = this.makeTranslateTransform();
-
-  transform.apply(this.position.add(translation));
-  transform.end();
-
-  this.pushEdit(transform, this.updatePosition.bind(this));
-  this.updatePosition();
-}
-
 // called when a translation is in progress
 Stage.prototype.onTranslate = function() {
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
@@ -407,6 +398,8 @@ Stage.prototype.onTranslate = function() {
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
   if (this.currentTransform) this.currentTransform.end();
+
+  if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updatePosition.bind(this));
 
@@ -423,6 +416,8 @@ Stage.prototype.onRotate = function() {
 // called on rotation end
 Stage.prototype.onFinishRotate = function() {
   if (this.currentTransform) this.currentTransform.end();
+
+  if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updateRotation.bind(this));
 
@@ -461,10 +456,52 @@ Stage.prototype.onScaleToSize = function() {
 Stage.prototype.onFinishScaleByFactor = function() {
   if (this.currentTransform) this.currentTransform.end();
 
+  if (this.snapTransformationsToFloor) this.floor(false);
+
   this.pushEdit(this.currentTransform, this.updateScale.bind(this));
 
   this.currentTransform = null;
   this.updateScale();
+}
+
+// instantaneous transformations - autocenter and floor
+
+Stage.prototype.autoCenter = function(invertible) {
+  var newCenter = this.calculateBuildPlateCenter();
+  newCenter.z += this.model.getSize().z / 2;
+  var translation = newCenter.sub(this.model.getCenter());
+
+  var transform = this.makeTranslateTransform(invertible);
+
+  transform.apply(this.position.add(translation));
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
+Stage.prototype.floor = function(invertible) {
+  if (!this.model) return;
+
+  var transform = this.makeTranslateTransform(invertible);
+
+  this.position.z -= this.model.getMin().z;
+  transform.apply(this.position);
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
+// invoked when toggling the checkbox for snapping transformations to floor
+Stage.prototype.handleSnapTransformationToFloorState = function() {
+  var snap = this.snapTransformationsToFloor;
+
+  // floor, but don't register the action as undoable
+  this.floor(false);
+
+  if (snap) this.disableController(this.positionZController);
+  else this.enableController(this.positionZController);
 }
 
 // position/rotation/scale GUI-updating functions
@@ -511,7 +548,8 @@ Stage.prototype.buildEditFolder = function() {
   this.clearFolder(this.editFolder);
 
   this.editFolder.add(this, "snapTransformationsToFloor").name("Snap to floor")
-    .title("Snap all transformations to the build volume floor.");
+    .title("Snap all transformations to the build volume floor.")
+    .onChange(this.handleSnapTransformationToFloorState.bind(this));
 
   if (!this.model) {
     //this.deleteEditControllers();
@@ -544,6 +582,8 @@ Stage.prototype.buildEditFolder = function() {
   this.positionZController = translateFolder.add(this.position, "z")
     .onChange(this.onTranslate.bind(this))
     .onFinishChange(this.onFinishTranslate.bind(this));
+  // if snapping transformations to floor, might need to disable a controller
+  this.handleSnapTransformationToFloorState();
 
   var rotateFolder = this.editFolder.addFolder("Rotate", "Rotate the mesh about a given axis.");
   this.rotationXController = rotateFolder.add(this.rotationDeg, "x", 0, 360)
@@ -583,6 +623,8 @@ Stage.prototype.buildEditFolder = function() {
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
+
+  return;
 
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
     "Set up a circle measurement around the inner circumference of a ring mesh, then scale so that the mesh will have the correct measurement in mm.");
@@ -635,16 +677,6 @@ Stage.prototype.scaleToMeasurement = function() {
     }
   }
 }
-Stage.prototype.mirrorX = function() { this.transform("mirror","x",null); }
-Stage.prototype.mirrorY = function() { this.transform("mirror","y",null); }
-Stage.prototype.mirrorZ = function() { this.transform("mirror","z",null); }
-Stage.prototype.floorX = function() { this.transform("floor","x",null); }
-Stage.prototype.floorY = function() { this.transform("floor","y",null); }
-Stage.prototype.floorZ = function() { this.transform("floor","z",null); }
-Stage.prototype.centerAll = function() { this.transform("center","all",null); }
-Stage.prototype.centerX = function() { this.transform("center","x",null); }
-Stage.prototype.centerY = function() { this.transform("center","y",null); }
-Stage.prototype.centerZ = function() { this.transform("center","z",null); }
 Stage.prototype.flipNormals = function() { if (this.model) this.model.flipNormals(); }
 Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
@@ -663,7 +695,7 @@ Stage.prototype.startMeasurement = function(type, param) {
 }
 Stage.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
-  this.clearFolder(this.scaleToMeasurementFolder);
+  if (this.scaleToMeasurementFolder) this.clearFolder(this.scaleToMeasurementFolder);
 }
 Stage.prototype.viewThickness = function() {
   if (this.model) this.model.viewThickness(this.thicknessThreshold);
@@ -1008,6 +1040,18 @@ Stage.prototype.clearFolder = function(folder) {
     folder.removeFolder(folder.__folders[folderName]);
   }
 }
+Stage.prototype.disableController = function(controller) {
+  if (!controller) return;
+
+  controller.domElement.style.pointerEvents = "none";
+  controller.domElement.style.opacity = 0.5;
+}
+Stage.prototype.enableController = function(controller) {
+  if (!controller) return;
+
+  controller.domElement.style.pointerEvents = "";
+  controller.domElement.style.opacity = "";
+}
 Stage.prototype.scaleToRingSize = function() {
   if (this.model &&
   this.model.measurement.active &&
@@ -1307,6 +1351,11 @@ Stage.prototype.handleFile = function(file) {
   this.importingMeshName = file.name;
   this.importEnabled = false;
 
+  var loader = new FileLoader();
+  loader.load(file, this.createModel.bind(this));
+
+  return;
+
   var model = new Model(
     this.scene,
     this.camera,
@@ -1326,6 +1375,36 @@ Stage.prototype.handleFile = function(file) {
   model.import(file, importParams, this.displayMesh.bind(this));
 };
 
+Stage.prototype.createModel = function(geometry) {
+  this.model = new Model(
+    geometry,
+    this.scene,
+    this.camera,
+    this.container,
+    this.printout,
+    this.infoBox,
+    this.progressBarContainer
+  );
+
+  this.importEnabled = true;
+  this.fileInput.value = "";
+  this.importingMeshName = "";
+
+  this.buildEditFolder();
+
+  this.filename = this.model.filename;
+  this.gcodeFilename = this.filename;
+  this.gcodeFilenameController.updateDisplay();
+
+  if (this.autocenterOnImport) this.autoCenter();
+  else if (this.snapTransformationsToFloor) this.floor();
+
+  this.cameraToModel();
+
+  this.setMeshMaterial();
+  this.updateUI();
+}
+
 // Callback passed to model.import; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success, model) {
   this.importEnabled = true;
@@ -1335,7 +1414,6 @@ Stage.prototype.displayMesh = function(success, model) {
     // a model with the same name twice in a row
     this.fileInput.value = "";
 
-    this.importEnabled = true;
     this.importingMeshName = "";
 
     this.model = null;

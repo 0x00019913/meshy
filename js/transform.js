@@ -84,7 +84,8 @@ Object.assign(Transform.prototype, {
   },
 
   invertible: function(invertible) {
-    this._invertible = invertible;
+    if (invertible !== undefined) this._invertible = invertible;
+    return this;
   },
 
   onApply: function(onApply) {

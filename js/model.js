@@ -15,7 +15,13 @@
    instance of Printout, or console by default), and an output for
    measurements.
 */
-function Model(scene, camera, container, printout, infoOutput, progressBarContainer) {
+function Model(geometry, scene, camera, container, printout, infoOutput, progressBarContainer) {
+  this.scene = scene;
+  this.camera = camera;
+  this.container = container;
+  this.infoOutput = infoOutput;
+  this.printout = printout ? printout : console;
+
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
@@ -46,8 +52,13 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // base mesh
   this.baseMesh = null;
-  this.makeBaseMesh();
-  this.matrix = this.baseMesh.matrix.clone();
+  geometry.mergeVertices();
+  this.makeBaseMesh(geometry);
+  this.resetFaceColors();
+  this.resetGeometryColors();
+  this.computeBounds();
+  this.shiftBaseGeometryToOrigin();
+  this.setMode("base");
 
   // patch mesh
   this.patchMesh = null;
@@ -65,13 +76,9 @@ function Model(scene, camera, container, printout, infoOutput, progressBarContai
 
   // will contain the bounds of distinct components in the geometry (main mesh
   // geometry, patch, supports)
-  this.geometryComponents = {};
+  // todo: remove all references
+  //this.geometryComponents = {};
 
-  this.scene = scene;
-  this.camera = camera;
-  this.container = container;
-  this.infoOutput = infoOutput;
-  this.printout = printout ? printout : console;
   // three orthogonal planes that intersect at the center of the mesh
   this.targetPlanes = null;
   this.showCenterOfMass = false;
@@ -203,6 +210,14 @@ Model.prototype.getBounds = function() {
   };
 }
 
+Model.prototype.getMin = function() {
+  return this.min;
+}
+
+Model.prototype.getMax = function() {
+  return this.max;
+}
+
 Model.prototype.boundCompareMin = function(min) {
   var sx = Math.sign(this.min.x - min.x);
   var sy = Math.sign(this.min.y - min.y);
@@ -221,7 +236,7 @@ Model.prototype.boundCompareMax = function(max) {
 
 // Get a vector representing the coords of the center.
 Model.prototype.getCenter = function() {
-  return this.max.clone().sub(this.min).divideScalar(2);
+  return this.max.clone().add(this.min).divideScalar(2);
 }
 // Get individual coords of the center.
 Model.prototype.getCenterx = function() { return (this.max.x+this.min.x)/2; }
@@ -285,6 +300,26 @@ Model.prototype.getScale = function() {
 }
 
 /* TRANSFORMATIONS */
+
+// want rotations and scalings to occur with respect to the geometry center
+Model.prototype.shiftBaseGeometryToOrigin = function() {
+  var mesh = this.baseMesh;
+  var center = this.getCenter();
+  var shift = mesh.position.clone().sub(center);
+
+  // shift geometry center to origin
+  mesh.position.copy(center.negate());
+  mesh.updateMatrix();
+  mesh.geometry.applyMatrix(mesh.matrix);
+
+  // reset mesh position to 0
+  mesh.position.set(0, 0, 0);
+  mesh.updateMatrix();
+
+  // shift bounds appropriately
+  this.min.add(shift);
+  this.max.add(shift);
+}
 
 Model.prototype.translate = function(position) {
   var diff = position.clone().sub(this.baseMesh.position);
@@ -948,9 +983,9 @@ Model.prototype.removeGeometryComponent = function(name) {
 
 // Create the base mesh (as opposed to another display mode).
 // todo: remove
-Model.prototype.makeBaseMesh = function() {
+Model.prototype.makeBaseMesh = function(geo) {
   if (!this.baseMesh) {
-    var geo = new THREE.Geometry();
+    //var geo = new THREE.Geometry();
     this.baseMesh = new THREE.Mesh(geo, Model.Materials.base);
     this.baseMesh.name = "base";
     this.baseMesh.frustumCulled = false;
@@ -1240,10 +1275,25 @@ Model.prototype.viewThickness = function(threshold) {
   }
 }
 
-// reset the face color to white
+// clear any coloration that occurred as part of thickness visualization
 Model.prototype.clearThicknessView = function() {
-  for (var i=0; i<this.faces.length; i++) {
-    this.faces[i].color.setRGB(1.0, 1.0, 1.0);
+  this.resetFaceColors();
+}
+
+// reset face colors to white
+Model.prototype.resetFaceColors = function() {
+  var faces = this.baseMesh.geometry.faces;
+  for (var i=0; i<faces.length; i++) {
+    faces[i].color.setRGB(1.0, 1.0, 1.0);
+  }
+
+  //this.baseMesh.geometry.colorsNeedUpdate = true;
+}
+
+Model.prototype.resetGeometryColors = function() {
+  var colors = this.baseMesh.geometry.colors;
+  for (var i=0; i<colors.length; i++) {
+    colors[i].setRGB(1.0, 1.0, 1.0);
   }
 
   this.baseMesh.geometry.colorsNeedUpdate = true;
@@ -2333,9 +2383,9 @@ Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
   var blob;
   var fname;
-  var count = this.faces.length;
-
   var geo = this.baseMesh.geometry;
+
+  var count = geo.faces.length;
   var vertices = geo.vertices;
   var faces = geo.faces;
 
@@ -2469,8 +2519,11 @@ Model.prototype.export = function(format, name) {
   this.printout.log("Saved file '" + fname + "' as " + format.toUpperCase());
 }
 
+// TODO: either split importers into separate files and replace THREE loaders
+// with these, or just deprecate
+
 // Import a model from an STL or OBJ file (any capitalization).
-Model.prototype.import = function(file, params, callback) {
+/*Model.prototype.import = function(file, params, callback) {
   params = params || {};
   var unitsFrom = params.hasOwnProperty("unitsFrom") ? params.unitsFrom : Units.mm;
   var unitsTo = params.hasOwnProperty("unitsTo") ? params.unitsTo : Units.mm;
@@ -2488,11 +2541,6 @@ Model.prototype.import = function(file, params, callback) {
     try {
       parseResult(fr.result);
       success = true;
-
-      /*// record where the main geometry begins
-      var vcount = _this.baseMesh.geometry.vertices.length;
-      var fcount = _this.baseMesh.geometry.faces.length;
-      _this.addGeometryComponent("model", 0, vcount, 0, fcount);*/
 
       // set mode to base mesh, which creates the mesh and puts it in the scene
       _this.setMode("base");
@@ -2798,15 +2846,10 @@ Model.prototype.import = function(file, params, callback) {
       }
     }
 
-    //todo: store geometry
     _this.baseMesh.geometry = geo;
     _this.computeBounds();
-
-    var t = performance.now();
-    var octree = new Octree(_this.baseMesh);
-    console.log(performance.now() - t);
   }
-}
+}*/
 
 // Turn off the measurement and delete the THREE.Mesh because these
 // wouldn't be automatically disposed of when the Model instance
