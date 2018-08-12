@@ -58,6 +58,7 @@ Stage = function() {
 
   this.isLittleEndian = true;
   this.vertexPrecision = 5;
+  this.displayPrecision = 4;
 
   // webgl viewport
   this.container = document.getElementById("container");
@@ -117,11 +118,16 @@ Stage.prototype.generateUI = function() {
 
   settingsFolder.add(this, "isLittleEndian").name("Little endian")
     .title("Endianness toggle for imports and exports.");
-  settingsFolder.add(this, "vertexPrecision").name("Vertex precision").onChange(this.setVertexPrecision.bind(this))
+  settingsFolder.add(this, "vertexPrecision").name("Vertex precision")
+    .onChange(this.setVertexPrecision.bind(this))
     .title("Precision p; 10^p is used as a conversion factor between floating-point and fixed-point coordinates.");
+
 
   var displayFolder = this.gui.addFolder("Display", "Mesh and build volume display settings.");
 
+  displayFolder.add(this, "displayPrecision", 0, 7).step(1).name("Display precision")
+    .onChange(this.setDisplayPrecision.bind(this))
+    .title("Maximal number of decimal places for displaying floating-point values.")
   displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget")
     .title("Toggle axis widget visibility.");
   displayFolder.add(this, "toggleWireframe").name("Toggle wireframe")
@@ -309,6 +315,11 @@ Stage.prototype.updateUI = function() {
 Stage.prototype.setVertexPrecision = function() {
   if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
+Stage.prototype.setDisplayPrecision = function() {
+  if (this.infoBox) this.infoBox.decimals = this.displayPrecision;
+
+  this.setFolderDisplayPrecision(this.editFolder);
+}
 
 // Functions corresponding to buttons in the dat.gui.
 Stage.prototype.exportOBJ = function() { this.export("obj"); }
@@ -444,6 +455,7 @@ Stage.prototype.onFinishRotate = function() {
 
   this.currentTransform = null;
   this.updateRotation();
+  this.updatePosition();
   this.updateSize();
 }
 
@@ -484,6 +496,7 @@ Stage.prototype.onFinishScaleByFactor = function() {
   this.pushEdit(this.currentTransform, this.updateScale.bind(this));
 
   this.currentTransform = null;
+  this.updatePosition();
   this.updateScale();
 }
 
@@ -598,13 +611,16 @@ Stage.prototype.buildEditFolder = function() {
   var translateFolder = this.editFolder.addFolder("Translate", "Translate the mesh on a given axis.");
   this.positionXController = translateFolder.add(this.position, "x")
     .onChange(this.onTranslate.bind(this))
-    .onFinishChange(this.onFinishTranslate.bind(this));
+    .onFinishChange(this.onFinishTranslate.bind(this))
+    .precision(4);
   this.positionYController = translateFolder.add(this.position, "y")
     .onChange(this.onTranslate.bind(this))
-    .onFinishChange(this.onFinishTranslate.bind(this));
+    .onFinishChange(this.onFinishTranslate.bind(this))
+    .precision(4);
   this.positionZController = translateFolder.add(this.position, "z")
     .onChange(this.onTranslate.bind(this))
-    .onFinishChange(this.onFinishTranslate.bind(this));
+    .onFinishChange(this.onFinishTranslate.bind(this))
+    .precision(4);
   // if snapping transformations to floor, might need to disable a controller
   this.handleSnapTransformationToFloorState();
 
@@ -1074,6 +1090,20 @@ Stage.prototype.enableController = function(controller) {
 
   controller.domElement.style.pointerEvents = "";
   controller.domElement.style.opacity = "";
+}
+Stage.prototype.setFolderDisplayPrecision = function(folder) {
+  for (var ci = 0; ci < folder.__controllers.length; ci++) {
+    var controller = folder.__controllers[ci];
+    // if number controller, set precision
+    if (isNumber(controller.initialValue)) {
+      controller.precision(this.displayPrecision);
+      controller.updateDisplay();
+    }
+  }
+
+  for (var fkey in folder.__folders) {
+    this.setFolderDisplayPrecision(folder.__folders[fkey]);
+  }
 }
 Stage.prototype.scaleToRingSize = function() {
   if (this.model &&

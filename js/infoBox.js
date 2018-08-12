@@ -220,7 +220,7 @@ InfoBox.prototype.update = function() {
 // Format numerical quantities; if int, return as-is.
 InfoBox.prototype.formatNumber = function(num) {
   if ((num%1)===0) return num;
-  else return num.toFixed(this.decimals);
+  else return +num.toFixed(this.decimals);
 }
 
 // Get the value of a prop as mapped through .add or .addMultiple.
