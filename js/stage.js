@@ -18,7 +18,7 @@ Stage = function() {
   this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
   this.buildVolumeMin = null;
   this.buildVolumeMax = null;
-  this.centerOriginOnBuildPlate = true; // todo: back to false
+  this.centerOriginOnBuildPlate = false; // todo: back to false
   this.buildVolumeMaterials = {
     linePrimary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
@@ -336,21 +336,6 @@ Stage.prototype.redo = function() {
 
 // functions for handling model transformations
 
-// possibly unnecessary
-Stage.prototype.deleteEditControllers = function() {
-  this.positionXController = null;
-  this.positionYController = null;
-  this.positionZController = null;
-
-  this.rotateXController = null;
-  this.rotateYController = null;
-  this.rotateZController = null;
-
-  this.scaleXController = null;
-  this.scaleYController = null;
-  this.scaleZController = null;
-}
-
 Stage.prototype.makeTranslateTransform = function(invertible) {
   if (this.dbg) console.log("make translate transform");
   var transform = new Transform("translate", this.model.getPosition()), _this = this;
@@ -387,7 +372,10 @@ Stage.prototype.makeRotateTransform = function(invertible) {
   var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
   transform.onApply = function(euler) { _this.model.rotate(euler); };
-  transform.onEnd = function() { _this.model.rotateEnd(); };
+  transform.onEnd = function() {
+    _this.model.rotateEnd();
+    if (_this.snapTransformationsToFloor) _this.floor(false);
+  };
   transform.invertible = invertible;
 
   return transform;
@@ -405,7 +393,10 @@ Stage.prototype.makeScaleTransform = function(invertible) {
     if (scale.z <= 0) scale.z = 1;
     _this.model.scale(scale);
   };
-  transform.onEnd = function() { _this.model.scaleEnd(); };
+  transform.onEnd = function() {
+    _this.model.scaleEnd();
+    if (_this.snapTransformationsToFloor) _this.floor(false);
+  };
   transform.invertible = invertible;
 
   return transform;
@@ -447,7 +438,7 @@ Stage.prototype.onFinishRotate = function() {
   if (this.dbg) console.log("finish rotate");
   if (this.currentTransform) this.currentTransform.end();
 
-  if (this.snapTransformationsToFloor) this.floor(false);
+  //if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updateRotation.bind(this));
 
@@ -488,7 +479,7 @@ Stage.prototype.onFinishScaleByFactor = function() {
   if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
 
-  if (this.snapTransformationsToFloor) this.floor(false);
+  //if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updateScale.bind(this));
 
@@ -585,7 +576,6 @@ Stage.prototype.buildEditFolder = function() {
     .onChange(this.handleSnapTransformationToFloorState.bind(this));
 
   if (!this.model) {
-    //this.deleteEditControllers();
     return;
   }
 
