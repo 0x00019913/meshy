@@ -10,6 +10,8 @@
 
 // Constructor.
 Stage = function() {
+  this.dbg = false;
+
   this.units = Units.mm;
 
   // params
@@ -43,7 +45,7 @@ Stage = function() {
   this.buildVolumeVisible = true;
 
   this.importUnits = Units.mm;
-  this.autocenterOnImport = false; // todo: back to true
+  this.autocenterOnImport = true; // todo: back to true
 
   // geometry
   this.model = null;
@@ -315,11 +317,21 @@ Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Stage.prototype.undo = function() {
   this.deactivateSliceMode();
-  this.editStack.undo();
+  try {
+    this.editStack.undo();
+  }
+  catch (e) {
+    this.printout.warn(e);
+  }
 }
 Stage.prototype.redo = function() {
   this.deactivateSliceMode();
-  this.editStack.redo();
+  try {
+    this.editStack.redo();
+  }
+  catch (e) {
+    this.printout.warn(e);
+  }
 }
 
 // functions for handling model transformations
@@ -340,66 +352,82 @@ Stage.prototype.deleteEditControllers = function() {
 }
 
 Stage.prototype.makeTranslateTransform = function(invertible) {
-  var transform = new Transform(), _this = this;
+  if (this.dbg) console.log("make translate transform");
+  var transform = new Transform("translate", this.model.getPosition()), _this = this;
 
-  transform.onApply(function(pos) { _this.model.translate(pos); });
-  transform.onEnd(function() { _this.model.translateEnd(); });
-  transform.getStartVal(function() { return _this.model.getPosition(); });
-  transform.getInverseEndVal(Transform.InversionFunctions.negateVector3);
-  transform.invertible(invertible);
+  transform.onApply = function(pos) { _this.model.translate(pos); };
+  transform.onEnd = function() {
+    if (_this.snapTransformationsToFloor) {
+      // update position and floor the model
+      _this.position.copy(_this.model.getPosition());
+      _this.position.z -= _this.model.getMin().z;
+      // apply transform again
+      this.onApply(_this.position);
+    }
+    _this.model.translateEnd();
+  };
+  transform.invertible = invertible;
+
+  return transform;
+}
+
+Stage.prototype.makeFloorTransform = function(invertible) {
+  if (this.dbg) console.log("make floor transform");
+  var transform = new Transform("floor", this.model.getPosition()), _this = this;
+
+  transform.onApply = function(pos) { _this.model.translate(pos); };
+  transform.onEnd = function() { _this.model.translateEnd(); };
+  transform.invertible = invertible;
 
   return transform;
 }
 
 Stage.prototype.makeRotateTransform = function(invertible) {
-  var transform = new Transform(), _this = this;
+  if (this.dbg) console.log("make rotate transform");
+  var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
-  transform.onApply(function(euler) { _this.model.rotate(euler); });
-  transform.onEnd(function() { _this.model.rotateEnd(); });
-  transform.getStartVal(function() { return _this.model.getRotation(); });
-  transform.getInverseEndVal(Transform.InversionFunctions.negateEuler);
-  transform.invertible(invertible);
+  transform.onApply = function(euler) { _this.model.rotate(euler); };
+  transform.onEnd = function() { _this.model.rotateEnd(); };
+  transform.invertible = invertible;
 
   return transform;
 }
 
 Stage.prototype.makeScaleTransform = function(invertible) {
-  var transform = new Transform(), _this = this;
+  if (this.dbg) console.log("make scale transform");
+  var transform = new Transform("scale", this.model.getScale()), _this = this;
 
-  transform.onApply(function(scale) {
+  transform.onApply = function(scale) {
     scale = scale.clone();
     // never scale to 0
     if (scale.x <= 0) scale.x = 1;
     if (scale.y <= 0) scale.y = 1;
     if (scale.z <= 0) scale.z = 1;
     _this.model.scale(scale);
-  });
-  transform.onEnd(function() { _this.model.scaleEnd(); });
-  transform.getStartVal(function() { return _this.model.getScale(); });
-  transform.getInverseEndVal(Transform.InversionFunctions.reciprocateVector3);
-  transform.invertible(invertible);
+  };
+  transform.onEnd = function() { _this.model.scaleEnd(); };
+  transform.invertible = invertible;
 
   return transform;
 }
 
 Stage.prototype.pushEdit = function(transform, onTransform) {
-  if (!transform) return;
-
-  var inv = transform.getInverse();
-  if (inv) this.editStack.push(transform, inv, onTransform);
+  if (transform && transform.invertible && !transform.noop()) {
+    this.editStack.push(transform, onTransform);
+  }
 }
 
 // called when a translation is in progress
 Stage.prototype.onTranslate = function() {
+  if (this.dbg) console.log("translate");
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
 }
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
+  if (this.dbg) console.log("finish translate");
   if (this.currentTransform) this.currentTransform.end();
-
-  if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updatePosition.bind(this));
 
@@ -409,12 +437,14 @@ Stage.prototype.onFinishTranslate = function() {
 
 // called when a rotation is in progress
 Stage.prototype.onRotate = function() {
+  if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
   this.currentTransform.apply(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
 }
 // called on rotation end
 Stage.prototype.onFinishRotate = function() {
+  if (this.dbg) console.log("finish rotate");
   if (this.currentTransform) this.currentTransform.end();
 
   if (this.snapTransformationsToFloor) this.floor(false);
@@ -428,6 +458,7 @@ Stage.prototype.onFinishRotate = function() {
 
 // called when scale change is in progress
 Stage.prototype.onScaleByFactor = function() {
+  if (this.dbg) console.log("scale");
   if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
   this.currentTransform.apply(this.scale);
@@ -454,6 +485,7 @@ Stage.prototype.onScaleToSize = function() {
 }
 // called on scale change end
 Stage.prototype.onFinishScaleByFactor = function() {
+  if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
 
   if (this.snapTransformationsToFloor) this.floor(false);
@@ -483,9 +515,10 @@ Stage.prototype.autoCenter = function(invertible) {
 Stage.prototype.floor = function(invertible) {
   if (!this.model) return;
 
-  var transform = this.makeTranslateTransform(invertible);
+  var transform = this.makeFloorTransform(invertible);
 
   this.position.z -= this.model.getMin().z;
+
   transform.apply(this.position);
   transform.end();
 
@@ -498,7 +531,7 @@ Stage.prototype.handleSnapTransformationToFloorState = function() {
   var snap = this.snapTransformationsToFloor;
 
   // floor, but don't register the action as undoable
-  this.floor(false);
+  if (snap) this.floor(false);
 
   if (snap) this.disableController(this.positionZController);
   else this.enableController(this.positionZController);
@@ -1396,8 +1429,8 @@ Stage.prototype.createModel = function(geometry) {
   this.gcodeFilename = this.filename;
   this.gcodeFilenameController.updateDisplay();
 
-  if (this.autocenterOnImport) this.autoCenter();
-  else if (this.snapTransformationsToFloor) this.floor();
+  if (this.autocenterOnImport) this.autoCenter(false);
+  else if (this.snapTransformationsToFloor) this.floor(false);
 
   this.cameraToModel();
 
