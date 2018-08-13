@@ -36,7 +36,7 @@ var PipeBufferGeometry = (function() {
     var indices = [];
     var vertices = [];
     var normals = [];
-    //var uvs = [];
+    var uvs = [];
 
     var index = 0;
     var halfHeight = height / 2;
@@ -53,7 +53,7 @@ var PipeBufferGeometry = (function() {
     this.setIndex(indices);
     this.addAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     this.addAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-    //this.addAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    this.addAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 
     function generateWall(outer) {
       var x, y;
@@ -86,6 +86,8 @@ var PipeBufferGeometry = (function() {
           if (!outer) normal.negate();
           normals.push(normal.x, normal.y, normal.z);
 
+          uvs.push(u, 1 - v);
+
           indexRow.push(index++);
         }
 
@@ -112,7 +114,7 @@ var PipeBufferGeometry = (function() {
         }
       }
 
-      scope.addGroup(groupStart, groupCount, 0);
+      scope.addGroup(groupStart, groupCount, outer ? 0 : 1);
 
       groupStart += groupCount;
     }
@@ -123,6 +125,7 @@ var PipeBufferGeometry = (function() {
 
       var sign = top ? 1 : -1;
       var idxStart = index;
+      var groupCount = 0;
 
       for (x = 0; x <= radialSegments; x++) {
         var u = x / radialSegments;
@@ -132,17 +135,20 @@ var PipeBufferGeometry = (function() {
         var cosTheta = Math.cos(theta);
 
         vertex.x = outerRadius * sinTheta;
-        vertex.y = halfHeight;
+        vertex.y = halfHeight * sign;
         vertex.z = outerRadius * cosTheta;
         vertices.push(vertex.x, vertex.y, vertex.z);
 
         vertex.x = innerRadius * sinTheta;
-        vertex.y = halfHeight;
+        vertex.y = halfHeight * sign;
         vertex.z = innerRadius * cosTheta;
         vertices.push(vertex.x, vertex.y, vertex.z);
 
         normals.push(0, sign, 0);
         normals.push(0, sign, 0);
+
+        uvs.push(u, 0);
+        uvs.push(u, 1);
 
         index++;
         index++;
@@ -159,7 +165,13 @@ var PipeBufferGeometry = (function() {
           indices.push(idx, idx+1, idx+3);
           indices.push(idx, idx+3, idx+2);
         }
+
+        groupCount += 6;
       }
+
+      scope.addGroup(groupStart, groupCount, top ? 2 : 3);
+
+      groupStart += groupCount;
     }
   }
 
