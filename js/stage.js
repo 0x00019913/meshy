@@ -290,7 +290,7 @@ Stage.prototype.generateUI = function() {
   this.gui.add(this, "delete").name("Delete")
     .title("Delete the mesh.");
 
-  this.infoBox = new InfoBox();
+  this.infoBox = new InfoBox(this.displayPrecision);
   this.infoBox.add("Units", this, "units");
   this.infoBox.add("Polycount", this, ["model","getPolycount"]);
   this.infoBox.addMultiple("x range", this, [["model","getxmin"], ["model","getxmax"]]);
@@ -304,6 +304,37 @@ Stage.prototype.generateUI = function() {
 
   this.initViewport();
   this.makeBuildVolume();
+
+  this.gizmoConeRadius = 0.75;
+  this.gizmoConeHeight = 5.0;
+  this.gizmoConeRadialSegments = 32;
+
+  this.gizmoPipeOuterRadius = 17.0;
+  this.gizmoPipeHeight = 0.25;
+  this.gizmoPipeRadialSegments = 64;
+
+  this.gizmoCylinderRadius = 1.0;
+  this.gizmoCylinderHeight = 3.0;
+  this.gizmoCylinderRadialSegments = 32;
+
+  this.gizmo = new Gizmo(this.camera, this.renderer.domElement, {
+    coneRadius: this.gizmoConeRadius,
+    coneHeight: this.gizmoConeHeight,
+    coneRadialSegments: this.gizmoConeRadialSegments,
+    translateHandleOffset: 21,
+
+    pipeOuterRadius: this.gizmoPipeOuterRadius,
+    pipeInnerRadius: this.gizmoPipeOuterRadius - this.gizmoPipeHeight,
+    pipeHeight: this.gizmoPipeHeight,
+    pipeRadialSegments: this.gizmoPipeRadialSegments,
+
+    cylinderRadius: this.gizmoCylinderRadius,
+    cylinderHeight: this.gizmoCylinderHeight,
+    cylinderRadialSegments: this.gizmoCylinderRadialSegments,
+    scaleHandleOffset: 14,
+  });
+
+  this.scene.add(this.gizmo);
 }
 
 // anything that needs to be refreshed by hand (not in every frame)
