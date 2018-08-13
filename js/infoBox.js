@@ -48,7 +48,7 @@
 
 
 // Constructor
-InfoBox = function() {
+InfoBox = function(decimals) {
   this.box = document.createElement("div");
   this.box.id = "infobox"
   this.styleBox();
@@ -64,7 +64,7 @@ InfoBox = function() {
 
   this.items = [];
 
-  this.decimals = 4;
+  this.decimals = decimals !== undefined ? decimals : 4;
 }
 
 // Add a line with a single data source.
