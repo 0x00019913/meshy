@@ -890,7 +890,6 @@ Model.prototype.generateTargetPlanes = function() {
   for (var i=0; i<planeMeshes.length; i++) {
     planeMeshes[i].name = "targetPlane";
     planeMeshes[i].visible = false;
-    planeMeshes[i].frustumCulled = false;
     this.scene.add(planeMeshes[i]);
   }
 }
@@ -939,7 +938,6 @@ Model.prototype.setMode = function(mode, params) {
 
   // base mode - display the normal, plain mesh
   if (mode == "base") {
-    this.makeBaseMesh();
     this.scene.add(this.baseMesh);
     if (this.supportsGenerated) {
       this.makeSupportMesh();
@@ -988,7 +986,6 @@ Model.prototype.makeBaseMesh = function(geo) {
     //var geo = new THREE.Geometry();
     this.baseMesh = new THREE.Mesh(geo, Model.Materials.base);
     this.baseMesh.name = "base";
-    this.baseMesh.frustumCulled = false;
   }
 
   return this.baseMesh;
@@ -998,7 +995,6 @@ Model.prototype.makeSupportMesh = function() {
     var geo = new THREE.Geometry();
     this.supportMesh = new THREE.Mesh(geo, Model.Materials.base);
     this.supportMesh.name = "support";
-    this.supportMesh.frustumCulled = false;
   }
 
   return this.supportMesh;
@@ -1008,7 +1004,6 @@ Model.prototype.makePatchMesh = function() {
     var geo = new THREE.Geometry();
     this.patchMesh = new THREE.Mesh(geo, Model.Materials.patch);
     this.patchMesh.name = "patch";
-    this.patchMesh.frustumCulled = false;
   }
 
   return this.patchMesh;
@@ -1120,7 +1115,6 @@ Model.prototype.makeSliceMeshes = function() {
     Model.Materials.sliceOneLayerBase
   );
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.sliceOneLayerBaseMesh = mesh;
 
   // make mesh for current layer's print contours
@@ -1129,7 +1123,6 @@ Model.prototype.makeSliceMeshes = function() {
     Model.Materials.sliceOneLayerContour
   );
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.sliceOneLayerContourMesh = mesh;
 
   // make mesh for current layer's infill
@@ -1138,7 +1131,6 @@ Model.prototype.makeSliceMeshes = function() {
     Model.Materials.sliceOneLayerInfill
   );
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.sliceOneLayerInfillMesh = mesh;
 
   // make mesh for all non-current layer contours
@@ -1147,7 +1139,6 @@ Model.prototype.makeSliceMeshes = function() {
     Model.Materials.sliceAllContours
   );
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.sliceAllContourMesh = mesh;
 
   // make mesh for sliced geometry - supports two material indices for making
@@ -1157,13 +1148,11 @@ Model.prototype.makeSliceMeshes = function() {
     [Model.Materials.slicePreviewMeshVisible, Model.Materials.slicePreviewMeshTransparent]
   );
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.slicePreviewSlicedMesh = mesh;
 
   // to make the ghost, just clone the base mesh and assign ghost material
   mesh = new THREE.Mesh(geos.source.geo, Model.Materials.slicePreviewMeshGhost);
   mesh.name = "slice";
-  mesh.frustumCulled = false;
   this.slicePreviewGhostMesh = mesh;
 }
 
