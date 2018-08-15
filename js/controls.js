@@ -44,6 +44,8 @@ Controls = function(camera, domElement, params) {
     this[key] = params[key];
   }
 
+  this.enabled = true;
+
   // EVENT HANDLING
 
   // for use inside the event handlers
@@ -63,6 +65,8 @@ Controls = function(camera, domElement, params) {
   this.domElement.addEventListener('contextmenu', onContextmenu, false);
 
   function onMouseMove(e) {
+    if (!_this.enabled) return;
+
     // calculate difference in mouse position between this and the previous events
     mouseXprev = mouseX;
     mouseYprev = mouseY;
@@ -162,6 +166,14 @@ Controls = function(camera, domElement, params) {
       if (_this.r>_this.rMax) _this.r = _this.rMax;
     }
   }
+}
+
+Controls.prototype.enable = function() {
+  this.enabled = true;
+}
+
+Controls.prototype.disable = function() {
+  this.enabled = false;
 }
 
 Controls.prototype.setDefaults = function(type) {
