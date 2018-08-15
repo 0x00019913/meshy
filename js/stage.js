@@ -305,36 +305,73 @@ Stage.prototype.generateUI = function() {
   this.initViewport();
   this.makeBuildVolume();
 
-  this.gizmoConeRadius = 0.75;
-  this.gizmoConeHeight = 5.0;
-  this.gizmoConeRadialSegments = 32;
+  // gizmo creation:
+  // set parameters, building the gizmo outward - first scale handles, then
+  // normal rotate handles, then orthogonal handle(s), then translate handles;
+  // this ensures that everything is spaced correctly
 
-  this.gizmoPipeOuterRadius = 17.0;
-  this.gizmoPipeHeight = 0.25;
-  this.gizmoPipeRadialSegments = 64;
+  this.gizmoSpacing = 1;
 
-  this.gizmoCylinderRadius = 1.0;
-  this.gizmoCylinderHeight = 3.0;
-  this.gizmoCylinderRadialSegments = 32;
+  // current radial boundary; next handle begins one spacing unit away from here
+  var gizmoEdge = 0;
+
+  this.gizmoScaleHandleRadius = 1.5;
+  this.gizmoScaleHandleHeight = 4.0;
+  this.gizmoScaleHandleRadialSegments = 32;
+  this.gizmoScaleHandleOffset = 14;
+
+  // edge of the
+  gizmoEdge = this.gizmoScaleHandleOffset + this.gizmoScaleHandleHeight / 2;
+
+  this.gizmoRotateHandleWidth = 0.6;
+  this.gizmoRotateHandleHeight = this.gizmoRotateHandleWidth;
+  this.gizmoRotateHandleOuterRadius =
+    gizmoEdge + this.gizmoSpacing + this.gizmoRotateHandleWidth / 2;
+  this.gizmoRotateHandleRadialSegments = 64;
+
+  gizmoEdge = this.gizmoRotateHandleOuterRadius;
+
+  this.gizmoRotateOrthogonalHandleOuterRadius =
+    this.gizmoRotateHandleOuterRadius + this.gizmoSpacing + this.gizmoRotateHandleWidth;
+
+  gizmoEdge = this.gizmoRotateOrthogonalHandleOuterRadius;
+
+  this.gizmoTranslateHandleRadius = 1.5;
+  this.gizmoTranslateHandleHeight = 6.0;
+  this.gizmoTranslateHandleRadialSegments = 32;
+  this.gizmoTranslateHandleOffset =
+    gizmoEdge + this.gizmoSpacing + this.gizmoTranslateHandleHeight / 2;
+
+  this.gizmoScaleFactor = 0.003;
+
+  var _this = this;
 
   this.gizmo = new Gizmo(this.camera, this.renderer.domElement, {
-    coneRadius: this.gizmoConeRadius,
-    coneHeight: this.gizmoConeHeight,
-    coneRadialSegments: this.gizmoConeRadialSegments,
-    translateHandleOffset: 21,
+    scaleHandleRadius: this.gizmoScaleHandleRadius,
+    scaleHandleHeight: this.gizmoScaleHandleHeight,
+    scaleHandleRadialSegments: this.gizmoScaleHandleRadialSegments,
+    scaleHandleOffset: this.gizmoScaleHandleOffset,
 
-    pipeOuterRadius: this.gizmoPipeOuterRadius,
-    pipeInnerRadius: this.gizmoPipeOuterRadius - this.gizmoPipeHeight,
-    pipeHeight: this.gizmoPipeHeight,
-    pipeRadialSegments: this.gizmoPipeRadialSegments,
+    rotateHandleOuterRadius: this.gizmoRotateHandleOuterRadius,
+    rotateOrthogonalHandleOuterRadius: this.gizmoRotateOrthogonalHandleOuterRadius,
+    rotateHandleWidth: this.gizmoRotateHandleWidth,
+    rotateHandleHeight: this.gizmoRotateHandleHeight,
+    rotateHandleRadialSegments: this.gizmoRotateHandleRadialSegments,
 
-    cylinderRadius: this.gizmoCylinderRadius,
-    cylinderHeight: this.gizmoCylinderHeight,
-    cylinderRadialSegments: this.gizmoCylinderRadialSegments,
-    scaleHandleOffset: 14,
+    translateHandleRadius: this.gizmoTranslateHandleRadius,
+    translateHandleHeight: this.gizmoTranslateHandleHeight,
+    translateHandleRadialSegments: this.gizmoTranslateHandleRadialSegments,
+    translateHandleOffset: this.gizmoTranslateHandleOffset,
+
+    scaleFactor: this.gizmoScaleFactor,
+
+    onTransform: function() { _this.controls.disable(); },
+    onFinishTransform: function() { _this.controls.enable(); }
   });
 
-  this.scene.add(this.gizmo);
+  this.gizmo.position.copy(this.calculateBuildPlateCenter());
+
+  this.gizmoScene.add(this.gizmo);
 }
 
 // anything that needs to be refreshed by hand (not in every frame)
@@ -1204,8 +1241,10 @@ Stage.prototype.initViewport = function() {
     _this.camera.up.set(0, 0, 1);
 
     _this.scene = new THREE.Scene();
-    debug = new Debug(_this.scene); // todo: remove
     _this.scene.background = new THREE.Color(_this.backgroundColor);
+    debug = new Debug(_this.scene); // todo: remove
+
+    _this.gizmoScene = new THREE.Scene();
 
     _this.controls = new Controls(
       _this.camera,
@@ -1218,11 +1257,18 @@ Stage.prototype.initViewport = function() {
       }
     );
 
+    // for lighting the scene
     var pointLight = new THREE.PointLight(0xffffff, 3);
     _this.scene.add(pointLight);
     _this.controls.addObject(pointLight);
+    // for lighting the gizmo
+    var gizmoPointLight = pointLight.clone();
+    _this.gizmoScene.add(gizmoPointLight);
+    _this.controls.addObject(gizmoPointLight);
+
     var ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     _this.scene.add(ambientLight);
+    _this.gizmoScene.add(ambientLight);
 
     _this.axisWidget = new AxisWidget(_this.camera);
 
@@ -1230,6 +1276,8 @@ Stage.prototype.initViewport = function() {
 
     /* RENDER */
     _this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    _this.renderer.autoClear = false;
+    //_this.renderer.setClearColor(0x000000, 0);
     //_this.renderer.shadowMap.enabled = true;
     _this.renderer.toneMapping = THREE.ReinhardToneMapping;
     _this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -1290,12 +1338,18 @@ Stage.prototype.initViewport = function() {
   function render() {
     if (!_this.camera || !_this.scene) return;
     _this.controls.update();
+    if (_this.gizmo) {
+      _this.gizmo.update();
+    }
     _this.axisWidget.update();
     _this.infoBox.update();
     if (_this.model && _this.model.measurement) {
       _this.model.measurement.rescale();
     }
+    _this.renderer.clear();
     _this.renderer.render(_this.scene, _this.camera);
+    _this.renderer.clearDepth();
+    _this.renderer.render(_this.gizmoScene, _this.camera);
   }
 }
 
@@ -1487,6 +1541,8 @@ Stage.prototype.createModel = function(geometry) {
 
   this.setMeshMaterial();
   this.updateUI();
+
+  this.gizmo.position.copy(this.model.getPosition());
 }
 
 // Callback passed to model.import; puts the mesh into the viewport.
