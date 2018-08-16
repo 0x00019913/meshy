@@ -175,8 +175,6 @@ Stage.prototype.generateUI = function() {
     .onChange(this.makeBuildVolume.bind(this));
 
   this.snapTransformationsToFloor = true;
-  // handle the state of the transformation snap checkbox
-  this.handleSnapTransformationToFloorState();
 
   this.editFolder = this.gui.addFolder("Edit",
     "Mesh edit functions: translation, scaling, rotation, normals.");
@@ -366,12 +364,20 @@ Stage.prototype.generateUI = function() {
     scaleFactor: this.gizmoScaleFactor,
 
     onTransform: function() { _this.controls.disable(); },
-    onFinishTransform: function() { _this.controls.enable(); }
+    onFinishTransform: function() { _this.controls.enable(); },
+
+    getPosition: function() { return _this.position.clone(); },
+    setPosition: function(pos) { _this.position.copy(pos); },
+    onTranslate: function() { _this.onTranslate(); },
+    onFinishTranslate: function() { _this.onFinishTranslate(); }
   });
 
   this.gizmo.position.copy(this.calculateBuildPlateCenter());
 
   this.gizmoScene.add(this.gizmo);
+
+  // handle the state of the transformation snap checkbox
+  this.handleSnapTransformationToFloorState();
 }
 
 // anything that needs to be refreshed by hand (not in every frame)
@@ -417,18 +423,21 @@ Stage.prototype.redo = function() {
 
 Stage.prototype.makeTranslateTransform = function(invertible) {
   if (this.dbg) console.log("make translate transform");
-  var transform = new Transform("translate", this.model.getPosition()), _this = this;
+  var transform = new Transform("translate", this.model.getPosition());
+  var _this = this;
 
+  transform.rectify = function(pos) {
+    pos = pos.clone();
+    // if snapping to floor, floor the model
+    if (_this.snapTransformationsToFloor) {
+      pos.z = _this.model.getSize().z / 2;
+    }
+    return pos;
+  }
   transform.onApply = function(pos) { _this.model.translate(pos); };
   transform.onEnd = function() {
-    if (_this.snapTransformationsToFloor) {
-      // update position and floor the model
-      _this.position.copy(_this.model.getPosition());
-      _this.position.z -= _this.model.getMin().z;
-      // apply transform again
-      this.onApply(_this.position);
-    }
     _this.model.translateEnd();
+    //_this.position.copy(this.getLastVal());
   };
   transform.invertible = invertible;
 
@@ -492,7 +501,7 @@ Stage.prototype.onTranslate = function() {
   if (this.dbg) console.log("translate");
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
-  this.currentTransform.apply(this.position);
+  this.currentTransform.apply(this.position.clone());
 }
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
@@ -510,7 +519,10 @@ Stage.prototype.onRotate = function() {
   if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
-  this.currentTransform.apply(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
+  // translate rotation in degrees to rotation in radians
+  this.rotation.copy(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
+
+  this.currentTransform.apply(this.rotation.clone());
 }
 // called on rotation end
 Stage.prototype.onFinishRotate = function() {
@@ -532,7 +544,7 @@ Stage.prototype.onScaleByFactor = function() {
   if (this.dbg) console.log("scale");
   if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
-  this.currentTransform.apply(this.scale);
+  this.currentTransform.apply(this.scale.clone());
 }
 // called when scaling to size is in progress
 Stage.prototype.onScaleToSize = function() {
@@ -577,7 +589,7 @@ Stage.prototype.autoCenter = function(invertible) {
 
   var transform = this.makeTranslateTransform(invertible);
 
-  transform.apply(this.position.add(translation));
+  transform.apply(this.position.add(translation).clone());
   transform.end();
 
   this.pushEdit(transform, this.updatePosition.bind(this));
@@ -591,7 +603,7 @@ Stage.prototype.floor = function(invertible) {
 
   this.position.z -= this.model.getMin().z;
 
-  transform.apply(this.position);
+  transform.apply(this.position.clone());
   transform.end();
 
   this.pushEdit(transform, this.updatePosition.bind(this));
@@ -607,6 +619,9 @@ Stage.prototype.handleSnapTransformationToFloorState = function() {
 
   if (snap) this.disableController(this.positionZController);
   else this.enableController(this.positionZController);
+
+  if (snap) this.gizmo.disableHandle(Gizmo.HandleTypes.translate, "z");
+  else this.gizmo.enableHandle(Gizmo.HandleTypes.translate, "z");
 }
 
 // position/rotation/scale GUI-updating functions
@@ -660,9 +675,14 @@ Stage.prototype.buildEditFolder = function() {
     return;
   }
 
+  // position vector
   this.position = new THREE.Vector3();
+  // radian rotation (for internal use) and equivalent degree rotation (for display)
+  this.rotation = new THREE.Euler();
   this.rotationDeg = new THREE.Euler();
+  // vector of scale factors
   this.scale = new THREE.Vector3();
+  // computed size of the model
   this.size = new THREE.Vector3();
 
   this.updatePosition();
@@ -1339,7 +1359,7 @@ Stage.prototype.initViewport = function() {
     if (!_this.camera || !_this.scene) return;
     _this.controls.update();
     if (_this.gizmo) {
-      _this.gizmo.update();
+      _this.gizmo.update(_this.position, _this.rotation, _this.scale);
     }
     _this.axisWidget.update();
     _this.infoBox.update();

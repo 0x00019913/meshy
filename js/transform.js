@@ -3,18 +3,25 @@
     Transform
     EditStack
    description:
-    A class representing a transformation. Has a reference to a model and can
-    apply the appropriate transformation with .apply(). Has a method to generate
-    an inverse transformation, which can be pushed onto an instance of
-    EditStack.
+    A class representing a transformation. Created with a start value; apply
+    the transform with the .apply() method and reverse it with .applyInverse().
+    End the transform with an .end() call.
 */
 
 function Transform(name, start) {
   this.name = name;
 
-  // start and end value of transformed parameter
+  // used to make new values of the same type as the starting value
+  this.valConstructor = start.constructor;
+
+  // start and target value of transformed parameter
   this.startVal = start.clone();
-  this.endVal = null;
+  this.targetVal = new this.valConstructor();
+  // latest target value (if applied forward) or start val (if applied inverse)
+  this.lastVal = new this.valConstructor();
+
+  // function used to modify the input value to onApply
+  this.rectify = null;
 
   // functions called on transform application and transform end
   this.onApply = null;
@@ -32,30 +39,45 @@ Object.assign(Transform.prototype, {
 
   constructor: Transform,
 
-  // true if start value and end value are the same
+  // true if start value and target value are the same
   noop: function() {
-    if (this.startVal === null || this.endVal === null) return false;
-    return this.startVal.equals(this.endVal);
+    if (this.startVal === null || this.targetVal === null) return false;
+    return this.startVal.equals(this.targetVal);
+  },
+
+  getLastVal: function() {
+    return this.lastVal;
   },
 
   apply: function(val) {
-    // if ending value is given, record it
-    if (val !== undefined) this.endVal = val.clone();
+    // if target value is given, record it
+    if (val !== undefined) this.targetVal.copy(val);
+
+    if (this.rectify && this.targetVal) {
+      this.targetVal.copy(this.rectify(this.targetVal));
+    }
+
+    this.lastVal.copy(this.targetVal)
 
     // apply with current end value
-    if (this.onApply) this.onApply(this.endVal);
-
-    return this;
+    return this.onApply(this.targetVal);
   },
 
   applyInverse: function() {
-    if (this.onApply) this.onApply(this.startVal);
+    if (this.startVal) {
+      this.lastVal.copy(this.startVal);
+
+      if (this.rectify) {
+        this.lastVal.copy(this.rectify(this.lastVal));
+      }
+    }
+
+    return this.onApply(this.lastVal);
   },
 
   end: function() {
-    if (this.onEnd) this.onEnd();
-
-    return this;
+    if (this.onEnd) return this.onEnd();
+    else return null;
   }
 
 });

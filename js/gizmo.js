@@ -81,7 +81,9 @@ var Gizmo = (function() {
       color: this.colors.o.inactive
     });
 
+    // currently active handle and the point on which the mouse hit it
     this.activeHandle = null;
+    this.activePoint = null;
 
     // interaction setup
 
@@ -91,6 +93,7 @@ var Gizmo = (function() {
     // when dragging, gives the current transform type and axis
     this.transformType = Gizmo.HandleTypes.none;
     this.transformAxis = "";
+    this.transformStart = null;
 
     // each group contains the handles of a particular type so that they can be
     // transformed together
@@ -311,36 +314,59 @@ var Gizmo = (function() {
       this.handles.scale.z = handle;
     },
 
-    update: function() {
+    update: function(position, rotation, scale) {
       var camPosProjected = this.camera.position.clone().sub(this.position);
       this.handleGroups.orthogonal.lookAt(camPosProjected);
 
       var distanceToCamera = this.position.distanceTo(this.camera.position);
       this.scale.setScalar(this.params.scaleFactor * distanceToCamera);
+
+      // if new position given, set to this position
+      if (position !== undefined) {
+        this.position.copy(position);
+      }
+      // if new rotation given, set rotation of cardinal rotate handles and
+      // scale handles to this rotation
+      if (rotation !== undefined) {
+        this.handleGroups[Gizmo.HandleTypes.rotate].rotation.copy(rotation);
+        this.handleGroups[Gizmo.HandleTypes.scale].rotation.copy(rotation);
+      }
+      // don't do anything for scale
     },
 
     mousemove: function(pointer) {
-      var raycaster = this.raycaster;
-      raycaster.setFromCamera(pointer.coords, this.camera);
+      this.raycaster.setFromCamera(pointer.coords, this.camera);
 
-      var intersections = raycaster.intersectObjects(this.children, true);
-
-      // intersecting some handle
-      if (intersections.length > 0) {
-        var dist = intersections[0].distance;
-        var handle = null;
-
-        for (var i = 0; i < intersections.length; i++) {
-          var intersection = intersections[i];
-
-          if (intersection.distance <= dist) handle = intersection.object;
-        }
-
-        if (this.activeHandle !== handle) this.deactivateHandle();
-        this.activateHandle(handle);
+      // if currently active transform
+      if (this.transformType !== Gizmo.HandleTypes.none && this.transformAxis !== "") {
+        this.transformmove();
       }
+      // no currently active transform, so handle handle mouseover
       else {
-        this.deactivateHandle();
+        var raycaster = this.raycaster;
+
+        var intersections = raycaster.intersectObjects(this.children, true);
+
+        // intersecting some handle
+        if (intersections.length > 0) {
+          var dist = intersections[0].distance;
+          var handle = null;
+
+          for (var i = 0; i < intersections.length; i++) {
+            var intersection = intersections[i];
+
+            if (intersection.distance <= dist) {
+              handle = intersection.object;
+              this.activePoint = intersection.point;
+            }
+          }
+
+          if (this.activeHandle !== handle) this.deactivateHandle();
+          this.activateHandle(handle);
+        }
+        else {
+          this.deactivateHandle();
+        }
       }
 
     },
@@ -357,19 +383,101 @@ var Gizmo = (function() {
         var type = nameParse.type;
         var axis = nameParse.axis;
 
-        this.transformType = type;
-        this.transformAxis = axis;
+        this.transformType = nameParse.type;
+        this.transformAxis = nameParse.axis;
 
-        if (type === Gizmo.HandleTypes.rotate) {
-          this.raycaster.setFromCamera(pointer.coords, this.camera);
+        if (type === Gizmo.HandleTypes.translate) {
+          this.transformStart = this.params.getPosition().clone();
+        }
+        else if (type === Gizmo.HandleTypes.rotate) {
+          this.transformStart = this.params.getRotation().clone();
+        }
+        else if (type === Gizmo.HandleTypes.scale) {
+          this.transformStart = this.params.getScale().clone();
         }
       }
     },
 
     mouseup: function(pointer) {
       if (pointer.button !== 0) return;
-      
+
+      if (this.transformType === Gizmo.HandleTypes.translate) {
+        if (this.params.onFinishTranslate) this.params.onFinishTranslate();
+        // todo: others
+      }
+
+      this.transformType = Gizmo.HandleTypes.none;
+      this.transformAxis = "";
+      this.transformStart = null;
+
       if (this.params.onFinishTransform) this.params.onFinishTransform();
+    },
+
+    // with a transform currently active, handles the effect of a mouse move
+    transformmove: function() {
+      var type = this.transformType;
+      var axis = this.transformAxis;
+
+      // if rotate, handle an angle change
+      if (type === Gizmo.HandleTypes.rotate) {
+        var normal = this.transformDirection();
+        var center = this.position;
+
+        plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+
+        var intersection = this.raycaster.ray.intersectPlane(plane);
+        if (intersection) {
+          debug.cleanup();
+          debug.oneline(center, intersection);
+        }
+      }
+      // else, handle a shift along an axis
+      else {
+        // transform line parameters - point and direction
+        var p0 = this.activePoint, d0 = this.transformDirection();
+
+        // ray from the camera params
+        var ray = this.raycaster.ray;
+        var p1 = ray.origin, d1 = ray.direction;
+
+        // calculate the point on the transform line that is closest to the view
+        // ray:
+        // v0 = p0 + t0d0, v1 = p1 + t1d1
+        // t0 = ((d0 - d1 (d0 dot d1)) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
+        // t1 = ((d0 (d0 dot d1) - d1) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
+        var d0d1 = d0.dot(d1);
+        var dn = 1 - d0d1 * d0d1;
+
+        var t0 = d0.clone().addScaledVector(d1, -d0d1).dot(p1.clone().sub(p0)) / dn;
+        var v0 = p0.clone().addScaledVector(d0, t0);
+
+        var shift = v0.clone().sub(p0);
+
+        if (type === Gizmo.HandleTypes.translate) {
+          this.params.setPosition(this.transformStart.clone().add(shift));
+          this.params.onTranslate();
+          //this.position.addVectors(this.transformStart, shift);
+        }
+      }
+    },
+
+    transformDirection: function() {
+      var axis = this.transformAxis;
+      var v = new THREE.Vector3();
+
+      if (axis === "o") v.subVectors(this.position, this.camera.position);
+      else {
+        var matrix = this.handleGroups[this.transformType].matrix;
+
+        if (axis === "x") v.set(1, 0, 0);
+        else if (axis === "y") v.set(0, 1, 0);
+        else if (axis === "z") v.set(0, 0, 1);
+        else return null;
+
+        v.applyMatrix4(matrix);
+      }
+
+      return v;
     },
 
     activateHandle: function(handle) {
@@ -390,6 +498,15 @@ var Gizmo = (function() {
       handle.material.opacity = this.opacityInactive;
 
       this.activeHandle = null;
+      this.activePoint = null;
+    },
+
+    disableHandle: function(type, axis) {
+      this.handles[type][axis].visible = false;
+    },
+
+    enableHandle: function(type, axis) {
+      this.handles[type][axis].visible = true;
     }
 
   });
