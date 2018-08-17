@@ -317,6 +317,9 @@ Stage.prototype.generateUI = function() {
   this.gizmoScaleHandleHeight = 4.0;
   this.gizmoScaleHandleRadialSegments = 32;
   this.gizmoScaleHandleOffset = 14;
+  this.gizmoScaleOrthogonalHandleRadius = 3.0;
+  this.gizmoScaleOrthogonalHandleWidthSegments = 32;
+  this.gizmoScaleOrthogonalHandleHeightSegments = 16;
 
   // edge of the
   gizmoEdge = this.gizmoScaleHandleOffset + this.gizmoScaleHandleHeight / 2;
@@ -349,6 +352,9 @@ Stage.prototype.generateUI = function() {
     scaleHandleHeight: this.gizmoScaleHandleHeight,
     scaleHandleRadialSegments: this.gizmoScaleHandleRadialSegments,
     scaleHandleOffset: this.gizmoScaleHandleOffset,
+    scaleOrthogonalHandleRadius: this.gizmoScaleOrthogonalHandleRadius,
+    scaleOrthogonalHandleWidthSegments: this.gizmoScaleOrthogonalHandleWidthSegments,
+    scaleOrthogonalHandleHeightSegments: this.gizmoScaleOrthogonalHandleHeightSegments,
 
     rotateHandleOuterRadius: this.gizmoRotateHandleOuterRadius,
     rotateOrthogonalHandleOuterRadius: this.gizmoRotateOrthogonalHandleOuterRadius,
@@ -368,8 +374,18 @@ Stage.prototype.generateUI = function() {
 
     getPosition: function() { return _this.position.clone(); },
     setPosition: function(pos) { _this.position.copy(pos); },
-    onTranslate: function() { _this.onTranslate(); },
-    onFinishTranslate: function() { _this.onFinishTranslate(); }
+    onTranslate: this.onTranslate.bind(this),
+    onFinishTranslate: this.onFinishTranslate.bind(this),
+
+    getRotation: function() { return _this.rotation.clone(); },
+    setRotation: function(euler) { _this.rotation.copy(euler); },
+    onRotate: this.onRotate.bind(this),
+    onFinishRotate: this.onFinishRotate.bind(this),
+
+    getScale: function() { return _this.scale.clone(); },
+    setScale: function(scale) { _this.scale.copy(scale); },
+    onScale: this.onScaleByFactor.bind(this),
+    onFinishScale: this.onFinishScaleByFactor.bind(this)
   });
 
   this.gizmo.position.copy(this.calculateBuildPlateCenter());
@@ -501,7 +517,7 @@ Stage.prototype.onTranslate = function() {
   if (this.dbg) console.log("translate");
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
-  this.currentTransform.apply(this.position.clone());
+  this.currentTransform.apply(this.position);
 }
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
@@ -514,15 +530,19 @@ Stage.prototype.onFinishTranslate = function() {
   this.updatePosition();
 }
 
+Stage.prototype.onChangeRotationDegrees = function() {
+  // translate rotation in degrees to rotation in radians
+  this.rotation.copy(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
+
+  this.onRotate();
+}
+
 // called when a rotation is in progress
 Stage.prototype.onRotate = function() {
   if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
-  // translate rotation in degrees to rotation in radians
-  this.rotation.copy(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
-
-  this.currentTransform.apply(this.rotation.clone());
+  this.currentTransform.apply(this.rotation);
 }
 // called on rotation end
 Stage.prototype.onFinishRotate = function() {
@@ -544,7 +564,7 @@ Stage.prototype.onScaleByFactor = function() {
   if (this.dbg) console.log("scale");
   if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
-  this.currentTransform.apply(this.scale.clone());
+  this.currentTransform.apply(this.scale);
 }
 // called when scaling to size is in progress
 Stage.prototype.onScaleToSize = function() {
@@ -637,7 +657,8 @@ Stage.prototype.updatePosition = function() {
 Stage.prototype.updateRotation = function() {
   if (!this.model) return;
 
-  this.rotationDeg.copy(eulerRadToDeg(this.model.getRotation()));
+  this.rotation.copy(eulerRadNormalize(this.model.getRotation()));
+  this.rotationDeg.copy(eulerRadToDeg(this.rotation));
 
   if (this.rotationXController) this.rotationXController.updateDisplay();
   if (this.rotationYController) this.rotationYController.updateDisplay();
@@ -714,13 +735,13 @@ Stage.prototype.buildEditFolder = function() {
 
   var rotateFolder = this.editFolder.addFolder("Rotate", "Rotate the mesh about a given axis.");
   this.rotationXController = rotateFolder.add(this.rotationDeg, "x", 0, 360)
-    .onChange(this.onRotate.bind(this))
+    .onChange(this.onChangeRotationDegrees.bind(this))
     .onFinishChange(this.onFinishRotate.bind(this));
   this.rotationYController = rotateFolder.add(this.rotationDeg, "y", 0, 360)
-    .onChange(this.onRotate.bind(this))
+    .onChange(this.onChangeRotationDegrees.bind(this))
     .onFinishChange(this.onFinishRotate.bind(this));
   this.rotationZController = rotateFolder.add(this.rotationDeg, "z", 0, 360)
-    .onChange(this.onRotate.bind(this))
+    .onChange(this.onChangeRotationDegrees.bind(this))
     .onFinishChange(this.onFinishRotate.bind(this));
 
   var scaleFolder = this.editFolder.addFolder("Scale", "Scale the mesh by given criteria.");
@@ -1561,8 +1582,6 @@ Stage.prototype.createModel = function(geometry) {
 
   this.setMeshMaterial();
   this.updateUI();
-
-  this.gizmo.position.copy(this.model.getPosition());
 }
 
 // Callback passed to model.import; puts the mesh into the viewport.
