@@ -524,6 +524,7 @@ Stage.prototype.onTranslate = function() {
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
+  this.updatePosition();
 }
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
