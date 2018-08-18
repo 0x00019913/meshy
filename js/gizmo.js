@@ -586,7 +586,7 @@ var Gizmo = (function() {
             var shift = cursor.clone().sub(this.activePoint);
 
             // if ctrl key, snap to integer values
-            shift.round();
+            if (this.ctrlKey) shift.round();
 
             this.params.setPosition(this.transformStart.clone().add(shift));
             this.params.onTranslate();
