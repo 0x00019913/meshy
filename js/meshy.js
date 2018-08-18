@@ -1,15 +1,15 @@
-/* stage.js
+/* meshy.js
 
    classes:
 
-   - Stage
+   - Meshy
    description:
     Main class representing the Meshy viewport. Encompasses UI, creating and
     handling the model, and controlling the viewport.
 */
 
 // Constructor.
-Stage = function() {
+Meshy = function() {
   this.dbg = false;
 
   this.units = Units.mm;
@@ -52,7 +52,7 @@ Stage = function() {
   var fileInput = document.createElement("input");
   fileInput.id = "file";
   fileInput.type = "file";
-  fileInput.onchange = function() { stage.handleFile(this.files[0]); };
+  fileInput.onchange = function() { meshy.handleFile(this.files[0]); };
   document.body.appendChild(fileInput);
   this.fileInput = fileInput;
 
@@ -92,7 +92,7 @@ Stage = function() {
 
 // Creates the dat.gui element and the InfoBox, initializes the viewport,
 // initializes build volume.
-Stage.prototype.generateUI = function() {
+Meshy.prototype.generateUI = function() {
   this.gui = new dat.GUI();
   this.gui.add(this, "import").name("Import").title("Import a mesh.");
 
@@ -414,26 +414,26 @@ Stage.prototype.generateUI = function() {
 }
 
 // anything that needs to be refreshed by hand (not in every frame)
-Stage.prototype.updateUI = function() {
+Meshy.prototype.updateUI = function() {
   this.filenameController.updateDisplay();
 }
 
 // used for internal optimization while building a list of unique vertices
-Stage.prototype.setVertexPrecision = function() {
+Meshy.prototype.setVertexPrecision = function() {
   if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
-Stage.prototype.setDisplayPrecision = function() {
+Meshy.prototype.setDisplayPrecision = function() {
   if (this.infoBox) this.infoBox.decimals = this.displayPrecision;
 
   this.setFolderDisplayPrecision(this.editFolder);
 }
 
 // Functions corresponding to buttons in the dat.gui.
-Stage.prototype.exportOBJ = function() { this.export("obj"); }
-Stage.prototype.exportSTL = function() { this.export("stl"); }
-Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
+Meshy.prototype.exportOBJ = function() { this.export("obj"); }
+Meshy.prototype.exportSTL = function() { this.export("stl"); }
+Meshy.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
-Stage.prototype.undo = function() {
+Meshy.prototype.undo = function() {
   this.deactivateSliceMode();
   this.gizmo.transformFinish();
   try {
@@ -443,7 +443,7 @@ Stage.prototype.undo = function() {
     this.printout.warn(e);
   }
 }
-Stage.prototype.redo = function() {
+Meshy.prototype.redo = function() {
   this.deactivateSliceMode();
   this.gizmo.transformFinish();
   try {
@@ -456,7 +456,7 @@ Stage.prototype.redo = function() {
 
 // functions for handling model transformations
 
-Stage.prototype.makeTranslateTransform = function(invertible) {
+Meshy.prototype.makeTranslateTransform = function(invertible) {
   if (this.dbg) console.log("make translate transform");
   var transform = new Transform("translate", this.model.getPosition());
   var _this = this;
@@ -476,7 +476,7 @@ Stage.prototype.makeTranslateTransform = function(invertible) {
   return transform;
 }
 
-Stage.prototype.makeFloorTransform = function(invertible) {
+Meshy.prototype.makeFloorTransform = function(invertible) {
   if (this.dbg) console.log("make floor transform");
   var transform = new Transform("floor", this.model.getPosition()), _this = this;
 
@@ -487,7 +487,7 @@ Stage.prototype.makeFloorTransform = function(invertible) {
   return transform;
 }
 
-Stage.prototype.makeRotateTransform = function(invertible) {
+Meshy.prototype.makeRotateTransform = function(invertible) {
   if (this.dbg) console.log("make rotate transform");
   var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
@@ -501,7 +501,7 @@ Stage.prototype.makeRotateTransform = function(invertible) {
   return transform;
 }
 
-Stage.prototype.makeScaleTransform = function(invertible) {
+Meshy.prototype.makeScaleTransform = function(invertible) {
   if (this.dbg) console.log("make scale transform");
   var transform = new Transform("scale", this.model.getScale()), _this = this;
 
@@ -522,21 +522,21 @@ Stage.prototype.makeScaleTransform = function(invertible) {
   return transform;
 }
 
-Stage.prototype.pushEdit = function(transform, onTransform) {
+Meshy.prototype.pushEdit = function(transform, onTransform) {
   if (transform && transform.invertible && !transform.noop()) {
     this.editStack.push(transform, onTransform);
   }
 }
 
 // called when a translation is in progress
-Stage.prototype.onTranslate = function() {
+Meshy.prototype.onTranslate = function() {
   if (this.dbg) console.log("translate");
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
 }
 // called on translation end
-Stage.prototype.onFinishTranslate = function() {
+Meshy.prototype.onFinishTranslate = function() {
   if (this.dbg) console.log("finish translate");
   if (this.currentTransform) this.currentTransform.end();
 
@@ -546,7 +546,7 @@ Stage.prototype.onFinishTranslate = function() {
   this.updatePosition();
 }
 
-Stage.prototype.onChangeRotationDegrees = function() {
+Meshy.prototype.onChangeRotationDegrees = function() {
   // translate rotation in degrees to rotation in radians
   this.rotation.copy(eulerRadNormalize(eulerDegToRad(this.rotationDeg)));
 
@@ -554,14 +554,14 @@ Stage.prototype.onChangeRotationDegrees = function() {
 }
 
 // called when a rotation is in progress
-Stage.prototype.onRotate = function() {
+Meshy.prototype.onRotate = function() {
   if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
   this.currentTransform.apply(this.rotation);
 }
 // called on rotation end
-Stage.prototype.onFinishRotate = function() {
+Meshy.prototype.onFinishRotate = function() {
   if (this.dbg) console.log("finish rotate");
   if (this.currentTransform) this.currentTransform.end();
 
@@ -576,14 +576,14 @@ Stage.prototype.onFinishRotate = function() {
 }
 
 // called when scale change is in progress
-Stage.prototype.onScaleByFactor = function() {
+Meshy.prototype.onScaleByFactor = function() {
   if (this.dbg) console.log("scale");
   if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
   this.currentTransform.apply(this.scale);
 }
 // called when scaling to size is in progress
-Stage.prototype.onScaleToSize = function() {
+Meshy.prototype.onScaleToSize = function() {
   // current size - changed dynamically via gui
   var size = this.size;
   // starting model size - only changes at the end of the transform
@@ -603,7 +603,7 @@ Stage.prototype.onScaleToSize = function() {
   this.onScaleByFactor();
 }
 // called on scale change end
-Stage.prototype.onFinishScaleByFactor = function() {
+Meshy.prototype.onFinishScaleByFactor = function() {
   if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
 
@@ -618,7 +618,7 @@ Stage.prototype.onFinishScaleByFactor = function() {
 
 // instantaneous transformations - autocenter and floor
 
-Stage.prototype.autoCenter = function(invertible) {
+Meshy.prototype.autoCenter = function(invertible) {
   var newCenter = this.calculateBuildPlateCenter();
   newCenter.z += this.model.getSize().z / 2;
   var translation = newCenter.sub(this.model.getCenter());
@@ -632,7 +632,7 @@ Stage.prototype.autoCenter = function(invertible) {
   this.updatePosition();
 }
 
-Stage.prototype.floor = function(invertible) {
+Meshy.prototype.floor = function(invertible) {
   if (!this.model) return;
 
   var transform = this.makeFloorTransform(invertible);
@@ -647,7 +647,7 @@ Stage.prototype.floor = function(invertible) {
 }
 
 // invoked when toggling the checkbox for snapping transformations to floor
-Stage.prototype.handleSnapTransformationToFloorState = function() {
+Meshy.prototype.handleSnapTransformationToFloorState = function() {
   var snap = this.snapTransformationsToFloor;
 
   // floor, but don't register the action as undoable
@@ -661,7 +661,7 @@ Stage.prototype.handleSnapTransformationToFloorState = function() {
 }
 
 // position/rotation/scale GUI-updating functions
-Stage.prototype.updatePosition = function() {
+Meshy.prototype.updatePosition = function() {
   if (!this.model) return;
 
   this.position.copy(this.model.getPosition());
@@ -670,7 +670,7 @@ Stage.prototype.updatePosition = function() {
   if (this.positionYController) this.positionYController.updateDisplay();
   if (this.positionZController) this.positionZController.updateDisplay();
 }
-Stage.prototype.updateRotation = function() {
+Meshy.prototype.updateRotation = function() {
   if (!this.model) return;
 
   this.rotation.copy(eulerRadNormalize(this.model.getRotation()));
@@ -680,7 +680,7 @@ Stage.prototype.updateRotation = function() {
   if (this.rotationYController) this.rotationYController.updateDisplay();
   if (this.rotationZController) this.rotationZController.updateDisplay();
 }
-Stage.prototype.updateScale = function() {
+Meshy.prototype.updateScale = function() {
   if (!this.model) return;
 
   this.scale.copy(this.model.getScale());
@@ -691,7 +691,7 @@ Stage.prototype.updateScale = function() {
 
   this.updateSize();
 }
-Stage.prototype.updateSize = function() {
+Meshy.prototype.updateSize = function() {
   if (!this.model) return;
 
   this.size.copy(this.model.getSize());
@@ -701,7 +701,7 @@ Stage.prototype.updateSize = function() {
   if (this.scaleToSizeZController) this.scaleToSizeZController.updateDisplay();
 }
 
-Stage.prototype.buildEditFolder = function() {
+Meshy.prototype.buildEditFolder = function() {
   this.clearFolder(this.editFolder);
 
   this.editFolder.add(this, "snapTransformationsToFloor").name("Snap to floor")
@@ -823,7 +823,7 @@ Stage.prototype.buildEditFolder = function() {
   this.editFolder.add(this, "flipNormals").name("Flip normals")
     .title("Flip mesh normals.");
 }
-Stage.prototype.scaleToMeasurement = function() {
+Meshy.prototype.scaleToMeasurement = function() {
   if (this.model) {
     var currentValue = this.model.getMeasuredValue(this.measurementToScale);
     if (currentValue) {
@@ -833,44 +833,44 @@ Stage.prototype.scaleToMeasurement = function() {
     }
   }
 }
-Stage.prototype.flipNormals = function() { if (this.model) this.model.flipNormals(); }
-Stage.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
-Stage.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
-Stage.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
-Stage.prototype.mLength = function() { this.startMeasurement("length"); }
-Stage.prototype.mAngle = function() { this.startMeasurement("angle"); }
-Stage.prototype.mCircle = function() { this.startMeasurement("circle"); }
-Stage.prototype.mCrossSectionX = function() { this.startMeasurement("crossSection","x"); }
-Stage.prototype.mCrossSectionY = function() { this.startMeasurement("crossSection","y"); }
-Stage.prototype.mCrossSectionZ = function() { this.startMeasurement("crossSection","z"); }
-Stage.prototype.startMeasurement = function(type, param) {
+Meshy.prototype.flipNormals = function() { if (this.model) this.model.flipNormals(); }
+Meshy.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
+Meshy.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
+Meshy.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }
+Meshy.prototype.mLength = function() { this.startMeasurement("length"); }
+Meshy.prototype.mAngle = function() { this.startMeasurement("angle"); }
+Meshy.prototype.mCircle = function() { this.startMeasurement("circle"); }
+Meshy.prototype.mCrossSectionX = function() { this.startMeasurement("crossSection","x"); }
+Meshy.prototype.mCrossSectionY = function() { this.startMeasurement("crossSection","y"); }
+Meshy.prototype.mCrossSectionZ = function() { this.startMeasurement("crossSection","z"); }
+Meshy.prototype.startMeasurement = function(type, param) {
   if (this.model) {
     this.model.activateMeasurement(type, param);
     this.buildScaleToMeasurementFolder();
   }
 }
-Stage.prototype.mDeactivate = function() {
+Meshy.prototype.mDeactivate = function() {
   if (this.model) this.model.deactivateMeasurement();
   if (this.scaleToMeasurementFolder) this.clearFolder(this.scaleToMeasurementFolder);
 }
-Stage.prototype.viewThickness = function() {
+Meshy.prototype.viewThickness = function() {
   if (this.model) this.model.viewThickness(this.thicknessThreshold);
 }
-Stage.prototype.clearThicknessView = function() {
+Meshy.prototype.clearThicknessView = function() {
   if (this.model) this.model.clearThicknessView();
 }
-Stage.prototype.generatePatch = function() {
+Meshy.prototype.generatePatch = function() {
   this.deactivateSliceMode();
   if (this.model) this.model.generatePatch();
 }
-Stage.prototype.acceptPatch = function() {
+Meshy.prototype.acceptPatch = function() {
   this.deactivateSliceMode();
   if (this.model) this.model.acceptPatch();
 }
-Stage.prototype.cancelPatch = function() {
+Meshy.prototype.cancelPatch = function() {
   if (this.model) this.model.cancelPatch();
 }
-Stage.prototype.generateSupports = function() {
+Meshy.prototype.generateSupports = function() {
   if (this.model) {
     if (this.supportRadius < this.lineWidth) {
       this.printout.warn("Support radius is lower than the planar resolution.");
@@ -889,11 +889,11 @@ Stage.prototype.generateSupports = function() {
     });
   }
 }
-Stage.prototype.removeSupports = function() {
+Meshy.prototype.removeSupports = function() {
   if (this.model) this.model.removeSupports();
 }
 // build support & slicing folder
-Stage.prototype.buildSupportSliceFolder = function() {
+Meshy.prototype.buildSupportSliceFolder = function() {
   var supportSliceFolder = this.supportSliceFolder;
   this.clearFolder(supportSliceFolder);
 
@@ -915,7 +915,7 @@ Stage.prototype.buildSupportSliceFolder = function() {
     this.buildSliceFolder(sliceFolder);
   }
 }
-Stage.prototype.buildSupportFolder = function(folder) {
+Meshy.prototype.buildSupportFolder = function(folder) {
   folder.add(this, "supportAngle", 0, 90).name("Angle")
     .title("Angle defining faces that need support.");
   folder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor")
@@ -935,7 +935,7 @@ Stage.prototype.buildSupportFolder = function(folder) {
   folder.add(this, "removeSupports").name("Remove supports")
     .title("Remove generated supports.");
 }
-Stage.prototype.buildSliceDisplayFolder = function(folder) {
+Meshy.prototype.buildSliceDisplayFolder = function(folder) {
   this.clearFolder(folder);
 
   if (this.sliceMode === Slicer.Modes.preview) {
@@ -952,7 +952,7 @@ Stage.prototype.buildSliceDisplayFolder = function(folder) {
       .title("Show infill if checked; default setting is false because infill makes the layers hard to see.");
   }
 }
-Stage.prototype.buildSliceFolder = function(folder) {
+Meshy.prototype.buildSliceFolder = function(folder) {
   this.clearFolder(folder);
 
   if (this.sliceModeOn) {
@@ -984,7 +984,7 @@ Stage.prototype.buildSliceFolder = function(folder) {
   else folder.add(this, "activateSliceMode").name("Slice mode on")
     .title("Turn slice mode on.");
 }
-Stage.prototype.buildLayerSettingsFolder = function(folder) {
+Meshy.prototype.buildLayerSettingsFolder = function(folder) {
   var sliceLayerSettingsFolder = folder.addFolder("Layer Settings", "Settings for computing layers.");
   this.clearFolder(sliceLayerSettingsFolder);
 
@@ -1012,7 +1012,7 @@ Stage.prototype.buildLayerSettingsFolder = function(folder) {
       .title("Update the layer parameters and recalculate as necessary.");
   }
 }
-Stage.prototype.buildRaftFolder = function(folder) {
+Meshy.prototype.buildRaftFolder = function(folder) {
   var sliceRaftFolder = folder.addFolder("Raft", "Settings for computing the raft.");
   this.clearFolder(sliceRaftFolder);
 
@@ -1045,7 +1045,7 @@ Stage.prototype.buildRaftFolder = function(folder) {
       .title("Update the raft parameters and recalculate as necessary.");
   }
 }
-Stage.prototype.buildGcodeFolder = function(folder) {
+Meshy.prototype.buildGcodeFolder = function(folder) {
   var gcodeFolder = folder.addFolder("G-code", "Settings for computing the G-code.");
   this.clearFolder(gcodeFolder);
 
@@ -1080,13 +1080,13 @@ Stage.prototype.buildGcodeFolder = function(folder) {
       .title("Generate g-code and save it to a file.");
   }
 }
-Stage.prototype.setSliceMode = function() {
+Meshy.prototype.setSliceMode = function() {
   if (this.model) {
     this.model.setSliceMode(this.sliceMode);
     this.buildSliceDisplayFolder(this.sliceDisplayFolder);
   }
 }
-Stage.prototype.updateSlicerDisplayParams = function() {
+Meshy.prototype.updateSlicerDisplayParams = function() {
   if (this.model) {
     this.model.updateSlicerParams({
       previewSliceMesh: this.slicePreviewModeSliceMesh,
@@ -1096,20 +1096,20 @@ Stage.prototype.updateSlicerDisplayParams = function() {
     this.setSliceLevel();
   }
 }
-Stage.prototype.updateSlicerParams = function() {
+Meshy.prototype.updateSlicerParams = function() {
   if (this.model) {
     this.model.updateSlicerParams(this.makeSlicerParams());
   }
   this.setSliceLevel();
 }
-Stage.prototype.activateSliceMode = function() {
+Meshy.prototype.activateSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = true;
     this.model.activateSliceMode(this.makeSlicerParams());
     this.buildSliceFolder(this.supportSliceFolder);
   }
 }
-Stage.prototype.makeSlicerParams = function() {
+Meshy.prototype.makeSlicerParams = function() {
   return {
     mode: this.sliceMode,
     axis: this.upAxis,
@@ -1140,7 +1140,7 @@ Stage.prototype.makeSlicerParams = function() {
     fullShowInfill: this.sliceFullModeShowInfill
   };
 }
-Stage.prototype.makeGcodeParams = function() {
+Meshy.prototype.makeGcodeParams = function() {
   return {
     filename: this.gcodeFilename,
     extension: this.gcodeExtension,
@@ -1157,24 +1157,24 @@ Stage.prototype.makeGcodeParams = function() {
     extruderPrecision: this.gcodeExtruderPrecision
   };
 }
-Stage.prototype.deactivateSliceMode = function() {
+Meshy.prototype.deactivateSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = false;
     this.buildSupportSliceFolder();
     this.model.deactivateSliceMode();
   }
 }
-Stage.prototype.setSliceLevel = function() {
+Meshy.prototype.setSliceLevel = function() {
   if (this.model) {
     this.model.setSliceLevel(this.currentSliceLevel);
   }
 }
-Stage.prototype.gcodeSave = function() {
+Meshy.prototype.gcodeSave = function() {
   if (this.model) {
     this.model.gcodeSave(this.makeGcodeParams());
   }
 }
-Stage.prototype.buildScaleToMeasurementFolder = function() {
+Meshy.prototype.buildScaleToMeasurementFolder = function() {
   this.clearFolder(this.scaleToMeasurementFolder);
   if (this.model) this.scalableMeasurements = this.model.getScalableMeasurements();
   if (this.scalableMeasurements && this.scalableMeasurements.length>0) {
@@ -1188,7 +1188,7 @@ Stage.prototype.buildScaleToMeasurementFolder = function() {
       .title("Scale the mesh.");
   }
 }
-Stage.prototype.clearFolder = function(folder) {
+Meshy.prototype.clearFolder = function(folder) {
   for (var i=folder.__controllers.length-1; i>=0; i--) {
     folder.remove(folder.__controllers[i]);
   }
@@ -1196,19 +1196,19 @@ Stage.prototype.clearFolder = function(folder) {
     folder.removeFolder(folder.__folders[folderName]);
   }
 }
-Stage.prototype.disableController = function(controller) {
+Meshy.prototype.disableController = function(controller) {
   if (!controller) return;
 
   controller.domElement.style.pointerEvents = "none";
   controller.domElement.style.opacity = 0.5;
 }
-Stage.prototype.enableController = function(controller) {
+Meshy.prototype.enableController = function(controller) {
   if (!controller) return;
 
   controller.domElement.style.pointerEvents = "";
   controller.domElement.style.opacity = "";
 }
-Stage.prototype.setFolderDisplayPrecision = function(folder) {
+Meshy.prototype.setFolderDisplayPrecision = function(folder) {
   for (var ci = 0; ci < folder.__controllers.length; ci++) {
     var controller = folder.__controllers[ci];
     // if number controller, set precision
@@ -1222,7 +1222,7 @@ Stage.prototype.setFolderDisplayPrecision = function(folder) {
     this.setFolderDisplayPrecision(folder.__folders[fkey]);
   }
 }
-Stage.prototype.scaleToRingSize = function() {
+Meshy.prototype.scaleToRingSize = function() {
   if (this.model &&
   this.model.measurement.active &&
   this.scalableMeasurements.includes("diameter")) {
@@ -1241,46 +1241,46 @@ Stage.prototype.scaleToRingSize = function() {
   }
 }
 
-Stage.prototype.toggleBuildVolume = function() {
+Meshy.prototype.toggleBuildVolume = function() {
   this.buildVolumeVisible = !this.buildVolumeVisible;
   this.setBuildVolumeState();
 }
-Stage.prototype.setBuildVolumeState = function() {
+Meshy.prototype.setBuildVolumeState = function() {
   var visible = this.buildVolumeVisible;
   this.scene.traverse(function(o) {
     if (o.name=="buildVolume") o.visible = visible;
   });
 }
-Stage.prototype.toggleGizmo = function() {
+Meshy.prototype.toggleGizmo = function() {
   if (!this.gizmo) return;
 
   var visible = this.gizmo.visible;
   this.gizmo.visible = !!this.model && !visible;
 }
-Stage.prototype.toggleCOM = function() {
+Meshy.prototype.toggleCOM = function() {
   if (this.model) {
     this.model.toggleCenterOfMass();
   }
 }
-Stage.prototype.toggleWireframe = function() {
+Meshy.prototype.toggleWireframe = function() {
   if (this.model) this.model.toggleWireframe();
 }
-Stage.prototype.toggleAxisWidget = function() {
+Meshy.prototype.toggleAxisWidget = function() {
   this.axisWidget.toggleVisibility();
 }
-Stage.prototype.setBackgroundColor = function() {
+Meshy.prototype.setBackgroundColor = function() {
   if (this.scene) this.scene.background.set(this.backgroundColor);
 }
-Stage.prototype.setMeshMaterial = function() {
+Meshy.prototype.setMeshMaterial = function() {
   if (this.model) this.model.setMeshMaterial(this.meshColor, this.meshRoughness, this.meshMetalness);
 }
-Stage.prototype.setWireframeMaterial = function() {
+Meshy.prototype.setWireframeMaterial = function() {
   if (this.model) this.model.setWireframeMaterial(this.wireframeColor);
 }
 
 // Initialize the viewport, set up everything with WebGL including the
 // axis widget.
-Stage.prototype.initViewport = function() {
+Meshy.prototype.initViewport = function() {
   var width, height;
   var _this = this;
 
@@ -1409,7 +1409,7 @@ Stage.prototype.initViewport = function() {
   }
 }
 
-Stage.prototype.calculateBuildVolumeBounds = function() {
+Meshy.prototype.calculateBuildVolumeBounds = function() {
   var size = this.buildVolumeSize;
   var x0, x1;
   var y0, y1;
@@ -1428,22 +1428,22 @@ Stage.prototype.calculateBuildVolumeBounds = function() {
   this.buildVolumeMax = new THREE.Vector3(x1, y1, z1);
 }
 
-Stage.prototype.calculateBuildVolumeCenter = function() {
+Meshy.prototype.calculateBuildVolumeCenter = function() {
   if (!this.buildVolumeMin || !this.buildVolumeMax) this.calculateBuildVolumeBounds();
 
   return this.buildVolumeMin.clone().add(this.buildVolumeMax).divideScalar(2);
 }
 
-Stage.prototype.calculateBuildPlateCenter = function() {
+Meshy.prototype.calculateBuildPlateCenter = function() {
   return this.calculateBuildVolumeCenter().setZ(0);
 }
 
-Stage.prototype.defaultCameraCenter = function() {
+Meshy.prototype.defaultCameraCenter = function() {
   return this.calculateBuildVolumeCenter().setZ(this.buildVolumeSize.z/8);
 }
 
 // Create the build volume.
-Stage.prototype.makeBuildVolume = function() {
+Meshy.prototype.makeBuildVolume = function() {
   removeMeshByName(this.scene, "buildVolume");
   removeMeshByName(this.scene, "buildVolumePlane");
 
@@ -1523,7 +1523,7 @@ Stage.prototype.makeBuildVolume = function() {
 }
 
 // Interface for the dat.gui button.
-Stage.prototype.import = function() {
+Meshy.prototype.import = function() {
   if (this.model) {
     this.printout.warn("A model is already loaded; delete the current model to import a new one.");
     return;
@@ -1541,7 +1541,7 @@ Stage.prototype.import = function() {
 
 // Called from HTML when the import button is clicked. Creates the Model
 // instance and tells it to load the geometry.
-Stage.prototype.handleFile = function(file) {
+Meshy.prototype.handleFile = function(file) {
   this.importingMeshName = file.name;
   this.importEnabled = false;
 
@@ -1569,7 +1569,7 @@ Stage.prototype.handleFile = function(file) {
   model.import(file, importParams, this.displayMesh.bind(this));
 };
 
-Stage.prototype.createModel = function(geometry) {
+Meshy.prototype.createModel = function(geometry) {
   this.model = new Model(
     geometry,
     this.scene,
@@ -1603,7 +1603,7 @@ Stage.prototype.createModel = function(geometry) {
 
 // todo: deprecate
 // Callback passed to model.import; puts the mesh into the viewport.
-Stage.prototype.displayMesh = function(success, model) {
+Meshy.prototype.displayMesh = function(success, model) {
   this.importEnabled = true;
 
   if (!success) {
@@ -1658,7 +1658,7 @@ Stage.prototype.displayMesh = function(success, model) {
 }
 
 // Interface for the dat.gui button. Saves the model.
-Stage.prototype.export = function(format) {
+Meshy.prototype.export = function(format) {
   if (!this.model) {
     this.printout.warn("No model to export.");
     return;
@@ -1669,7 +1669,7 @@ Stage.prototype.export = function(format) {
 
 // Interface for the dat.gui button. Completely removes the model and resets
 // everything to a clean state.
-Stage.prototype.delete = function() {
+Meshy.prototype.delete = function() {
   // it's necessary to clear file input box because it blocks importing
   // a model with the same name twice in a row
   this.fileInput.value = "";
@@ -1693,7 +1693,7 @@ Stage.prototype.delete = function() {
 }
 
 // Reposition the camera to look at the model.
-Stage.prototype.cameraToModel = function() {
+Meshy.prototype.cameraToModel = function() {
   if (!this.model) {
     this.printout.warn("No model to align camera.");
     return;

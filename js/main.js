@@ -1,5 +1,5 @@
 var debug; // todo: remove
-var stage = new Stage();
+var meshy = new Meshy();
 
 // Make the intro menu interactive.
 var introVisible = false;
