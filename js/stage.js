@@ -435,6 +435,7 @@ Stage.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Stage.prototype.undo = function() {
   this.deactivateSliceMode();
+  this.gizmo.transformFinish();
   try {
     this.editStack.undo();
   }
@@ -444,6 +445,7 @@ Stage.prototype.undo = function() {
 }
 Stage.prototype.redo = function() {
   this.deactivateSliceMode();
+  this.gizmo.transformFinish();
   try {
     this.editStack.redo();
   }
