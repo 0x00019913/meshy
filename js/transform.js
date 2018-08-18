@@ -21,7 +21,7 @@ function Transform(name, start) {
   this.lastVal = new this.valConstructor();
 
   // function used to modify the input value to onApply
-  this.rectify = null;
+  this.preprocess = null;
 
   // functions called on transform application and transform end
   this.onApply = null;
@@ -53,8 +53,8 @@ Object.assign(Transform.prototype, {
     // if target value is given, record it
     if (val !== undefined) this.targetVal.copy(val);
 
-    if (this.rectify && this.targetVal) {
-      this.targetVal.copy(this.rectify(this.targetVal));
+    if (this.preprocess && this.targetVal) {
+      this.targetVal.copy(this.preprocess(this.targetVal));
     }
 
     this.lastVal.copy(this.targetVal)
@@ -67,8 +67,8 @@ Object.assign(Transform.prototype, {
     if (this.startVal) {
       this.lastVal.copy(this.startVal);
 
-      if (this.rectify) {
-        this.lastVal.copy(this.rectify(this.lastVal));
+      if (this.preprocess) {
+        this.lastVal.copy(this.preprocess(this.lastVal));
       }
     }
 

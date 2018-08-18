@@ -461,7 +461,7 @@ Stage.prototype.makeTranslateTransform = function(invertible) {
   var transform = new Transform("translate", this.model.getPosition());
   var _this = this;
 
-  transform.rectify = function(pos) {
+  transform.preprocess = function(pos) {
     pos = pos.clone();
     // if snapping to floor, floor the model
     if (_this.snapTransformationsToFloor) {
@@ -801,14 +801,6 @@ Stage.prototype.buildEditFolder = function() {
     .title("Scale the ring.");
   ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
     .title("Turn off the measurement tool when not in use.");
-
-  var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
-  mirrorFolder.add(this, "mirrorX").name("Mirror on x")
-    .title("Mirror mesh on x axis.");
-  mirrorFolder.add(this, "mirrorY").name("Mirror on y")
-    .title("Mirror mesh on y axis.");
-  mirrorFolder.add(this, "mirrorZ").name("Mirror on z")
-    .title("Mirror mesh on z axis.");
 
   var floorFolder = this.editFolder.addFolder("Floor", "Floor the mesh on a given axis.");
   floorFolder.add(this, "floorX").name("Floor to x")
