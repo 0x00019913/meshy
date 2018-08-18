@@ -81,7 +81,7 @@ Stage = function() {
   // standard notifications
   this.printout.log("Meshy is freely available under the MIT license. Thanks for using!");
   this.printout.log("Supported import formats: OBJ, STL.");
-  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe), B (build volume)");
+  this.printout.log("Controls: LMB (turn), MMB (pan/zoom), RMB (pan), F (center on model), C (center of mass), W (wireframe), B (build volume), G (gizmo)");
 
   // undo stack
   this.editStack = new EditStack(this.printout);
@@ -127,7 +127,9 @@ Stage.prototype.generateUI = function() {
 
   displayFolder.add(this, "displayPrecision", 0, 7).step(1).name("Display precision")
     .onChange(this.setDisplayPrecision.bind(this))
-    .title("Maximal number of decimal places for displaying floating-point values.")
+    .title("Maximal number of decimal places for displaying floating-point values.");
+  displayFolder.add(this, "toggleGizmo").name("Toggle gizmo")
+    .title("Toggle transform gizmo visibility.");
   displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget")
     .title("Toggle axis widget visibility.");
   displayFolder.add(this, "toggleWireframe").name("Toggle wireframe")
@@ -347,8 +349,11 @@ Stage.prototype.generateUI = function() {
   this.gizmoTranslateOrthogonalHandleHeight = 4,
   this.gizmoTranslateOrthogonalHandleThickness = 2,
   this.gizmoTranslateOrthogonalHandleInset = 2,
+  this.gizmoTranslateOrthogonalHandleOffset =
+    this.gizmoRotateOrthogonalHandleOuterRadius + this.gizmoSpacing + 3;
 
   this.gizmoScaleFactor = 0.003;
+  this.gizmoColliderInflation = 0.5;
 
   var _this = this;
 
@@ -375,8 +380,10 @@ Stage.prototype.generateUI = function() {
     translateOrthogonalHandleHeight: this.gizmoTranslateOrthogonalHandleHeight,
     translateOrthogonalHandleThickness: this.gizmoTranslateOrthogonalHandleThickness,
     translateOrthogonalHandleInset: this.gizmoTranslateOrthogonalHandleInset,
+    translateOrthogonalHandleOffset: this.gizmoTranslateOrthogonalHandleOffset,
 
     scaleFactor: this.gizmoScaleFactor,
+    colliderInflation: this.gizmoColliderInflation,
 
     onTransform: function() { _this.controls.disable(); },
     onFinishTransform: function() { _this.controls.enable(); },
@@ -397,7 +404,8 @@ Stage.prototype.generateUI = function() {
     onFinishScale: this.onFinishScaleByFactor.bind(this)
   });
 
-  this.gizmo.position.copy(this.calculateBuildPlateCenter());
+  this.gizmo.visible = false;
+  //this.gizmo.position.copy(this.calculateBuildPlateCenter());
 
   this.gizmoScene.add(this.gizmo);
 
@@ -524,7 +532,6 @@ Stage.prototype.onTranslate = function() {
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
-  this.updatePosition();
 }
 // called on translation end
 Stage.prototype.onFinishTranslate = function() {
@@ -1250,6 +1257,12 @@ Stage.prototype.setBuildVolumeState = function() {
     if (o.name=="buildVolume") o.visible = visible;
   });
 }
+Stage.prototype.toggleGizmo = function() {
+  if (!this.gizmo) return;
+
+  var visible = this.gizmo.visible;
+  this.gizmo.visible = !!this.model && !visible;
+}
 Stage.prototype.toggleCOM = function() {
   if (this.model) {
     this.model.toggleCenterOfMass();
@@ -1371,6 +1384,7 @@ Stage.prototype.initViewport = function() {
       else if (k=="c") _this.toggleCOM();
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
+      else if (k=="g") _this.toggleGizmo();
       else if (e.keyCode === 27) _this.mDeactivate();
       else caught = false;
     }
@@ -1589,8 +1603,11 @@ Stage.prototype.createModel = function(geometry) {
 
   this.setMeshMaterial();
   this.updateUI();
+
+  this.gizmo.visible = true;
 }
 
+// todo: deprecate
 // Callback passed to model.import; puts the mesh into the viewport.
 Stage.prototype.displayMesh = function(success, model) {
   this.importEnabled = true;
@@ -1676,6 +1693,7 @@ Stage.prototype.delete = function() {
   this.model = null;
   this.editStack.clear();
   this.clearFolder(this.editFolder);
+  this.gizmo.visible = false;
 
   this.printout.log("Model deleted.");
 }

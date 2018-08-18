@@ -4,22 +4,6 @@ var Gizmo = (function() {
     return axis + '_' + type;
   }
 
-  function parseHandleName(name) {
-    var split = name.split('_');
-    var typestr = split[1];
-    var types = Gizmo.HandleTypes;
-    var type = types.none;
-
-    if (typestr === types.translate) type = types.translate;
-    else if (typestr === types.rotate) type = types.rotate;
-    else if (typestr === types.scale) type = types.scale;
-
-    return {
-      type: type,
-      axis: split[0]
-    };
-  }
-
   // clamp a number to two boundary values
   function clamp(x, minVal, maxVal) {
     if (x < minVal) x = minVal;
@@ -38,7 +22,7 @@ var Gizmo = (function() {
     this.up = camera.up.clone();
     this.domElement = domElement !== undefined ? domElement : document;
 
-    this.visible = true; // todo: back to false
+    this.visible = true;
 
     // if some/all params are not provided, set defaults
     this.params = params || {};
@@ -77,6 +61,10 @@ var Gizmo = (function() {
       metalness: 0.2,
       transparent: true,
       opacity: this.opacityInactive
+    });
+
+    this.colliderMaterial = new THREE.MeshBasicMaterial({
+      visible: false
     });
 
     // clone base material and give it the appropriate color
@@ -137,6 +125,7 @@ var Gizmo = (function() {
     this.handles[Gizmo.HandleTypes.translate] = {};
     this.handles[Gizmo.HandleTypes.rotate] = {};
     this.handles[Gizmo.HandleTypes.scale] = {};
+    this.colliders = [];
 
     this.makeHandles();
 
@@ -213,8 +202,10 @@ var Gizmo = (function() {
       setProp("translateOrthogonalHandleHeight", 4);
       setProp("translateOrthogonalHandleThickness", 2);
       setProp("translateOrthogonalHandleInset", 2);
+      setProp("translateOrthogonalHandleOffset", 27);
 
       setProp("scaleFactor", 0.003);
+      setProp("colliderInflation", 0.5);
 
       // if params object doesn't contain a property, set it
       function setProp(name, val) {
@@ -222,29 +213,63 @@ var Gizmo = (function() {
       }
     },
 
+    makeHandleAndCollider: function(type, axis, material) {
+      var handle = this.makeHandle(type, axis, material);
+      var collider;
+
+      if (this.params.colliderInflation) {
+        collider = this.makeCollider(type, axis);
+      }
+      else {
+        collider = handle;
+        this.colliders.push(collider);
+      }
+
+      this.handles[type][axis] = handle;
+      this.colliders.push(collider);
+
+      // link handles and corresponding colliders
+      handle.userData.collider = collider;
+      collider.userData.handle = handle;
+    },
+
     makeHandle: function(type, axis, material) {
+      return this.makeMesh(type, axis, false, material);
+    },
+
+    makeCollider: function(type, axis) {
+      return this.makeMesh(type, axis, true);
+    },
+
+    makeMesh: function(type, axis, collider, material) {
+      material = collider ? this.colliderMaterial : material.clone();
+
       var geo;
+      var d = collider ? this.params.colliderInflation : 0;
+      var d2 = d * 2;
 
       if (type === Gizmo.HandleTypes.translate) {
         if (axis === "o") {
-          var w = this.params.translateOrthogonalHandleWidth;
-          var h = this.params.translateOrthogonalHandleHeight;
+          var w = this.params.translateOrthogonalHandleWidth + d2;
+          var h = this.params.translateOrthogonalHandleHeight + d2;
           var t = this.params.translateOrthogonalHandleThickness;
-          var i = this.params.translateOrthogonalHandleInset;
+          var i = this.params.translateOrthogonalHandleInset + d;
+          var o = this.params.translateOrthogonalHandleOffset - d;
+
           var bgeo0 = new ChevronBufferGeometry(w, h, t, i);
-          bgeo0.translate(0, 0, 25);
+          bgeo0.translate(0, 0, o);
           bgeo0.rotateY(Math.PI / 4);
 
           var bgeo1 = new ChevronBufferGeometry(w, h, t, i);
-          bgeo1.translate(0, 0, 25);
+          bgeo1.translate(0, 0, o);
           bgeo1.rotateY(Math.PI * 3 / 4);
 
           var bgeo2 = new ChevronBufferGeometry(w, h, t, i);
-          bgeo2.translate(0, 0, 25);
+          bgeo2.translate(0, 0, o);
           bgeo2.rotateY(Math.PI * 5 / 4);
 
           var bgeo3 = new ChevronBufferGeometry(w, h, t, i);
-          bgeo3.translate(0, 0, 25);
+          bgeo3.translate(0, 0, o);
           bgeo3.rotateY(Math.PI * 7 / 4);
 
           var geo0 = new THREE.Geometry().fromBufferGeometry(bgeo0);
@@ -256,8 +281,8 @@ var Gizmo = (function() {
         }
         else {
           geo = new THREE.ConeBufferGeometry(
-            this.params.translateHandleRadius,
-            this.params.translateHandleHeight,
+            this.params.translateHandleRadius + d,
+            this.params.translateHandleHeight + d,
             this.params.translateHandleRadialSegments
           );
         }
@@ -272,100 +297,104 @@ var Gizmo = (function() {
         }
 
         geo = new PipeBufferGeometry(
-          outerRadius,
-          outerRadius - this.params.rotateHandleWidth,
-          this.params.rotateHandleHeight,
+          outerRadius + d,
+          outerRadius - this.params.rotateHandleWidth - d,
+          this.params.rotateHandleHeight + d2,
           this.params.rotateHandleRadialSegments
         );
       }
       else if (type === Gizmo.HandleTypes.scale) {
         if (axis === "o") {
           geo = new THREE.SphereBufferGeometry(
-            this.params.scaleOrthogonalHandleRadius,
+            this.params.scaleOrthogonalHandleRadius + d,
             this.params.scaleOrthogonalHandleWidthSegments,
             this.params.scaleOrthogonalHandleHeightSegments
           );
         }
         else {
           geo = new THREE.CylinderBufferGeometry(
-            this.params.scaleHandleRadius,
-            this.params.scaleHandleRadius,
-            this.params.scaleHandleHeight,
+            this.params.scaleHandleRadius + d,
+            this.params.scaleHandleRadius + d,
+            this.params.scaleHandleHeight + d2,
             this.params.scaleHandleRadialSegments
           );
         }
       }
       else return;
 
-      var handle = new THREE.Mesh(geo, material.clone());
+      var mesh = new THREE.Mesh(geo, material);
 
-      if (type === Gizmo.HandleTypes.translate) {
-        handle.position[axis] = this.params.translateHandleOffset;
-      }
-      else if (type === Gizmo.HandleTypes.scale) {
-        handle.position[axis] = this.params.scaleHandleOffset;
+      // if axis-oriented handles, axis-shift them if necessary
+      if (axis !== "o") {
+        if (type === Gizmo.HandleTypes.translate) {
+          mesh.position[axis] = this.params.translateHandleOffset + d;
+        }
+        else if (type === Gizmo.HandleTypes.scale) {
+          mesh.position[axis] = this.params.scaleHandleOffset;
+        }
       }
 
       // point the mesh in the right direction
-      if (axis === "x") handle.rotation.z = -Math.PI / 2;
-      else if (axis === "z") handle.rotation.x = Math.PI / 2;
+      if (axis === "x") mesh.rotation.z = -Math.PI / 2;
+      else if (axis === "z") mesh.rotation.x = Math.PI / 2;
 
       // add the mesh to the appropriate handle group
-      if (axis === "o") this.handleGroups.orthogonal.add(handle);
-      else this.handleGroups[type].add(handle);
+      if (axis === "o") this.handleGroups.orthogonal.add(mesh);
+      else this.handleGroups[type].add(mesh);
 
-      // add the mesh to the handles collection
-      this.handles[type][axis] = handle;
-      handle.userData.enabled = true;
-
-      // rotate the orthogonal handles' geometry to face up on the z axis so
-      // that the lookat function works correctly
-      if (axis === "o") {
-        /*handle.rotation.x = Math.PI/2;
-        handle.updateMatrix();
-        handle.geometry.applyMatrix(handle.matrix);
-        handle.rotation.x = 0;
-        handle.updateMatrix();*/
+      // store references from handles to colliders and vice versa
+      if (collider) {
+        mesh.userData = {
+          handle: null
+        };
+      }
+      else {
+        mesh.userData = {
+          type: type,
+          axis: axis,
+          collider: null,
+          enabled: true
+        };
       }
 
-      handle.name = makeHandleName(axis, type);
+      mesh.name = makeHandleName(axis, type);
 
-      return handle;
+      return mesh;
     },
 
     makeHandles: function() {
       // translate handles
 
       // x translation
-      this.makeHandle(Gizmo.HandleTypes.translate, "x", this.materials.x);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.translate, "x", this.materials.x);
       // y translation
-      this.makeHandle(Gizmo.HandleTypes.translate, "y", this.materials.y);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.translate, "y", this.materials.y);
       // z translation
-      this.makeHandle(Gizmo.HandleTypes.translate, "z", this.materials.z);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.translate, "z", this.materials.z);
       // o translation
-      this.makeHandle(Gizmo.HandleTypes.translate, "o", this.materials.o);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.translate, "o", this.materials.o);
 
       // rotate handles
 
       // x rotation
-      this.makeHandle(Gizmo.HandleTypes.rotate, "x", this.materials.x);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.rotate, "x", this.materials.x);
       // y rotation
-      this.makeHandle(Gizmo.HandleTypes.rotate, "y", this.materials.y);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.rotate, "y", this.materials.y);
       // z rotation
-      this.makeHandle(Gizmo.HandleTypes.rotate, "z", this.materials.z);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.rotate, "z", this.materials.z);
       // o rotation
-      this.makeHandle(Gizmo.HandleTypes.rotate, "o", this.materials.o);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.rotate, "o", this.materials.o);
 
       // scale handles
 
       // x scale
-      this.makeHandle(Gizmo.HandleTypes.scale, "x", this.materials.x);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.scale, "x", this.materials.x);
       // y scale
-      this.makeHandle(Gizmo.HandleTypes.scale, "y", this.materials.y);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.scale, "y", this.materials.y);
       // z scale
-      this.makeHandle(Gizmo.HandleTypes.scale, "z", this.materials.z);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.scale, "z", this.materials.z);
       // o scale
-      this.makeHandle(Gizmo.HandleTypes.scale, "o", this.materials.o);
+      this.makeHandleAndCollider(Gizmo.HandleTypes.scale, "o", this.materials.o);
     },
 
     update: function(position, rotation, scale) {
@@ -400,6 +429,12 @@ var Gizmo = (function() {
     },
 
     mousemove: function(pointer) {
+      if (!this.visible) {
+        this.transformFinish();
+
+        return;
+      }
+
       this.raycaster.setFromCamera(pointer.coords, this.camera);
       this.ctrlKey = pointer.ctrlKey;
       this.shiftKey = pointer.shiftKey;
@@ -412,25 +447,28 @@ var Gizmo = (function() {
       else {
         var raycaster = this.raycaster;
 
-        var intersections = raycaster.intersectObjects(this.children, true);
+        var intersections = raycaster.intersectObjects(this.colliders, true);
 
-        // intersecting some handle
+        // intersecting some collider
         if (intersections.length > 0) {
           var dist = Infinity;
-          var handle = null;
+          var collider = null;
 
           for (var i = 0; i < intersections.length; i++) {
             var intersection = intersections[i];
             var object = intersection.object;
+            var enabled = object.userData.handle.userData.enabled;
 
-            if (intersection.distance < dist && object.userData.enabled) {
+            if (intersection.distance < dist && enabled) {
               dist = intersection.distance;
-              handle = object;
+              collider = object;
               this.activePoint = intersection.point;
             }
           }
 
-          if (handle !== null) {
+          if (collider !== null) {
+            var handle = collider.userData.handle;
+
             if (this.activeHandle !== handle) this.deactivateHandle();
             this.activateHandle(handle);
           }
@@ -450,12 +488,12 @@ var Gizmo = (function() {
       if (handle !== null) {
         if (this.params.onTransform) this.params.onTransform();
 
-        var nameParse = parseHandleName(handle.name);
-        var type = nameParse.type;
-        var axis = nameParse.axis;
+        var handleData = handle.userData
+        var type = handleData.type;
+        var axis = handleData.axis;
 
-        this.transformType = nameParse.type;
-        this.transformAxis = nameParse.axis;
+        this.transformType = type;
+        this.transformAxis = axis;
 
         if (type === Gizmo.HandleTypes.translate) {
           this.transformStart = this.params.getPosition().clone();
@@ -477,6 +515,8 @@ var Gizmo = (function() {
 
     // with a transform currently active, handles the effect of a mouse move
     transformmove: function() {
+      if (this.activePoint === null) return;
+
       var type = this.transformType;
       var axis = this.transformAxis;
 
@@ -487,11 +527,21 @@ var Gizmo = (function() {
       // if plane transform, get the projected position of the cursor in the
       // transform plane
       if (planeTransform) {
-        var normal = this.transformDirection();
+        // normal to the plane transform:
+        // if translating but one axis is disabled, set normal to that axis;
+        // else, just use the default normal
+        var normal = new THREE.Vector3();
+        if (type === Gizmo.HandleTypes.translate && axis === "o") {
+          if (!this.handleEnabled(type, "x")) normal.set(1, 0, 0);
+          else if (!this.handleEnabled(type, "y")) normal.set(0, 1, 0);
+          else if (!this.handleEnabled(type, "z")) normal.set(0, 0, 1);
+          else normal.copy(this.transformDirection());
+        }
+        else normal.copy(this.transformDirection());
 
         var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, this.activePoint);
-
         var cursor = this.raycaster.ray.intersectPlane(plane);
+
         if (cursor) {
           var d = cursor.clone().sub(this.position);
 
@@ -524,12 +574,20 @@ var Gizmo = (function() {
             var up = normal.clone().cross(right).normalize();
 
             var factor = Math.exp(d.dot(up) / this.params.scaleHandleOffset);
+
+            // if ctrl key, round factor to powers of 2
+            if (this.ctrlKey) factor = roundToPowerOf2(factor);
+
             var scale = this.transformStart.clone().multiplyScalar(factor);
             this.params.setScale(scale);
             this.params.onScale();
           }
           else if (type === Gizmo.HandleTypes.translate) {
             var shift = cursor.clone().sub(this.activePoint);
+
+            // if ctrl key, snap to integer values
+            shift.round();
+
             this.params.setPosition(this.transformStart.clone().add(shift));
             this.params.onTranslate();
           }
@@ -558,17 +616,37 @@ var Gizmo = (function() {
         var shift = v0.clone().sub(p0);
 
         if (type === Gizmo.HandleTypes.translate) {
+          // if ctrl key, snap to integer values
+          if (this.ctrlKey) shift.round();
+
           this.params.setPosition(this.transformStart.clone().add(shift));
           this.params.onTranslate();
         }
         else if (type === Gizmo.HandleTypes.scale) {
           var pos = this.params.getPosition();
-          var factor = pos.distanceTo(v0) / pos.distanceTo(p0);
           var scale = this.transformStart.clone();
+          var factor = pos.distanceTo(v0) / pos.distanceTo(p0);
+
+          if (factor <= 0) factor = 1;
+
+          // if ctrl key, round factor to powers of 2
+          if (this.ctrlKey) factor = roundToPowerOf2(factor);
+
           scale[axis] *= factor;
           this.params.setScale(scale);
           this.params.onScale();
         }
+      }
+
+      function roundToPowerOf2(x) {
+        return Math.pow(2, Math.round(Math.log2(x)));
+      }
+
+      function roundVectorToPowerOf2(v) {
+        v.x = Math.pow(2, Math.round(Math.log2(v.x)));
+        v.y = Math.pow(2, Math.round(Math.log2(v.y)));
+        v.z = Math.pow(2, Math.round(Math.log2(v.z)));
+        return v;
       }
     },
 
@@ -582,6 +660,7 @@ var Gizmo = (function() {
       else if (this.transformType === Gizmo.HandleTypes.rotate) {
         if (this.params.onFinishRotate) this.params.onFinishRotate();
       }
+      else return;
 
       this.transformType = Gizmo.HandleTypes.none;
       this.transformAxis = "";
@@ -612,7 +691,7 @@ var Gizmo = (function() {
     },
 
     activateHandle: function(handle) {
-      var axis = parseHandleName(handle.name).axis;
+      var axis = handle.userData.axis;
       handle.material.color = this.colors[axis].active;
       handle.material.opacity = this.opacityActive;
 
@@ -623,7 +702,7 @@ var Gizmo = (function() {
       var handle = this.activeHandle;
       if (handle === null) return;
 
-      var axis = parseHandleName(handle.name).axis;
+      var axis = handle.userData.axis;
 
       handle.material.color = this.colors[axis].inactive;
       handle.material.opacity = this.opacityInactive;
@@ -644,6 +723,10 @@ var Gizmo = (function() {
 
       handle.userData.enabled = true;
       handle.material.color = this.colors[axis].inactive;
+    },
+
+    handleEnabled: function(type, axis) {
+      return this.handles[type][axis].userData.enabled;
     }
 
   });
