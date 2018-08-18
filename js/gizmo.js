@@ -27,9 +27,9 @@ var Gizmo = (function() {
     return x;
   }
   // compute acos, but clamp the input
-  function acos(a) {
-    return Math.acos(clamp(a, -1, 1));
-  }
+  function acos(a) { return Math.acos(clamp(a, -1, 1)); }
+  // compute asin, but clamp the input
+  function asin(a) { return Math.asin(clamp(a, -1, 1)); }
 
   function Gizmo(camera, domElement, params) {
     THREE.Object3D.call(this);
@@ -126,6 +126,7 @@ var Gizmo = (function() {
     // special group for orthogonal handles because they don't need to be
     // transformed with the rest
     this.handleGroups.orthogonal = new THREE.Group();
+    this.handleGroups.orthogonal.matrixAutoUpdate = false;
 
     this.add(this.handleGroups.translate);
     this.add(this.handleGroups.rotate);
@@ -208,6 +209,10 @@ var Gizmo = (function() {
       setProp("translateHandleHeight", 6);
       setProp("translateHandleRadialSegments", 32);
       setProp("translateHandleOffset", 22.15);
+      setProp("translateOrthogonalHandleWidth", 8);
+      setProp("translateOrthogonalHandleHeight", 4);
+      setProp("translateOrthogonalHandleThickness", 2);
+      setProp("translateOrthogonalHandleInset", 2);
 
       setProp("scaleFactor", 0.003);
 
@@ -221,11 +226,41 @@ var Gizmo = (function() {
       var geo;
 
       if (type === Gizmo.HandleTypes.translate) {
-        geo = new THREE.ConeBufferGeometry(
-          this.params.translateHandleRadius,
-          this.params.translateHandleHeight,
-          this.params.translateHandleRadialSegments
-        );
+        if (axis === "o") {
+          var w = this.params.translateOrthogonalHandleWidth;
+          var h = this.params.translateOrthogonalHandleHeight;
+          var t = this.params.translateOrthogonalHandleThickness;
+          var i = this.params.translateOrthogonalHandleInset;
+          var bgeo0 = new ChevronBufferGeometry(w, h, t, i);
+          bgeo0.translate(0, 0, 25);
+          bgeo0.rotateY(Math.PI / 4);
+
+          var bgeo1 = new ChevronBufferGeometry(w, h, t, i);
+          bgeo1.translate(0, 0, 25);
+          bgeo1.rotateY(Math.PI * 3 / 4);
+
+          var bgeo2 = new ChevronBufferGeometry(w, h, t, i);
+          bgeo2.translate(0, 0, 25);
+          bgeo2.rotateY(Math.PI * 5 / 4);
+
+          var bgeo3 = new ChevronBufferGeometry(w, h, t, i);
+          bgeo3.translate(0, 0, 25);
+          bgeo3.rotateY(Math.PI * 7 / 4);
+
+          var geo0 = new THREE.Geometry().fromBufferGeometry(bgeo0);
+          geo0.merge(new THREE.Geometry().fromBufferGeometry(bgeo1));
+          geo0.merge(new THREE.Geometry().fromBufferGeometry(bgeo2));
+          geo0.merge(new THREE.Geometry().fromBufferGeometry(bgeo3));
+
+          geo = new THREE.BufferGeometry().fromGeometry(geo0);
+        }
+        else {
+          geo = new THREE.ConeBufferGeometry(
+            this.params.translateHandleRadius,
+            this.params.translateHandleHeight,
+            this.params.translateHandleRadialSegments
+          );
+        }
       }
       else if (type === Gizmo.HandleTypes.rotate) {
         var outerRadius;
@@ -286,11 +321,11 @@ var Gizmo = (function() {
       // rotate the orthogonal handles' geometry to face up on the z axis so
       // that the lookat function works correctly
       if (axis === "o") {
-        handle.rotation.x = Math.PI/2;
+        /*handle.rotation.x = Math.PI/2;
         handle.updateMatrix();
         handle.geometry.applyMatrix(handle.matrix);
         handle.rotation.x = 0;
-        handle.updateMatrix();
+        handle.updateMatrix();*/
       }
 
       handle.name = makeHandleName(axis, type);
@@ -307,6 +342,8 @@ var Gizmo = (function() {
       this.makeHandle(Gizmo.HandleTypes.translate, "y", this.materials.y);
       // z translation
       this.makeHandle(Gizmo.HandleTypes.translate, "z", this.materials.z);
+      // o translation
+      this.makeHandle(Gizmo.HandleTypes.translate, "o", this.materials.o);
 
       // rotate handles
 
@@ -332,9 +369,21 @@ var Gizmo = (function() {
     },
 
     update: function(position, rotation, scale) {
+      // camera position in object space
       var camPosProjected = this.camera.position.clone().sub(this.position);
-      this.handleGroups.orthogonal.lookAt(camPosProjected);
+      // get the camera's basis vectors
+      var xc = new THREE.Vector3(), yc = xc.clone(), zc = xc.clone();
+      this.camera.matrix.extractBasis(xc, yc, zc);
 
+      // orthogonal handle group initially points in y direction and lies in xy
+      // plane; orient it so that y now point at the camera and z points up in
+      // camera space
+      var xp = camPosProjected.clone().cross(yc).normalize();
+      var yp = camPosProjected.normalize();
+      var zp = xp.clone().cross(yp);
+      this.handleGroups.orthogonal.matrix.makeBasis(xp, yp, zp);
+
+      // scale gizmo proportionally to its distance to the camera
       var distanceToCamera = this.position.distanceTo(this.camera.position);
       this.scale.setScalar(this.params.scaleFactor * distanceToCamera);
 
@@ -342,10 +391,9 @@ var Gizmo = (function() {
       if (position !== undefined) {
         this.position.copy(position);
       }
-      // if new rotation given, set rotation of cardinal rotate handles and
-      // scale handles to this rotation
+      // if new rotation given, set rotation of cardinal scale handles to this
+      // rotation
       if (rotation !== undefined) {
-        //this.handleGroups[Gizmo.HandleTypes.rotate].rotation.copy(rotation);
         this.handleGroups[Gizmo.HandleTypes.scale].rotation.copy(rotation);
       }
       // don't do anything for scale
@@ -440,15 +488,14 @@ var Gizmo = (function() {
       // transform plane
       if (planeTransform) {
         var normal = this.transformDirection();
-        var center = this.position;
 
-        var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, center);
+        var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, this.activePoint);
 
         var cursor = this.raycaster.ray.intersectPlane(plane);
         if (cursor) {
-          var d = cursor.clone().sub(center);
+          var d = cursor.clone().sub(this.position);
 
-          var v0 = this.activePoint.clone().sub(center).normalize();
+          var v0 = this.activePoint.clone().sub(this.position).normalize();
           var v1 = d.clone().normalize();
 
           // handle rotation, normal or orthogonal
@@ -480,6 +527,11 @@ var Gizmo = (function() {
             var scale = this.transformStart.clone().multiplyScalar(factor);
             this.params.setScale(scale);
             this.params.onScale();
+          }
+          else if (type === Gizmo.HandleTypes.translate) {
+            var shift = cursor.clone().sub(this.activePoint);
+            this.params.setPosition(this.transformStart.clone().add(shift));
+            this.params.onTranslate();
           }
         }
       }

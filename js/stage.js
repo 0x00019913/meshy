@@ -343,6 +343,11 @@ Stage.prototype.generateUI = function() {
   this.gizmoTranslateHandleOffset =
     gizmoEdge + this.gizmoSpacing + this.gizmoTranslateHandleHeight / 2;
 
+  this.gizmoTranslateOrthogonalHandleWidth = 8,
+  this.gizmoTranslateOrthogonalHandleHeight = 4,
+  this.gizmoTranslateOrthogonalHandleThickness = 2,
+  this.gizmoTranslateOrthogonalHandleInset = 2,
+
   this.gizmoScaleFactor = 0.003;
 
   var _this = this;
@@ -366,6 +371,10 @@ Stage.prototype.generateUI = function() {
     translateHandleHeight: this.gizmoTranslateHandleHeight,
     translateHandleRadialSegments: this.gizmoTranslateHandleRadialSegments,
     translateHandleOffset: this.gizmoTranslateHandleOffset,
+    translateOrthogonalHandleWidth: this.gizmoTranslateOrthogonalHandleWidth,
+    translateOrthogonalHandleHeight: this.gizmoTranslateOrthogonalHandleHeight,
+    translateOrthogonalHandleThickness: this.gizmoTranslateOrthogonalHandleThickness,
+    translateOrthogonalHandleInset: this.gizmoTranslateOrthogonalHandleInset,
 
     scaleFactor: this.gizmoScaleFactor,
 
@@ -451,10 +460,7 @@ Stage.prototype.makeTranslateTransform = function(invertible) {
     return pos;
   }
   transform.onApply = function(pos) { _this.model.translate(pos); };
-  transform.onEnd = function() {
-    _this.model.translateEnd();
-    //_this.position.copy(this.getLastVal());
-  };
+  transform.onEnd = function() { _this.model.translateEnd(); };
   transform.invertible = invertible;
 
   return transform;
