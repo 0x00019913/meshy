@@ -340,7 +340,7 @@ Stage.prototype.generateUI = function() {
   gizmoEdge = this.gizmoRotateOrthogonalHandleOuterRadius;
 
   this.gizmoTranslateHandleRadius = 1.5;
-  this.gizmoTranslateHandleHeight = 6.0;
+  this.gizmoTranslateHandleHeight = 7.5;
   this.gizmoTranslateHandleRadialSegments = 32;
   this.gizmoTranslateHandleOffset =
     gizmoEdge + this.gizmoSpacing + this.gizmoTranslateHandleHeight / 2;
