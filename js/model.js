@@ -55,6 +55,7 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   geometry.mergeVertices();
   this.makeBaseMesh(geometry);
   this.resetFaceColors();
+  this.resetVertexColors();
   this.resetGeometryColors();
   this.computeBounds();
   this.shiftBaseGeometryToOrigin();
@@ -368,21 +369,39 @@ Model.prototype.floor = function(axis) {
   this.translate(translation);
 }
 
-Model.prototype.center = function(v) {
-  if (v === undefined) center = new THREE.Vector3();
+// mirror the geometry on an axis
+// NB: assumes that the geometry is centered on 0
+Model.prototype.mirror = function(axis) {
+  var scale = new THREE.Vector3(1, 1, 1);
+  scale[axis] = -1;
+  var geo = this.baseMesh.geometry;
 
-  var translation = v.clone().sub(this.getCenter());
-  this.translate(translation);
-}
+  // reflect each vertex across 0
+  for (var v = 0; v < geo.vertices.length; v++) {
+    geo.vertices[v].multiply(scale);
+  }
 
-// floor on one axis after centering on the other two
-Model.prototype.autoCenter = function(v, axis) {
-  if (v === undefined) center = new THREE.Vector3();
-  if (axis === undefined) axis = "z";
+  for (var f = 0; f < geo.faces.length; f++) {
+    var face = geo.faces[f];
 
-  var translation = v.clone().sub(this.getCenter());
-  translation[axis] = -this.min[axis];
-  this.translate(translation);
+    // flip winding order on each face
+    var tmp = face.a;
+    face.a = face.b;
+    face.b = tmp;
+
+    // flip face normal on the axis
+    face.normal.multiply(scale);
+
+    // also flip vertex normals if present
+    if (face.vertexNormals) {
+      for (var n = 0; n < face.vertexNormals.length; n++) {
+        face.vertexNormals[n].multiply(scale);
+      }
+    }
+  }
+
+  geo.verticesNeedUpdate = true;
+  geo.elementsNeedUpdate = true;
 }
 
 //// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
@@ -547,7 +566,7 @@ Model.prototype.autoCenter = function(v, axis) {
 }*/
 
 // Mirror the mesh along an axis.
-Model.prototype.mirror = function(axis) {
+/*Model.prototype.mirror = function(axis) {
   this.printout.log("mirror along "+axis+" axis");
 
   var scaleVector = new THREE.Vector3(1,1,1);
@@ -592,7 +611,7 @@ Model.prototype.mirror = function(axis) {
   this.clearThicknessView();
 
   this.measurement.scale(scaleVector);
-}
+}*/
 
 Model.prototype.flipNormals = function() {
   // flip the normal component and also flip the winding order
@@ -1272,17 +1291,33 @@ Model.prototype.clearThicknessView = function() {
 // reset face colors to white
 Model.prototype.resetFaceColors = function() {
   var faces = this.baseMesh.geometry.faces;
-  for (var i=0; i<faces.length; i++) {
-    faces[i].color.setRGB(1.0, 1.0, 1.0);
+  for (var f = 0; f < faces.length; f++) {
+    faces[f].color.setRGB(1.0, 1.0, 1.0);
   }
 
-  //this.baseMesh.geometry.colorsNeedUpdate = true;
+  this.baseMesh.geometry.colorsNeedUpdate = true;
+}
+
+// reset vertex colors to white
+Model.prototype.resetVertexColors = function() {
+  var faces = this.baseMesh.geometry.faces;
+  for (var f = 0; f < faces.length; f++) {
+    var vertexColors = faces[f].vertexColors;
+
+    if (vertexColors) {
+      for (var c = 0; c < vertexColors.length; c++) {
+        vertexColors[c].setRGB(1.0, 1.0, 1.0);
+      }
+    }
+  }
+
+  this.baseMesh.geometry.colorsNeedUpdate = true;
 }
 
 Model.prototype.resetGeometryColors = function() {
   var colors = this.baseMesh.geometry.colors;
-  for (var i=0; i<colors.length; i++) {
-    colors[i].setRGB(1.0, 1.0, 1.0);
+  for (var c = 0; c < colors.length; c++) {
+    colors[c].setRGB(1.0, 1.0, 1.0);
   }
 
   this.baseMesh.geometry.colorsNeedUpdate = true;

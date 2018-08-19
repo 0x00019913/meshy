@@ -12,13 +12,23 @@ function Transform(name, start) {
   this.name = name;
 
   // used to make new values of the same type as the starting value
-  this.valConstructor = start.constructor;
+  this.valConstructor = null;
 
   // start and target value of transformed parameter
-  this.startVal = start.clone();
-  this.targetVal = new this.valConstructor();
+  this.startVal = null;
+  this.targetVal = null;
+
   // latest target value (if applied forward) or start val (if applied inverse)
-  this.lastVal = new this.valConstructor();
+  this.lastVal = null;
+
+
+  if (start) {
+    this.valConstructor = start.constructor;
+
+    this.startVal = start.clone();
+    this.targetVal = new this.valConstructor();
+    this.lastVal = new this.valConstructor();
+  }
 
   // function used to modify the input value to onApply
   this.preprocess = null;
@@ -51,13 +61,13 @@ Object.assign(Transform.prototype, {
 
   apply: function(val) {
     // if target value is given, record it
-    if (val !== undefined) this.targetVal.copy(val);
+    if (val !== undefined) this.targetVal = val;
 
-    if (this.preprocess && this.targetVal) {
-      this.targetVal.copy(this.preprocess(this.targetVal));
+    if (this.preprocess !== null && this.targetVal !== null) {
+      this.targetVal = this.preprocess(this.targetVal);
     }
 
-    this.lastVal.copy(this.targetVal)
+    this.lastVal = this.targetVal
 
     // apply with current end value
     return this.onApply(this.targetVal);
@@ -65,10 +75,10 @@ Object.assign(Transform.prototype, {
 
   applyInverse: function() {
     if (this.startVal) {
-      this.lastVal.copy(this.startVal);
+      this.lastVal = this.startVal;
 
       if (this.preprocess) {
-        this.lastVal.copy(this.preprocess(this.lastVal));
+        this.lastVal = this.preprocess(this.lastVal);
       }
     }
 

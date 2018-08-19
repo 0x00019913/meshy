@@ -137,7 +137,7 @@ Meshy.prototype.generateUI = function() {
   displayFolder.add(this, "cameraToModel").name("Camera to model")
     .title("Snap camera to model.");
   this.backgroundColor = "#222222";
-  this.meshColor = "#662828"; // todo: reset to 0xffffff
+  this.meshColor = "#481a1a"; //"#662828"; // todo: reset to 0xffffff?
   this.wireframeColor = "#000000";
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
@@ -522,6 +522,16 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
   return transform;
 }
 
+Meshy.prototype.makeMirrorTransform = function(invertible) {
+  if (this.dbg) console.log("make mirror transform");
+  var transform = new Transform("mirror"), _this = this;
+
+  transform.onApply = function(axis) { _this.model.mirror(axis); };
+  transform.invertible = invertible;
+
+  return transform;
+}
+
 Meshy.prototype.pushEdit = function(transform, onTransform) {
   if (transform && transform.invertible && !transform.noop()) {
     this.editStack.push(transform, onTransform);
@@ -644,6 +654,18 @@ Meshy.prototype.floor = function(invertible) {
 
   this.pushEdit(transform, this.updatePosition.bind(this));
   this.updatePosition();
+}
+
+Meshy.prototype.mirrorX = function(invertible) { this.mirror("x", invertible); }
+Meshy.prototype.mirrorY = function(invertible) { this.mirror("y", invertible); }
+Meshy.prototype.mirrorZ = function(invertible) { this.mirror("z", invertible); }
+Meshy.prototype.mirror = function(axis, invertible) {
+  if (!this.model) return;
+
+  var transform = this.makeMirrorTransform(invertible);
+  transform.apply(axis);
+
+  this.pushEdit(transform);
 }
 
 // invoked when toggling the checkbox for snapping transformations to floor
@@ -787,6 +809,14 @@ Meshy.prototype.buildEditFolder = function() {
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
+
+  var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
+  mirrorFolder.add(this, "mirrorX").name("Mirror on x")
+    .title("Mirror mesh on x axis.");
+  mirrorFolder.add(this, "mirrorY").name("Mirror on y")
+    .title("Mirror mesh on y axis.");
+  mirrorFolder.add(this, "mirrorZ").name("Mirror on z")
+    .title("Mirror mesh on z axis.");
 
   return;
 
