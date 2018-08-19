@@ -180,6 +180,7 @@ Meshy.prototype.generateUI = function() {
 
   this.editFolder = this.gui.addFolder("Edit",
     "Mesh edit functions: translation, scaling, rotation, normals.");
+  this.buildEditFolder();
 
   var calculationFolder = this.gui.addFolder("Calculate", "Calculate global mesh parameters.");
   calculationFolder.add(this, "calcSurfaceArea").name("Surface area")
@@ -347,7 +348,7 @@ Meshy.prototype.generateUI = function() {
 
   this.gizmoTranslateOrthogonalHandleWidth = 8,
   this.gizmoTranslateOrthogonalHandleHeight = 4,
-  this.gizmoTranslateOrthogonalHandleThickness = 2,
+  this.gizmoTranslateOrthogonalHandleThickness = 0,
   this.gizmoTranslateOrthogonalHandleInset = 2,
   this.gizmoTranslateOrthogonalHandleOffset =
     this.gizmoRotateOrthogonalHandleOuterRadius + this.gizmoSpacing + 3;
@@ -469,17 +470,6 @@ Meshy.prototype.makeTranslateTransform = function(invertible) {
     }
     return pos;
   }
-  transform.onApply = function(pos) { _this.model.translate(pos); };
-  transform.onEnd = function() { _this.model.translateEnd(); };
-  transform.invertible = invertible;
-
-  return transform;
-}
-
-Meshy.prototype.makeFloorTransform = function(invertible) {
-  if (this.dbg) console.log("make floor transform");
-  var transform = new Transform("floor", this.model.getPosition()), _this = this;
-
   transform.onApply = function(pos) { _this.model.translate(pos); };
   transform.onEnd = function() { _this.model.translateEnd(); };
   transform.invertible = invertible;
@@ -626,35 +616,7 @@ Meshy.prototype.onFinishScaleByFactor = function() {
   this.updateScale();
 }
 
-// instantaneous transformations - autocenter and floor
-
-Meshy.prototype.autoCenter = function(invertible) {
-  var newCenter = this.calculateBuildPlateCenter();
-  newCenter.z += this.model.getSize().z / 2;
-  var translation = newCenter.sub(this.model.getCenter());
-
-  var transform = this.makeTranslateTransform(invertible);
-
-  transform.apply(this.position.add(translation).clone());
-  transform.end();
-
-  this.pushEdit(transform, this.updatePosition.bind(this));
-  this.updatePosition();
-}
-
-Meshy.prototype.floor = function(invertible) {
-  if (!this.model) return;
-
-  var transform = this.makeFloorTransform(invertible);
-
-  this.position.z -= this.model.getMin().z;
-
-  transform.apply(this.position.clone());
-  transform.end();
-
-  this.pushEdit(transform, this.updatePosition.bind(this));
-  this.updatePosition();
-}
+// instantaneous transformations - mirror, floor, center, autocenter
 
 Meshy.prototype.mirrorX = function(invertible) { this.mirror("x", invertible); }
 Meshy.prototype.mirrorY = function(invertible) { this.mirror("y", invertible); }
@@ -668,12 +630,68 @@ Meshy.prototype.mirror = function(axis, invertible) {
   this.pushEdit(transform);
 }
 
+Meshy.prototype.floorX = function(invertible) { this.floor("x", invertible); }
+Meshy.prototype.floorY = function(invertible) { this.floor("y", invertible); }
+Meshy.prototype.floorZ = function(invertible) { this.floor("z", invertible); }
+Meshy.prototype.floor = function(axis, invertible) {
+  if (!this.model) return;
+
+  if (axis === undefined) axis = "z";
+
+  // need to know bounds to floor to them
+  this.calculateBuildVolumeBounds();
+
+  var transform = this.makeTranslateTransform(invertible);
+
+  this.position[axis] = this.buildVolumeMin[axis] + this.model.getSize()[axis] / 2;
+  transform.apply(this.position.clone());
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
+Meshy.prototype.centerX = function(invertible) { this.center("x", invertible); }
+Meshy.prototype.centerY = function(invertible) { this.center("y", invertible); }
+Meshy.prototype.centerAll = function(invertible) { this.center("all", invertible); }
+Meshy.prototype.center = function(axis, invertible) {
+  if (!this.model) return;
+
+  if (axis === undefined) axis = "all";
+
+  var center = this.calculateBuildPlateCenter();
+
+  if (axis === "x" || axis === "all") this.position.x = center.x;
+  if (axis === "y" || axis === "all") this.position.y = center.y;
+
+  var transform = this.makeTranslateTransform(invertible);
+
+  transform.apply(this.position.clone());
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
+Meshy.prototype.autoCenter = function(invertible) {
+  this.position.copy(this.calculateBuildPlateCenter());
+  this.position.z += this.model.getSize().z / 2;
+
+  var transform = this.makeTranslateTransform(invertible);
+
+  transform.apply(this.position.clone());
+  transform.end();
+
+  this.pushEdit(transform, this.updatePosition.bind(this));
+  this.updatePosition();
+}
+
 // invoked when toggling the checkbox for snapping transformations to floor
 Meshy.prototype.handleSnapTransformationToFloorState = function() {
   var snap = this.snapTransformationsToFloor;
 
   // floor, but don't register the action as undoable
-  if (snap) this.floor(false);
+  if (snap) this.floorZ(false);
 
   if (snap) this.disableController(this.positionZController);
   else this.enableController(this.positionZController);
@@ -771,7 +789,8 @@ Meshy.prototype.buildEditFolder = function() {
   // if snapping transformations to floor, might need to disable a controller
   this.handleSnapTransformationToFloorState();
 
-  var rotateFolder = this.editFolder.addFolder("Rotate", "Rotate the mesh about a given axis.");
+  var rotateFolder = this.editFolder.addFolder("Rotate",
+    "Rotate the mesh about a given axis. NB: the given Euler angles are applied in XYZ order, so subsequent rotations may affect previous rotations.");
   this.rotationXController = rotateFolder.add(this.rotationDeg, "x", 0, 360)
     .onChange(this.onChangeRotationDegrees.bind(this))
     .onFinishChange(this.onFinishRotate.bind(this));
@@ -818,6 +837,22 @@ Meshy.prototype.buildEditFolder = function() {
   mirrorFolder.add(this, "mirrorZ").name("Mirror on z")
     .title("Mirror mesh on z axis.");
 
+  var floorFolder = this.editFolder.addFolder("Floor", "Floor the mesh on a given axis.");
+  floorFolder.add(this, "floorX").name("Floor to x")
+    .title("Floor the mesh on x axis.");
+  floorFolder.add(this, "floorY").name("Floor to y")
+    .title("Floor the mesh on y axis.");
+  floorFolder.add(this, "floorZ").name("Floor to z")
+    .title("Floor the mesh on z axis.");
+
+  var centerFolder = this.editFolder.addFolder("Center", "Center the mesh on a given axis in the build volume.");
+  centerFolder.add(this, "centerAll").name("Center on all")
+    .title("Center the mesh on all axes.");
+  centerFolder.add(this, "centerX").name("Center on x")
+    .title("Center the mesh on x axis.");
+  centerFolder.add(this, "centerY").name("Center on y")
+    .title("Center the mesh on y axis.");
+
   return;
 
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
@@ -831,14 +866,6 @@ Meshy.prototype.buildEditFolder = function() {
     .title("Scale the ring.");
   ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
     .title("Turn off the measurement tool when not in use.");
-
-  var floorFolder = this.editFolder.addFolder("Floor", "Floor the mesh on a given axis.");
-  floorFolder.add(this, "floorX").name("Floor to x")
-    .title("Floor the mesh on x axis.");
-  floorFolder.add(this, "floorY").name("Floor to y")
-    .title("Floor the mesh on y axis.");
-  floorFolder.add(this, "floorZ").name("Floor to z")
-    .title("Floor the mesh on z axis.");
 
   var centerFolder = this.editFolder.addFolder("Center", "Center the mesh on a given axis in the build volume.");
   centerFolder.add(this, "centerAll").name("Center on all")
@@ -1633,7 +1660,7 @@ Meshy.prototype.createModel = function(geometry) {
 
 // todo: deprecate
 // Callback passed to model.import; puts the mesh into the viewport.
-Meshy.prototype.displayMesh = function(success, model) {
+/*Meshy.prototype.displayMesh = function(success, model) {
   this.importEnabled = true;
 
   if (!success) {
@@ -1685,7 +1712,7 @@ Meshy.prototype.displayMesh = function(success, model) {
 
   this.setMeshMaterial();
   this.updateUI();
-}
+}*/
 
 // Interface for the dat.gui button. Saves the model.
 Meshy.prototype.export = function(format) {
