@@ -686,6 +686,10 @@ Meshy.prototype.autoCenter = function(invertible) {
   this.updatePosition();
 }
 
+Meshy.prototype.flipNormals = function() {
+  if (this.model) this.model.flipNormals();
+}
+
 // invoked when toggling the checkbox for snapping transformations to floor
 Meshy.prototype.handleSnapTransformationToFloorState = function() {
   var snap = this.snapTransformationsToFloor;
@@ -853,6 +857,9 @@ Meshy.prototype.buildEditFolder = function() {
   centerFolder.add(this, "centerY").name("Center on y")
     .title("Center the mesh on y axis.");
 
+  this.editFolder.add(this, "flipNormals").name("Flip normals")
+    .title("Flip mesh normals.");
+
   return;
 
   var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
@@ -866,19 +873,6 @@ Meshy.prototype.buildEditFolder = function() {
     .title("Scale the ring.");
   ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
     .title("Turn off the measurement tool when not in use.");
-
-  var centerFolder = this.editFolder.addFolder("Center", "Center the mesh on a given axis in the build volume.");
-  centerFolder.add(this, "centerAll").name("Center on all")
-    .title("Center the mesh on all axes.");
-  centerFolder.add(this, "centerX").name("Center on x")
-    .title("Center the mesh on x axis.");
-  centerFolder.add(this, "centerY").name("Center on y")
-    .title("Center the mesh on y axis.");
-  //centerFolder.add(this, "centerZ").name("Center on z")
-  //  .title("Center the mesh on z axis.");
-
-  this.editFolder.add(this, "flipNormals").name("Flip normals")
-    .title("Flip mesh normals.");
 }
 Meshy.prototype.scaleToMeasurement = function() {
   if (this.model) {
@@ -890,7 +884,6 @@ Meshy.prototype.scaleToMeasurement = function() {
     }
   }
 }
-Meshy.prototype.flipNormals = function() { if (this.model) this.model.flipNormals(); }
 Meshy.prototype.calcSurfaceArea = function() { if (this.model) this.model.calcSurfaceArea(); }
 Meshy.prototype.calcVolume = function() { if (this.model) this.model.calcVolume(); }
 Meshy.prototype.calcCenterOfMass = function() { if (this.model) this.model.calcCenterOfMass(); }

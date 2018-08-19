@@ -404,6 +404,32 @@ Model.prototype.mirror = function(axis) {
   geo.elementsNeedUpdate = true;
 }
 
+Model.prototype.flipNormals = function() {
+  var geo = this.baseMesh.geometry;
+
+  for (var f = 0; f < geo.faces.length; f++) {
+    var face = geo.faces[f];
+
+    // flip winding order on each face
+    var tmp = face.a;
+    face.a = face.b;
+    face.b = tmp;
+
+    // flip face normal
+    face.normal.negate();
+
+    // also flip vertex normals if present
+    if (face.vertexNormals) {
+      for (var n = 0; n < face.vertexNormals.length; n++) {
+        face.vertexNormals[n].negate();
+      }
+    }
+  }
+
+  geo.elementsNeedUpdate = true;
+  geo.normalsNeedUpdate = true;
+}
+
 //// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
 // Translate the model to a new position.
 /*Model.prototype.translate = function(target) {
@@ -613,7 +639,7 @@ Model.prototype.mirror = function(axis) {
   this.measurement.scale(scaleVector);
 }*/
 
-Model.prototype.flipNormals = function() {
+/*Model.prototype.flipNormals = function() {
   // flip the normal component and also flip the winding order
   for (var f=0; f<this.faces.length; f++) {
     var face = this.faces[f];
@@ -625,7 +651,7 @@ Model.prototype.flipNormals = function() {
 
   this.baseMesh.geometry.elementsNeedUpdate = true;
   this.baseMesh.geometry.normalsNeedUpdate = true;
-}
+}*/
 
 /* MEASUREMENT */
 
