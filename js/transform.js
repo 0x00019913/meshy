@@ -52,7 +52,8 @@ Object.assign(Transform.prototype, {
   // true if start value and target value are the same
   noop: function() {
     if (this.startVal === null || this.targetVal === null) return false;
-    return this.startVal.equals(this.targetVal);
+    if (this.startVal.equals) return this.startVal.equals(this.targetVal);
+    else return this.startVal === this.targetVal;
   },
 
   getLastVal: function() {
