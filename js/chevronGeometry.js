@@ -35,11 +35,15 @@ var ChevronBufferGeometry = (function() {
 
     var groupStart = 0;
 
-    generateWall(true);
-    generateWall(false);
+    if (thickness > 0) {
+      generateWall(true);
+      generateWall(false);
+    }
 
     generateCap(true);
-    generateCap(false);
+    if (thickness > 0) {
+      generateCap(false);
+    }
 
     this.setIndex(indices);
     this.addAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
