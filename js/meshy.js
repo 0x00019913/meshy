@@ -294,14 +294,14 @@ Meshy.prototype.generateUI = function() {
   this.infoBox = new InfoBox(this.displayPrecision);
   this.infoBox.add("Units", this, "units");
   this.infoBox.add("Polycount", this, ["model","getPolycount"]);
-  this.infoBox.addMultiple("x range", this, [["model","getxmin"], ["model","getxmax"]]);
-  this.infoBox.addMultiple("y range", this, [["model","getymin"], ["model","getymax"]]);
-  this.infoBox.addMultiple("z range", this, [["model","getzmin"], ["model","getzmax"]]);
-  this.infoBox.addMultiple("Center", this, [["model", "getCenterx"],["model", "getCentery"],["model", "getCenterz"]]);
-  this.infoBox.addMultiple("Size", this, [["model", "getSizex"],["model", "getSizey"],["model", "getSizez"]]);
+  this.infoBox.add("x range", this, ["model","getXRange"]);
+  this.infoBox.add("y range", this, ["model","getYRange"]);
+  this.infoBox.add("z range", this, ["model","getZRange"]);
+  this.infoBox.add("Center", this, ["model","getCenter"]);
+  this.infoBox.add("Size", this, ["model","getSize"]);
   this.infoBox.add("Surface area", this, ["model","surfaceArea"],"[calculate]");
-  this.infoBox.add("Volume", this, ["model", "volume"], "[calculate]");
-  this.infoBox.addMultiple("Center of mass", this, [["model","getCOMx"], ["model","getCOMy"], ["model","getCOMz"]], "[calculate]");
+  this.infoBox.add("Volume", this, ["model","volume"], "[calculate]");
+  this.infoBox.add("Center of mass", this, ["model","centerOfMass"], "[calculate]");
 
   this.initViewport();
   this.makeBuildVolume();
@@ -484,7 +484,7 @@ Meshy.prototype.makeRotateTransform = function(invertible) {
   transform.onApply = function(euler) { _this.model.rotate(euler); };
   transform.onEnd = function() {
     _this.model.rotateEnd();
-    if (_this.snapTransformationsToFloor) _this.floor(false);
+    if (_this.snapTransformationsToFloor) _this.floorZ(false);
   };
   transform.invertible = invertible;
 
@@ -505,7 +505,7 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
   };
   transform.onEnd = function() {
     _this.model.scaleEnd();
-    if (_this.snapTransformationsToFloor) _this.floor(false);
+    if (_this.snapTransformationsToFloor) _this.floorZ(false);
   };
   transform.invertible = invertible;
 
@@ -565,8 +565,6 @@ Meshy.prototype.onFinishRotate = function() {
   if (this.dbg) console.log("finish rotate");
   if (this.currentTransform) this.currentTransform.end();
 
-  //if (this.snapTransformationsToFloor) this.floor(false);
-
   this.pushEdit(this.currentTransform, this.updateRotation.bind(this));
 
   this.currentTransform = null;
@@ -606,8 +604,6 @@ Meshy.prototype.onScaleToSize = function() {
 Meshy.prototype.onFinishScaleByFactor = function() {
   if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
-
-  //if (this.snapTransformationsToFloor) this.floor(false);
 
   this.pushEdit(this.currentTransform, this.updateScale.bind(this));
 
@@ -833,6 +829,18 @@ Meshy.prototype.buildEditFolder = function() {
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
 
+  var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
+    "Set up a circle measurement around the inner circumference of a ring mesh, then scale so that the mesh will have the correct measurement in mm.");
+  ringSizeFolder.add(this, "mCircle").name("1. Mark circle")
+    .title("Turn on the circle measurement tool and mark the inner circumference of the ring.");
+  this.newRingSize = 0;
+  ringSizeFolder.add(this, "newRingSize", ringSizes).name("2. New ring size")
+    .title("Select ring size.");
+  ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
+    .title("Scale the ring.");
+  ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
+    .title("Turn off the measurement tool.");
+
   var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
   mirrorFolder.add(this, "mirrorX").name("Mirror on x")
     .title("Mirror mesh on x axis.");
@@ -859,20 +867,6 @@ Meshy.prototype.buildEditFolder = function() {
 
   this.editFolder.add(this, "flipNormals").name("Flip normals")
     .title("Flip mesh normals.");
-
-  return;
-
-  var ringSizeFolder = scaleFolder.addFolder("Scale To Ring Size",
-    "Set up a circle measurement around the inner circumference of a ring mesh, then scale so that the mesh will have the correct measurement in mm.");
-  ringSizeFolder.add(this, "mCircle").name("1. Mark circle")
-    .title("Turn on the circle measurement tool and mark the inner circumference of the ring.");
-  this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes).name("2. New ring size")
-    .title("Select ring size.");
-  ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
-    .title("Scale the ring.");
-  ringSizeFolder.add(this, "mDeactivate").name("4. End measurement")
-    .title("Turn off the measurement tool when not in use.");
 }
 Meshy.prototype.scaleToMeasurement = function() {
   if (this.model) {

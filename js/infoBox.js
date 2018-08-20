@@ -10,7 +10,6 @@
 //   // for non-manual data
 //   var box = new InfoBox();
 //   box.add(title, source, props, def;
-//   box.addMultiple(title2, source2, props, def);
 //   box.update(); // called manually to update the values in the box
 //   // for measurements
 //   box.showMeasurementOutput();
@@ -23,9 +22,6 @@
 //   -props: a single property name, or an array of property names, that
 //     lead to the data source
 //   -def: default value if the line needs to be calculated
-//  Arguments for .addMultiple:
-//   -props: an array of single property names, or an array of arrays of
-//     property names
 //
 //  Prop names that are functions are called instead of dereferenced,
 //   but this can be expensive.
@@ -39,12 +35,6 @@
 //     box.add("foo", this, ["model", "count"]);
 //   When calling .update(), the value displayed in the infobox will show
 //   the value of this.model.count.
-//   -To include multiple data sources on one line, do:
-//     box.addMultiple("foo", this, ["xmin", "xmax"]);
-//   This will show [ this.xmin, this.xmax ].
-//   Or:
-//     box.addMultiple("foo", this, [["model", "xmin"], ["model", "xmax"]]);
-//   This will show [ this.model.xmin, this.model.xmax ].
 
 
 // Constructor
@@ -67,46 +57,20 @@ InfoBox = function(decimals) {
   this.decimals = decimals !== undefined ? decimals : 4;
 }
 
-// Add a line with a single data source.
+// Add a line.
 InfoBox.prototype.add = function(title, source, props, def) {
   var liValueElement = this.createLine(title);
 
   if (!isArray(props)){
-    props = [[props]];
+    props = [props];
   }
-  else {
-    if (!isArray(props[0])) {
-      props = [props];
-    }
-  }
+
   this.items.push({
     element: liValueElement,
     source: source,
     props: props,
     def: def
   });
-}
-
-// Add a line with multiple data sources.
-InfoBox.prototype.addMultiple = function(title, source, props, def) {
-    var liValueElement = this.createLine(title);
-
-    if (!isArray(props)) {
-      console.log("didn't pass an array for InfoBox.addMultiple; use InfoBox.add");
-      return;
-    }
-
-    for (var i=0; i<props.length; i++) {
-      if (!isArray(props[i])) {
-        props[i] = [props[i]]
-      }
-    }
-    this.items.push({
-      element: liValueElement,
-      source: source,
-      props: props,
-      def: def
-    });
 }
 
 // Creates a line in the infobox, returns HTML element that contains the value.
@@ -190,26 +154,7 @@ InfoBox.prototype.update = function() {
       continue;
     }
 
-    var value = "";
-
-    if (item.props.length==1) {
-      value = this.getPropValue(item.source, item.props[0]);
-      if (isNumber(value)) value = this.formatNumber(value);
-    }
-    else {
-      var len = item.props.length;
-      var valuesExist = false;
-      value += "[ ";
-      for (var propIdx=0; propIdx<len; propIdx++) {
-        var v = this.getPropValue(item.source, item.props[propIdx]);
-        if (v!=="") valuesExist = true;
-        if (isNumber(v)) v = this.formatNumber(v);
-        value += v;
-        if (propIdx < len-1) value += ", ";
-      }
-      value += " ]";
-      if (!valuesExist) value = "";
-    }
+    var value = this.getPropValue(item.source, item.props);
 
     if (value==="" && item.def) value = item.def;
 
@@ -230,7 +175,28 @@ InfoBox.prototype.getPropValue = function(source, propPath) {
     else source = source[propPath[i]];
     if (source===null || source===undefined) return "";
   }
-  return source;
+  var value;
+
+  if (isNumber(source)) value = this.formatNumber(source);
+  else if (source.isVector2) {
+    value = "[";
+    value += this.formatNumber(source.x);
+    value += ", ";
+    value += this.formatNumber(source.y);
+    value += "]";
+  }
+  else if (source.isVector3) {
+    value = "[";
+    value += this.formatNumber(source.x);
+    value += ", ";
+    value += this.formatNumber(source.y);
+    value += ", ";
+    value += this.formatNumber(source.z);
+    value += "]";
+  }
+  else value = source;
+
+  return value;
 }
 
 // STYLES
@@ -271,7 +237,7 @@ InfoBox.prototype.styleMeasurementList = function() {
 // Style list item.
 InfoBox.prototype.styleLI = function(listItem) {
   listItem.style.width = "100%";
-  listItem.style.height = "27px";
+  listItem.style.minHeight = "27px";
   listItem.style.lineHeight = "27px";
   listItem.style.overflow = "hidden";
   listItem.style.padding = "0 4px 0 5px";
@@ -284,6 +250,7 @@ InfoBox.prototype.styleLITitle = function(listItemTitle) {
   listItemTitle.style.overflow = "hidden";
   listItemTitle.style.textOverflow = "ellipsis";
   listItemTitle.style.display = "inline-block";
+  listItemTitle.style.verticalAlign = "top";
 }
 
 // Style the span containing the value of a list item.
