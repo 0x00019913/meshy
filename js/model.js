@@ -29,9 +29,7 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   this.setVertexPrecision(5);
 
   // calculated stuff
-  this.min = new THREE.Vector3();
-  this.max = new THREE.Vector3();
-  this.resetBounds(); // sets bounds to Infinity
+  this.boundingBox = new THREE.Box3();
   this.surfaceArea = null;
   this.volume = null;
   this.centerOfMass = null;
@@ -57,7 +55,7 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   this.resetFaceColors();
   this.resetVertexColors();
   this.resetGeometryColors();
-  this.computeBounds();
+  this.computeBoundingBox();
   this.shiftBaseGeometryToOrigin();
   this.setMode("base");
 
@@ -162,91 +160,39 @@ Model.Materials = {
   })
 };
 
-// Add a Face3 to the model.
-// todo: remove
-/*Model.prototype.addFace = function(face) {
-  this.faces.push(face);
-  this.updateBoundsF(face);
-}*/
-
-Model.prototype.computeBounds = function() {
-  this.resetBounds();
-
-  var mesh = this.baseMesh;
-  var faces = mesh.geometry.faces;
-  var vertices = mesh.geometry.vertices;
-  var matrix = mesh.matrix;
-
-  for (var f = 0; f < faces.length; f++) {
-    this.updateBoundsF(faces[f], vertices, matrix);
-  }
+Model.prototype.computeBoundingBox = function() {
+  this.boundingBox.setFromObject(this.baseMesh);
 }
 
 // All bounds to Infinity.
-Model.prototype.resetBounds = function() {
-  this.min.setScalar(Infinity);
-  this.max.setScalar(-Infinity);
-}
-
-// Update the bounds with a new face.
-Model.prototype.updateBoundsF = function(face, vertices, matrix) {
-  var verts = faceGetVerts(face, vertices);
-  for (var i = 0; i < 3; i++) {
-    var vert = matrix !== undefined ? verts[i].clone().applyMatrix4(matrix) : verts[i];
-    this.updateBoundsV(vert);
-  }
-}
-
-// Update bounds with a new vertex.
-Model.prototype.updateBoundsV = function(v) {
-  this.min.min(v);
-  this.max.max(v);
-}
-
-// Get the bounds as one object.
-Model.prototype.getBounds = function() {
-  return {
-    min: this.min,
-    max: this.max
-  };
+Model.prototype.resetBoundingBox = function() {
+  this.boundingBox.makeEmpty();
 }
 
 Model.prototype.getMin = function() {
-  return this.min;
+  return this.boundingBox.min;
 }
 
 Model.prototype.getMax = function() {
-  return this.max;
-}
-
-Model.prototype.boundCompareMin = function(min) {
-  var sx = Math.sign(this.min.x - min.x);
-  var sy = Math.sign(this.min.y - min.y);
-  var sz = Math.sign(this.min.z - min.z);
-
-  return new THREE.Vector3(sx, sy, sz);
-}
-
-Model.prototype.boundCompareMax = function(max) {
-  var sx = Math.sign(this.max.x - max.x);
-  var sy = Math.sign(this.max.y - max.y);
-  var sz = Math.sign(this.max.z - max.z);
-
-  return new THREE.Vector3(sx, sy, sz);
+  return this.boundingBox.max;
 }
 
 // Get a vector representing the coords of the center.
 Model.prototype.getCenter = function() {
-  return this.max.clone().add(this.min).divideScalar(2);
+  var center = new THREE.Vector3();
+  this.boundingBox.getCenter(center);
+  return center;
+}
+// Get a vector representing the size of the model in every direction.
+Model.prototype.getSize = function() {
+  var size = new THREE.Vector3();
+  this.boundingBox.getSize(size);
+  return size;
 }
 // Get individual coords of the center.
 Model.prototype.getCenterx = function() { return (this.max.x+this.min.x)/2; }
 Model.prototype.getCentery = function() { return (this.max.y+this.min.y)/2; }
 Model.prototype.getCenterz = function() { return (this.max.z+this.min.z)/2; }
-// Get a vector representing the size of the model in every direction.
-Model.prototype.getSize = function() {
-  return this.max.clone().sub(this.min);
-}
 // Get individual sizes of the model.
 Model.prototype.getSizex = function() { return (this.max.x-this.min.x); }
 Model.prototype.getSizey = function() { return (this.max.y-this.min.y); }
@@ -274,9 +220,23 @@ Model.prototype.getCOMz = function() {
   if (this.centerOfMass) return this.centerOfMass.z;
   return null;
 }
+Model.prototype.getCOM = function() {
+  if (this.centerOfMass) return this.centerOfMass;
+  return null;
+}
 Model.prototype.setVertexPrecision = function(precision) {
   this.vertexPrecision = precision;
   this.p = Math.pow(10, precision);
+}
+
+Model.prototype.getXRange = function() {
+  return new THREE.Vector2(this.boundingBox.min.x, this.boundingBox.max.x);
+}
+Model.prototype.getYRange = function() {
+  return new THREE.Vector2(this.boundingBox.min.y, this.boundingBox.max.y);
+}
+Model.prototype.getZRange = function() {
+  return new THREE.Vector2(this.boundingBox.min.z, this.boundingBox.max.z);
 }
 // Return individual mins and maxes.
 Model.prototype.getxmin = function() { return this.min.x; }
@@ -318,8 +278,7 @@ Model.prototype.shiftBaseGeometryToOrigin = function() {
   mesh.updateMatrix();
 
   // shift bounds appropriately
-  this.min.add(shift);
-  this.max.add(shift);
+  this.boundingBox.translate(shift);
 }
 
 Model.prototype.translate = function(position) {
@@ -330,8 +289,7 @@ Model.prototype.translate = function(position) {
   if (this.wireframeMesh) this.wireframeMesh.position.copy(position);
   this.baseMesh.updateMatrix();
 
-  this.min.add(diff);
-  this.max.add(diff);
+  this.boundingBox.translate(diff);
 
   if (this.centerOfMass) {
     this.centerOfMass.add(diff)
@@ -349,7 +307,7 @@ Model.prototype.rotate = function(euler) {
   this.baseMesh.updateMatrix();
 }
 Model.prototype.rotateEnd = function() {
-  this.computeBounds();
+  this.computeBoundingBox();
 }
 
 Model.prototype.scale = function(scale) {
@@ -358,7 +316,7 @@ Model.prototype.scale = function(scale) {
   this.baseMesh.updateMatrix();
 }
 Model.prototype.scaleEnd = function() {
-  this.computeBounds();
+  this.computeBoundingBox();
 }
 
 Model.prototype.floor = function(axis) {
@@ -2897,7 +2855,7 @@ Model.prototype.export = function(format, name) {
     }
 
     _this.baseMesh.geometry = geo;
-    _this.computeBounds();
+    _this.computeBoundingBox();
   }
 }*/
 
