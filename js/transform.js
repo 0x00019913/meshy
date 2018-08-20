@@ -11,24 +11,30 @@
 function Transform(name, start) {
   this.name = name;
 
-  // used to make new values of the same type as the starting value
-  this.valConstructor = null;
+  // clones values to avoid mutation
+  this.clone = null;
+  if (start && start.clone) {
+    this.clone = function(val) { return val.clone(); }
+  }
+  else {
+    this.clone = function(val) { return val; }
+  }
+
+  // checks equality of values
+  this.equals = null;
+  if (start && start.equals) {
+    this.equals = function(va, vb) { return va.equals(vb); }
+  }
+  else {
+    this.equals = function(va, vb) { return va === vb; }
+  }
 
   // start and target value of transformed parameter
-  this.startVal = null;
+  this.startVal = this.clone(start);
   this.targetVal = null;
 
   // latest target value (if applied forward) or start val (if applied inverse)
   this.lastVal = null;
-
-
-  if (start) {
-    this.valConstructor = start.constructor;
-
-    this.startVal = start.clone();
-    this.targetVal = new this.valConstructor();
-    this.lastVal = new this.valConstructor();
-  }
 
   // function used to modify the input value to onApply
   this.preprocess = null;
@@ -52,23 +58,23 @@ Object.assign(Transform.prototype, {
   // true if start value and target value are the same
   noop: function() {
     if (this.startVal === null || this.targetVal === null) return false;
-    if (this.startVal.equals) return this.startVal.equals(this.targetVal);
-    else return this.startVal === this.targetVal;
+
+    return this.equals(this.startVal, this.targetVal);
   },
 
   getLastVal: function() {
-    return this.lastVal;
+    return this.clone(this.lastVal);
   },
 
   apply: function(val) {
     // if target value is given, record it
-    if (val !== undefined) this.targetVal = val;
+    if (val !== undefined) this.targetVal = this.clone(val);
 
     if (this.preprocess !== null && this.targetVal !== null) {
       this.targetVal = this.preprocess(this.targetVal);
     }
 
-    this.lastVal = this.targetVal
+    this.lastVal = this.clone(this.targetVal);
 
     // apply with current end value
     return this.onApply(this.targetVal);
@@ -76,7 +82,7 @@ Object.assign(Transform.prototype, {
 
   applyInverse: function() {
     if (this.startVal) {
-      this.lastVal = this.startVal;
+      this.lastVal = this.clone(this.startVal);
 
       if (this.preprocess) {
         this.lastVal = this.preprocess(this.lastVal);
