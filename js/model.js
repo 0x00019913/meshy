@@ -270,9 +270,9 @@ Model.prototype.translate = function(position) {
   this.boundingBox.translate(diff);
 
   if (this.centerOfMass) {
-    this.centerOfMass.add(diff)
+    this.centerOfMass.add(diff);
     // transform center of mass indicator
-    this.positionCenterOfMassIndicator(this.centerOfMass);
+    this.positionCenterOfMassIndicator();
   }
 }
 Model.prototype.translateEnd = function() {
@@ -286,6 +286,7 @@ Model.prototype.rotate = function(euler) {
 }
 Model.prototype.rotateEnd = function() {
   this.computeBoundingBox();
+  this.positionCenterOfMassIndicator();
 }
 
 Model.prototype.scale = function(scale) {
@@ -295,6 +296,9 @@ Model.prototype.scale = function(scale) {
 }
 Model.prototype.scaleEnd = function() {
   this.computeBoundingBox();
+  this.calculateVolume();
+  this.calculateSurfaceArea();
+  this.positionCenterOfMassIndicator();
 }
 
 // mirror the geometry on an axis
@@ -802,8 +806,10 @@ Model.prototype.toggleCenterOfMass = function() {
   if (this.centerOfMass === null) this.calculateCenterOfMass();
 
   this.centerOfMassIndicator.visible = !this.centerOfMassIndicator.visible;
-  this.printout.log("Center of mass indicator is "+(this.showCenterOfMass ? "on" : "off")+".");
-  this.positionCenterOfMassIndicator(this.centerOfMass);
+  this.printout.log(
+    "Center of mass indicator is "+(this.centerOfMassIndicator.visible ? "on" : "off")+"."
+  );
+  this.positionCenterOfMassIndicator();
 }
 
 // Create the target planes forming the COM indicator.
@@ -831,7 +837,7 @@ Model.prototype.generateCenterOfMassIndicator = function() {
 }
 
 // Position the COM indicator.
-Model.prototype.positionCenterOfMassIndicator = function(point) {
+Model.prototype.positionCenterOfMassIndicator = function() {
   if (!this.centerOfMassIndicator) this.generateCenterOfMassIndicator();
 
   var extendFactor = 0.1;

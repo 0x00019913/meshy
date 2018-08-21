@@ -290,9 +290,10 @@ Meshy.prototype.generateUI = function() {
   this.infoBox.add("z range", this, ["model","getZRange"]);
   this.infoBox.add("Center", this, ["model","getCenter"]);
   this.infoBox.add("Size", this, ["model","getSize"]);
-  this.infoBox.add("Surface area", this, ["model","surfaceArea"],"[calculate]");
-  this.infoBox.add("Volume", this, ["model","volume"], "[calculate]");
-  this.infoBox.add("Center of mass", this, ["model","centerOfMass"], "[calculate]");
+  this.infoBox.add("Surface area", this, ["model","surfaceArea"]);
+  this.infoBox.add("Volume", this, ["model","volume"]);
+  this.infoBox.add("Center of mass", this, ["model","centerOfMass"]);
+  this.infoBox.update();
 
   this.initViewport();
   this.makeBuildVolume();
@@ -434,6 +435,7 @@ Meshy.prototype.undo = function() {
   catch (e) {
     this.printout.warn(e);
   }
+  this.infoBox.update();
 }
 Meshy.prototype.redo = function() {
   this.deactivateSliceMode();
@@ -444,6 +446,7 @@ Meshy.prototype.redo = function() {
   catch (e) {
     this.printout.warn(e);
   }
+  this.infoBox.update();
 }
 
 // functions for handling model transformations
@@ -525,6 +528,7 @@ Meshy.prototype.onTranslate = function() {
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
+  this.infoBox.update();
 }
 // called on translation end
 Meshy.prototype.onFinishTranslate = function() {
@@ -535,6 +539,7 @@ Meshy.prototype.onFinishTranslate = function() {
 
   this.currentTransform = null;
   this.updatePosition();
+  this.infoBox.update();
 }
 
 Meshy.prototype.onChangeRotationDegrees = function() {
@@ -562,6 +567,7 @@ Meshy.prototype.onFinishRotate = function() {
   this.updateRotation();
   this.updatePosition();
   this.updateSize();
+  this.infoBox.update();
 }
 
 // called when scale change is in progress
@@ -601,6 +607,7 @@ Meshy.prototype.onFinishScaleByFactor = function() {
   this.currentTransform = null;
   this.updatePosition();
   this.updateScale();
+  this.infoBox.update();
 }
 
 // instantaneous transformations - mirror, floor, center, autocenter
@@ -1433,7 +1440,6 @@ Meshy.prototype.initViewport = function() {
       _this.gizmo.update(_this.position, _this.rotation, _this.scale);
     }
     _this.axisWidget.update();
-    _this.infoBox.update();
     if (_this.model && _this.model.measurement) {
       _this.model.measurement.rescale();
     }
@@ -1634,6 +1640,8 @@ Meshy.prototype.createModel = function(geometry) {
   this.updateUI();
 
   this.gizmo.visible = true;
+
+  this.infoBox.update();
 }
 
 // todo: deprecate
@@ -1725,6 +1733,8 @@ Meshy.prototype.delete = function() {
   this.gizmo.visible = false;
 
   this.printout.log("Model deleted.");
+
+  this.infoBox.update();
 }
 
 // Reposition the camera to look at the model.
