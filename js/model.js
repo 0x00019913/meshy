@@ -840,8 +840,20 @@ Model.prototype.generateCenterOfMassIndicator = function() {
 Model.prototype.positionCenterOfMassIndicator = function() {
   if (!this.centerOfMassIndicator) this.generateCenterOfMassIndicator();
 
+  var size = this.getSize();
+
+  // position the planes within the indicator object
+  var indicator = this.centerOfMassIndicator;
+  var planes = indicator.children;
+  var pos = this.centerOfMass.clone().sub(this.boundingBox.min).divide(size).subScalar(0.5);
+
+  planes[0].position.x = pos.x;
+  planes[1].position.y = pos.y;
+  planes[2].position.z = pos.z;
+
+  // position and scale the indicator
   var extendFactor = 0.1;
-  var scale = this.getSize().multiplyScalar(1.0 + extendFactor);
+  var scale = size.clone().multiplyScalar(1.0 + extendFactor);
 
   this.centerOfMassIndicator.scale.copy(scale);
   this.centerOfMassIndicator.position.copy(this.getCenter());
