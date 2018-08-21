@@ -122,20 +122,21 @@ Meshy.prototype.generateUI = function() {
     .onChange(this.setVertexPrecision.bind(this))
     .title("Precision p; 10^p is used as a conversion factor between floating-point and fixed-point coordinates.");
 
-
   var displayFolder = this.gui.addFolder("Display", "Mesh and build volume display settings.");
 
   displayFolder.add(this, "displayPrecision", 0, 7).step(1).name("Display precision")
     .onChange(this.setDisplayPrecision.bind(this))
     .title("Maximal number of decimal places for displaying floating-point values.");
   displayFolder.add(this, "toggleGizmo").name("Toggle gizmo")
-    .title("Toggle transform gizmo visibility.");
+    .title("Toggle transform gizmo visibility (G).");
   displayFolder.add(this, "toggleAxisWidget").name("Toggle axis widget")
     .title("Toggle axis widget visibility.");
   displayFolder.add(this, "toggleWireframe").name("Toggle wireframe")
-    .title("Toggle mesh wireframe.");
+    .title("Toggle mesh wireframe (W).");
+  displayFolder.add(this, "toggleCOM").name("Toggle center of mass")
+    .title("Toggle the center of mass indicator (C).");
   displayFolder.add(this, "cameraToModel").name("Camera to model")
-    .title("Snap camera to model.");
+    .title("Snap camera to model (F).");
   this.backgroundColor = "#222222";
   this.meshColor = "#481a1a"; //"#662828"; // todo: reset to 0xffffff?
   this.wireframeColor = "#000000";
@@ -181,16 +182,6 @@ Meshy.prototype.generateUI = function() {
   this.editFolder = this.gui.addFolder("Edit",
     "Mesh edit functions: translation, scaling, rotation, normals.");
   this.buildEditFolder();
-
-  var calculationFolder = this.gui.addFolder("Calculate", "Calculate global mesh parameters.");
-  calculationFolder.add(this, "calcSurfaceArea").name("Surface area")
-    .title("Calculate mesh surface area.");
-  calculationFolder.add(this, "calcVolume").name("Volume")
-    .title("Calculate mesh volume.");
-  calculationFolder.add(this, "calcCenterOfMass").name("Center of mass")
-    .title("Calculate mesh center of mass.");
-  calculationFolder.add(this, "toggleCOM").name("Toggle COM")
-    .title("Toggle the center of mass indicator.");
 
   var measurementFolder = this.gui.addFolder("Measure", "Make calculations based on mouse-placed markers.");
   measurementFolder.add(this, "mLength").name("Length")

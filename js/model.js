@@ -52,12 +52,19 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   this.baseMesh = null;
   geometry.mergeVertices();
   this.makeBaseMesh(geometry);
+
+  // setup: clear colors, make bounding box, shift geometry to the mesh's
+  // origin, set mode, and compute various quantities
   this.resetFaceColors();
   this.resetVertexColors();
   this.resetGeometryColors();
   this.computeBoundingBox();
   this.shiftBaseGeometryToOrigin();
   this.setMode("base");
+
+  this.calculateSurfaceArea();
+  this.calculateVolume();
+  this.calculateCenterOfMass();
 
   // patch mesh
   this.patchMesh = null;
@@ -79,8 +86,7 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   //this.geometryComponents = {};
 
   // three orthogonal planes that intersect at the center of the mesh
-  this.targetPlanes = null;
-  this.showCenterOfMass = false;
+  this.centerOfMassIndicator = null;
 
   this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
   this.measurement.setOutput(this.infoOutput);
@@ -152,7 +158,7 @@ Model.Materials = {
     color: 0x44ff44,
     wireframe: false
   }),
-  targetPlane: new THREE.MeshStandardMaterial({
+  centerOfMassPlane: new THREE.MeshStandardMaterial({
     color: 0xffffff,
     side: THREE.DoubleSide,
     transparent: true,
@@ -160,10 +166,12 @@ Model.Materials = {
   })
 };
 
+// Bounding box functions.
+
+// Compute the bounding box.
 Model.prototype.computeBoundingBox = function() {
   this.boundingBox.setFromObject(this.baseMesh);
 }
-
 // All bounds to Infinity.
 Model.prototype.resetBoundingBox = function() {
   this.boundingBox.makeEmpty();
@@ -172,7 +180,6 @@ Model.prototype.resetBoundingBox = function() {
 Model.prototype.getMin = function() {
   return this.boundingBox.min;
 }
-
 Model.prototype.getMax = function() {
   return this.boundingBox.max;
 }
@@ -189,14 +196,6 @@ Model.prototype.getSize = function() {
   this.boundingBox.getSize(size);
   return size;
 }
-// Get individual coords of the center.
-Model.prototype.getCenterx = function() { return (this.max.x+this.min.x)/2; }
-Model.prototype.getCentery = function() { return (this.max.y+this.min.y)/2; }
-Model.prototype.getCenterz = function() { return (this.max.z+this.min.z)/2; }
-// Get individual sizes of the model.
-Model.prototype.getSizex = function() { return (this.max.x-this.min.x); }
-Model.prototype.getSizey = function() { return (this.max.y-this.min.y); }
-Model.prototype.getSizez = function() { return (this.max.z-this.min.z); }
 // Largest dimension of the model.
 Model.prototype.getMaxSize = function() {
   var size = this.getSize();
@@ -206,27 +205,6 @@ Model.prototype.getMaxSize = function() {
 Model.prototype.getMinSize = function() {
   var size = this.getSize();
   return Math.min(size.x, size.y, size.z);
-}
-// Individual center of mass coords.
-Model.prototype.getCOMx = function() {
-  if (this.centerOfMass) return this.centerOfMass.x;
-  return null;
-}
-Model.prototype.getCOMy = function() {
-  if (this.centerOfMass) return this.centerOfMass.y;
-  return null;
-}
-Model.prototype.getCOMz = function() {
-  if (this.centerOfMass) return this.centerOfMass.z;
-  return null;
-}
-Model.prototype.getCOM = function() {
-  if (this.centerOfMass) return this.centerOfMass;
-  return null;
-}
-Model.prototype.setVertexPrecision = function(precision) {
-  this.vertexPrecision = precision;
-  this.p = Math.pow(10, precision);
 }
 
 Model.prototype.getXRange = function() {
@@ -238,13 +216,6 @@ Model.prototype.getYRange = function() {
 Model.prototype.getZRange = function() {
   return new THREE.Vector2(this.boundingBox.min.z, this.boundingBox.max.z);
 }
-// Return individual mins and maxes.
-Model.prototype.getxmin = function() { return this.min.x; }
-Model.prototype.getymin = function() { return this.min.y; }
-Model.prototype.getzmin = function() { return this.min.z; }
-Model.prototype.getxmax = function() { return this.max.x; }
-Model.prototype.getymax = function() { return this.max.y; }
-Model.prototype.getzmax = function() { return this.max.z; }
 
 Model.prototype.getPolycount = function() {
   return this.baseMesh.geometry.faces.length;
@@ -258,6 +229,13 @@ Model.prototype.getRotation = function() {
 }
 Model.prototype.getScale = function() {
   return this.baseMesh.scale;
+}
+
+// todo: possibly deprecate?
+// set the precision factor used to merge geometries
+Model.prototype.setVertexPrecision = function(precision) {
+  this.vertexPrecision = precision;
+  this.p = Math.pow(10, precision);
 }
 
 /* TRANSFORMATIONS */
@@ -294,7 +272,7 @@ Model.prototype.translate = function(position) {
   if (this.centerOfMass) {
     this.centerOfMass.add(diff)
     // transform center of mass indicator
-    this.positionTargetPlanes(this.centerOfMass);
+    this.positionCenterOfMassIndicator(this.centerOfMass);
   }
 }
 Model.prototype.translateEnd = function() {
@@ -317,14 +295,6 @@ Model.prototype.scale = function(scale) {
 }
 Model.prototype.scaleEnd = function() {
   this.computeBoundingBox();
-}
-
-Model.prototype.floor = function(axis) {
-  if (axis === undefined) axis = "z";
-
-  var translation = this.baseMesh.position.clone();
-  translation[axis] = -this.min[axis];
-  this.translate(translation);
 }
 
 // mirror the geometry on an axis
@@ -677,44 +647,32 @@ Model.prototype.deactivateMeasurement = function () {
 /* CALCULATIONS */
 
 // Calculate surface area.
-Model.prototype.calcSurfaceArea = function() {
-  this.surfaceArea = 0;
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    this.surfaceArea += this.faceCalcSurfaceArea(face);
-  }
-  return this.surfaceArea;
+Model.prototype.calculateSurfaceArea = function() {
+  this.surfaceArea = Calculate.surfaceArea(this.baseMesh);
 }
 
 // Calculate volume.
-Model.prototype.calcVolume = function() {
-  this.volume = 0;
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    this.volume += this.faceCalcSignedVolume(face);
-  }
+Model.prototype.calculateVolume = function() {
+  this.volume = Calculate.volume(this.baseMesh);
 }
 
 // Calculate center of mass.
-Model.prototype.calcCenterOfMass = function() {
-  if (this.centerOfMass) return this.centerOfMass;
-  var modelVolume = 0, faceVolume = 0;
-  var center = new THREE.Vector3();
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    var verts = faceGetVerts(face, this.vertices);
-    faceVolume = this.faceCalcSignedVolume(face);
-    modelVolume += faceVolume;
-    center.x += ((verts[0].x + verts[1].x + verts[2].x) / 4) * faceVolume;
-    center.y += ((verts[0].y + verts[1].y + verts[2].y) / 4) * faceVolume;
-    center.z += ((verts[0].z + verts[1].z + verts[2].z) / 4) * faceVolume;
-  }
-  this.volume = modelVolume;
-  this.centerOfMass = center.divideScalar(modelVolume);
+Model.prototype.calculateCenterOfMass = function() {
+  this.centerOfMass = Calculate.centerOfMass(this.baseMesh);
 }
 
 // Calculate cross-section.
 Model.prototype.calcCrossSection = function(axis, pos) {
+  var axisVector = new THREE.Vector3();
+  axisVector[axis] = 1;
+  var point = axisVector.clone();
+  point[axis] = pos;
+  var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(axisVector, point);
+
+  return Calculate.crossSection(plane, this.baseMesh);
+
+  return;
+
   var crossSection = 0;
   // for finding the range of the cross-section; axis1 and axis2 are the two
   // axes that
@@ -749,31 +707,6 @@ Model.prototype.calcCrossSection = function(axis, pos) {
   result[axis1+"size"] = maxAxis1-minAxis1;
   result[axis2+"size"] = maxAxis2-minAxis2;
   return result;
-}
-
-// Calculate triangle area via cross-product.
-Model.prototype.faceCalcSurfaceArea = function(face) {
-  var v = new THREE.Vector3();
-  var v2 = new THREE.Vector3();
-  v.subVectors(this.vertices[face.a], this.vertices[face.b]);
-  v2.subVectors(this.vertices[face.a], this.vertices[face.c]);
-  v.cross(v2);
-  this.surfaceArea = 0.5 * v.length();
-  return this.surfaceArea;
-}
-
-// Calculate the volume of a tetrahedron with one vertex on the origin and
-// with the triangle forming the outer face; sign is determined by the inner
-// product of the normal with any of the vertices.
-Model.prototype.faceCalcSignedVolume = function(face) {
-  var sign = Math.sign(this.vertices[face.a].dot(face.normal));
-  var v1 = this.vertices[face.a];
-  var v2 = this.vertices[face.b];
-  var v3 = this.vertices[face.c];
-  var volume = (-v3.x*v2.y*v1.z + v2.x*v3.y*v1.z + v3.x*v1.y*v2.z);
-  volume += (-v1.x*v3.y*v2.z - v2.x*v1.y*v3.z + v1.x*v2.y*v3.z);
-  this.signedVolume = sign * Math.abs(volume/6.0);
-  return this.signedVolume;
 }
 
 // Calculate the endpoints of the segment formed by the intersection of this
@@ -866,69 +799,46 @@ Model.prototype.setWireframeMaterial = function(color) {
 // Toggle the COM indicator. If the COM hasn't been calculated, then
 // calculate it.
 Model.prototype.toggleCenterOfMass = function() {
-  this.calcCenterOfMass();
-  this.showCenterOfMass = !this.showCenterOfMass;
+  if (this.centerOfMass === null) this.calculateCenterOfMass();
+
+  this.centerOfMassIndicator.visible = !this.centerOfMassIndicator.visible;
   this.printout.log("Center of mass indicator is "+(this.showCenterOfMass ? "on" : "off")+".");
-  var visible = this.showCenterOfMass;
-  this.positionTargetPlanes(this.centerOfMass);
-  this.scene.traverse(function(o) {
-    if (o.name == "targetPlane") o.visible = visible;
-  });
+  this.positionCenterOfMassIndicator(this.centerOfMass);
 }
 
 // Create the target planes forming the COM indicator.
-Model.prototype.generateTargetPlanes = function() {
-  var size = 1;
-  this.targetPlanes = [
-    new THREE.PlaneGeometry(size,size).rotateY(Math.PI/2), // normal x
-    new THREE.PlaneGeometry(size,size).rotateX(Math.PI/2), // normal y
-    new THREE.PlaneGeometry(size,size) // normal z
-  ];
-  var planeMat = Model.Materials.targetPlane;
-  var planeMeshes = [
-    new THREE.Mesh(this.targetPlanes[0], planeMat),
-    new THREE.Mesh(this.targetPlanes[1], planeMat),
-    new THREE.Mesh(this.targetPlanes[2], planeMat)
-  ];
-  for (var i=0; i<planeMeshes.length; i++) {
-    planeMeshes[i].name = "targetPlane";
-    planeMeshes[i].visible = false;
-    this.scene.add(planeMeshes[i]);
-  }
+Model.prototype.generateCenterOfMassIndicator = function() {
+  var centerOfMassIndicator = new THREE.Object3D;
+
+  centerOfMassIndicator.name = "centerOfMassIndicator";
+  centerOfMassIndicator.visible = false;
+
+  var xgeo = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2); // normal x
+  var ygeo = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2); // normal y
+  var zgeo = new THREE.PlaneGeometry(1, 1); // normal z
+
+  var planeMat = Model.Materials.centerOfMassPlane;
+
+  centerOfMassIndicator.add(
+    new THREE.Mesh(xgeo, planeMat),
+    new THREE.Mesh(ygeo, planeMat),
+    new THREE.Mesh(zgeo, planeMat)
+  );
+
+  this.centerOfMassIndicator = centerOfMassIndicator;
+
+  this.scene.add(centerOfMassIndicator);
 }
 
 // Position the COM indicator.
-Model.prototype.positionTargetPlanes = function(point) {
-  if (!this.targetPlanes) this.generateTargetPlanes();
+Model.prototype.positionCenterOfMassIndicator = function(point) {
+  if (!this.centerOfMassIndicator) this.generateCenterOfMassIndicator();
 
-  var vX = this.targetPlanes[0].vertices;
-  var vY = this.targetPlanes[1].vertices;
-  var vZ = this.targetPlanes[2].vertices;
-  // arrange that the planes protrude from the boundaries of the object
-  // by 0.1 times its size
   var extendFactor = 0.1;
-  var size = this.getSize().multiplyScalar(extendFactor);
-  var min = this.min.clone().sub(size);
-  var max = this.max.clone().add(size);
+  var scale = this.getSize().multiplyScalar(1.0 + extendFactor);
 
-  vX[0].set(point.x, min.y, min.z);
-  vX[1].set(point.x, min.y, max.z);
-  vX[2].set(point.x, max.y, min.z);
-  vX[3].set(point.x, max.y, max.z);
-
-  vY[0].set(min.x, point.y, min.z);
-  vY[1].set(min.x, point.y, max.z);
-  vY[2].set(max.x, point.y, min.z);
-  vY[3].set(max.x, point.y, max.z);
-
-  vZ[0].set(min.x, min.y, point.z);
-  vZ[1].set(min.x, max.y, point.z);
-  vZ[2].set(max.x, min.y, point.z);
-  vZ[3].set(max.x, max.y, point.z);
-
-  this.targetPlanes[0].verticesNeedUpdate = true;
-  this.targetPlanes[1].verticesNeedUpdate = true;
-  this.targetPlanes[2].verticesNeedUpdate = true;
+  this.centerOfMassIndicator.scale.copy(scale);
+  this.centerOfMassIndicator.position.copy(this.getCenter());
 }
 
 // Set the mode.
@@ -2271,8 +2181,8 @@ Model.prototype.generateSupports = function(params) {
 
   // add mesh min and max to the params and pass them to the support generator
   Object.assign(params, {
-    min: this.min,
-    max: this.max
+    min: this.boundingBox.min,
+    max: this.boundingBox.max
   });
 
   var supportMesh = this.makeSupportMesh();
@@ -2871,7 +2781,7 @@ Model.prototype.dispose = function() {
 
   removeMeshByName(this.scene, "base");
   removeMeshByName(this.scene, "slice");
-  removeMeshByName(this.scene, "targetPlane");
+  removeMeshByName(this.scene, "centerOfMassIndicator");
 
   // remove measurement markers, etc. from the scene
   this.measurement.dispose();
