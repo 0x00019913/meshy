@@ -24,7 +24,7 @@ var FileLoader = function() {
             }
           }
 
-          if (callback) callback(geo);
+          if (callback) callback(geo, filename);
         });
 
         reader.readAsText(file);
@@ -38,14 +38,14 @@ var FileLoader = function() {
           var bufferGeo = new THREE.STLLoader().parse(result);
           var geo = new THREE.Geometry().fromBufferGeometry(bufferGeo);
 
-          if (callback) callback(geo);
+          if (callback) callback(geo, filename);
         });
 
         if (reader.readAsBinaryString !== undefined) {
           reader.readAsBinaryString(file);
         }
         else {
-          reader.readAsArrayBuffer(fiel);
+          reader.readAsArrayBuffer(file);
         }
 
         break;
