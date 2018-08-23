@@ -1,7 +1,7 @@
 var Calculate = (function() {
 
   var Vector3 = THREE.Vector3;
-  var Line = THREE.Line;
+  var Line3 = THREE.Line3;
   var Plane = THREE.Plane;
 
   // get an array of the face's vertices in the original winding order
@@ -53,9 +53,9 @@ var Calculate = (function() {
 
     // intersection points of the plane with all three face segments; each is
     // undefined if no intersection
-    var vab = plane.intersectLine(new Line(a, b));
-    var vbc = plane.intersectLine(new Line(b, c));
-    var vca = plane.intersectLine(new Line(c, a));
+    var vab = plane.intersectLine(new Line3(a, b));
+    var vbc = plane.intersectLine(new Line3(b, c));
+    var vca = plane.intersectLine(new Line3(c, a));
 
     // if no intersections, return null
     if (vab === undefined && vbc === undefined && vca === undefined) {
@@ -71,12 +71,12 @@ var Calculate = (function() {
 
     // get the first and second intersections
     var v0 = vab !== undefined ? vab : vbc !== undefined ? vbc : vca;
-    var v1 = v0 === vca ? undefined : v0 === vbc ? vca : vbc;
+    var v1 = v0 === vab ? (vbc !== undefined ? vbc : vca) : (v0 === vbc ? vca : undefined);
 
     // if either intersection doesn't exist, return null
     if (v0 === undefined || v1 === undefined) return null;
 
-    return new Line(v0, v1);
+    return new Line3(v0, v1);
   }
 
   // apply a function to each face
@@ -136,27 +136,41 @@ var Calculate = (function() {
     var point = new Vector3();
     plane.coplanarPoint(point);
 
+    // total cross-section
     var crossSection = 0;
+    // min and max on each axis
+    var min = new Vector3().setScalar(Infinity);
+    var max = new Vector3().setScalar(-Infinity);
 
     _traverseFaces(mesh, function(face, vertices, matrix) {
       var segment = _planeFaceIntersection(plane, face, vertices, matrix);
 
       // nonzero contribution if plane intersects face
       if (segment !== null) {
+        min.min(segment.start);
+        min.min(segment.end);
+        max.max(segment.start);
+        max.max(segment.end);
+
         // triangle between coplanar point and the two endpoints of the segment
         var pa = new Vector3().subVectors(segment.start, point);
         var pb = new Vector3().subVectors(segment.end, point);
 
         // compute area of the triangle; possibly force it negative depending on
         // the normal
-        var area = Math.abs(pa.cross(pb)) / 2;
-        var sign = segment.start.dot(face.normal);
+        var area = pa.cross(pb).length() / 2;
+        var sign = Math.sign(segment.start.dot(face.normal));
 
         crossSection += area * sign;
       }
     });
 
-    return crossSection;
+    // return the value of the cross-section and its bounds along the axes
+    return {
+      crossSection: crossSection,
+      min: min,
+      max: max
+    };
   }
 
   return {
