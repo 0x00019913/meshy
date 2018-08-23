@@ -293,6 +293,10 @@ Meshy.prototype.generateUI = function() {
   this.initViewport();
   this.makeBuildVolume();
 
+  // measurement and mouse interaction
+  this.pointer = new Pointer(this.camera, this.renderer.domElement, this.scene);
+  this.measurement = new Measurement(this.pointer, this.scene);
+
   // gizmo creation:
   // set parameters, building the gizmo outward - first scale handles, then
   // normal rotate handles, then orthogonal handle(s), then translate handles;
@@ -401,17 +405,15 @@ Meshy.prototype.generateUI = function() {
   this.handleSnapTransformationToFloorState();
 }
 
-// anything that needs to be refreshed by hand (not in every frame)
-Meshy.prototype.updateUI = function() {
-  this.filenameController.updateDisplay();
-}
-
 // used for internal optimization while building a list of unique vertices
 Meshy.prototype.setVertexPrecision = function() {
   if (this.model) this.model.setVertexPrecision(this.vertexPrecision);
 }
 Meshy.prototype.setDisplayPrecision = function() {
-  if (this.infoBox) this.infoBox.decimals = this.displayPrecision;
+  if (this.infoBox) {
+    this.infoBox.decimals = this.displayPrecision;
+    this.infoBox.update();
+  }
 
   this.setFolderDisplayPrecision(this.editFolder);
 }
@@ -1575,7 +1577,7 @@ Meshy.prototype.handleFile = function(file) {
 
   return;
 
-  var model = new Model(
+  /*var model = new Model(
     this.scene,
     this.camera,
     this.container,
@@ -1591,10 +1593,10 @@ Meshy.prototype.handleFile = function(file) {
 
   model.isLittleEndian = this.isLittleEndian;
   model.vertexPrecision = this.vertexPrecision;
-  model.import(file, importParams, this.displayMesh.bind(this));
+  model.import(file, importParams, this.displayMesh.bind(this));*/
 };
 
-Meshy.prototype.createModel = function(geometry) {
+Meshy.prototype.createModel = function(geometry, filename) {
   this.model = new Model(
     geometry,
     this.scene,
@@ -1611,7 +1613,7 @@ Meshy.prototype.createModel = function(geometry) {
 
   this.buildEditFolder();
 
-  this.filename = this.model.filename;
+  this.filename = filename;
   this.gcodeFilename = this.filename;
   this.gcodeFilenameController.updateDisplay();
 
@@ -1621,9 +1623,13 @@ Meshy.prototype.createModel = function(geometry) {
   this.cameraToModel();
 
   this.setMeshMaterial();
-  this.updateUI();
+  this.filenameController.updateDisplay();
 
   this.gizmo.visible = true;
+
+  this.pointer.setModel(this.model);
+  // todo: remove
+  this.measurement.activate(Measurement.Types.circle, { axis: "z"});
 
   this.infoBox.update();
 }
