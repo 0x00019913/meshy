@@ -25,7 +25,7 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   //store header to export back out identically
   this.header = null;
   this.isLittleEndian = true;
-  this.filename = "";
+  //this.filename = "";
   this.setVertexPrecision(5);
 
   // calculated stuff
@@ -88,8 +88,8 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   // three orthogonal planes that intersect at the center of the mesh
   this.centerOfMassIndicator = null;
 
-  this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
-  this.measurement.setOutput(this.infoOutput);
+  //this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
+  //this.measurement.setOutput(this.infoOutput);
 
   // for supports
   this.supportGenerator = null;
@@ -236,6 +236,14 @@ Model.prototype.getScale = function() {
 Model.prototype.setVertexPrecision = function(precision) {
   this.vertexPrecision = precision;
   this.p = Math.pow(10, precision);
+}
+
+/* RAYCASTING */
+
+// pass straight through to the base mesh to raycast;
+// todo: route through an octree instead for efficiency
+Model.prototype.raycast = function(raycaster, intersects) {
+  this.baseMesh.raycast(raycaster, intersects);
 }
 
 /* TRANSFORMATIONS */
@@ -2802,5 +2810,5 @@ Model.prototype.dispose = function() {
   removeMeshByName(this.scene, "centerOfMassIndicator");
 
   // remove measurement markers, etc. from the scene
-  this.measurement.dispose();
+  //this.measurement.dispose();
 }
