@@ -449,9 +449,10 @@ var Gizmo = (function() {
 
         var intersections = raycaster.intersectObjects(this.colliders, true);
 
-        // intersecting some collider
+        // intersecting some collider - the intersections are sorted by
+        // distance, but the first one or more may be disabled, so find the
+        // closest enabled collider
         if (intersections.length > 0) {
-          var dist = Infinity;
           var collider = null;
 
           for (var i = 0; i < intersections.length; i++) {
@@ -459,10 +460,11 @@ var Gizmo = (function() {
             var object = intersection.object;
             var enabled = object.userData.handle.userData.enabled;
 
-            if (intersection.distance < dist && enabled) {
-              dist = intersection.distance;
+            if (enabled) {
               collider = object;
               this.activePoint = intersection.point;
+
+              break;
             }
           }
 
