@@ -62,11 +62,23 @@ var Calculate = (function() {
       return null;
     }
     // in the anomalous situation that the plane intersects all three segments,
-    // two of the intersections have to be coincident, so remove one
+    // do special handling
     else if (vab !== undefined && vbc !== undefined && vca !== undefined) {
-      if (vab.equals(vbc)) vab = undefined;
-      else if (vbc.equals(vca)) vbc = undefined;
-      else vca = undefined;
+      // two possible degenerate cases:
+      // 1. all three points lie on the plane, so there's no segment intersection
+      // 2. two points lie on the plane - they form the segment
+      var da = plane.distanceToPoint(a);
+      var db = plane.distanceToPoint(b);
+      var dc = plane.distanceToPoint(c);
+
+      // if 1, return null
+      if (da === 0 && db === 0 && dc === 0) return null;
+
+      // if 2, take the two points (but only if the other point is above the plane)
+      if (da === 0 && db === 0 && dc > 0) return new Line3(a, b);
+      else if (db === 0 && dc === 0 && da > 0) return new Line3(b, c);
+      else if (dc === 0 && da === 0 && db > 0) return new Line3(c, a);
+      else return null;
     }
 
     // get the first and second intersections
@@ -75,6 +87,9 @@ var Calculate = (function() {
 
     // if either intersection doesn't exist, return null
     if (v0 === undefined || v1 === undefined) return null;
+
+    // if intersection points are the same, return null
+    if (v0.equals(v1)) return null;
 
     return new Line3(v0, v1);
   }
@@ -158,8 +173,8 @@ var Calculate = (function() {
 
         // compute area of the triangle; possibly force it negative depending on
         // the normal
-        var area = pa.cross(pb).length() / 2;
-        var sign = Math.sign(segment.start.dot(face.normal));
+        var area = pa.clone().cross(pb).length() / 2;
+        var sign = Math.sign(pa.dot(face.normal));
 
         crossSection += area * sign;
       }

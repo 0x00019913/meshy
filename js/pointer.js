@@ -7,7 +7,7 @@ var Pointer = (function() {
     // for displaying the cursor
     this.scene = scene;
 
-    this.model = null;
+    this.target = null;
     this.active = false;
 
     this.raycaster = new THREE.Raycaster();
@@ -40,7 +40,7 @@ var Pointer = (function() {
     var _this = this;
 
     // pixel coords of the mousedown event, if the button is currently down
-    var clickCoords = null;
+    this.clickPixelCoords = null;
 
     // allowance in pixels between the mousedown and mouseup events - determines
     // whether a click counts or not
@@ -87,8 +87,8 @@ var Pointer = (function() {
 
   Object.assign(Pointer.prototype, {
 
-    setModel: function(model) {
-      this.model = model;
+    setTarget: function(target) {
+      this.target = target;
       return this;
     },
 
@@ -116,12 +116,12 @@ var Pointer = (function() {
     },
 
     mousemove: function(pointer) {
-      if (!this.active || !this.model) return;
+      if (!this.active || !this.target) return;
 
       this.raycaster.setFromCamera(pointer.coords, this.camera);
 
-      // recursive is false b/c model doesn't have children
-      var intersects = this.raycaster.intersectObject(this.model, false);
+      // recursive is false b/c target doesn't have children
+      var intersects = this.raycaster.intersectObject(this.target, false);
 
       // if intersecting mesh, get the first intersection
       if (intersects.length > 0) {
@@ -132,6 +132,7 @@ var Pointer = (function() {
         this.cursor.position.copy(point);
         this.cursor.lookAt(point.clone().add(normal));
         this.cursor.visible = true;
+        this.updateCursor();
 
         this.intersection = intersection;
       }
@@ -143,27 +144,35 @@ var Pointer = (function() {
     },
 
     mousedown: function(pointer) {
-      if (!this.active || !this.model) return;
+      if (!this.active || !this.target) return;
       if (!this.intersection) return;
       if (pointer.button !== 0) return;
 
-      this.clickCoords = pointer.pixelCoords;
+      this.clickPixelCoords = pointer.pixelCoords;
       this.cursor.material.color.set(this.cursorColorDown);
     },
 
     mouseup: function(pointer) {
-      if (!this.active || !this.model) return;
-      if (!this.clickCoords) return;
+      if (!this.active || !this.target) return;
+      if (!this.clickPixelCoords) return;
 
-      var dist = pointer.pixelCoords.distanceTo(this.clickCoords);
+      var dist = pointer.pixelCoords.distanceTo(this.clickPixelCoords);
       if (dist < this.clickAllowance) {
         for (var c = 0; c < this.clickCallbacks.length; c++) {
           this.clickCallbacks[c](this.intersection);
         }
       }
 
-      this.clickCoords = null;
+      this.clickPixelCoords = null;
       this.cursor.material.color.set(this.cursorColor);
+    },
+
+    updateCursor: function() {
+      if (!this.active || !this.cursor.visible) return;
+
+      var dist = this.cursor.position.distanceTo(this.camera.position);
+
+      this.cursor.scale.setScalar(dist * 0.005);
     }
 
   });

@@ -4,6 +4,7 @@ var Measurement = (function() {
     this.pointer = pointer;
     this.scene = scene;
 
+    this.active = false;
     this.type = Measurement.Types.none;
     this.params = null;
 
@@ -13,7 +14,9 @@ var Measurement = (function() {
     this.markers = [];
     this.connectors = [];
 
-    this.result = {};
+    this.result = {
+      ready: false
+    };
 
     // index of the marker due to be placed next
     this.midx = 0;
@@ -29,7 +32,10 @@ var Measurement = (function() {
     this.mtype = Marker.Types.none;
     this.ctype = Connector.Types.none;
 
-    this.pointerCallbackIdx = -1;;
+    this.pointerCallbackIdx = -1;
+
+    // optionally called when a valid result has been calculated
+    this.onResultReady = null;
   }
 
   Measurement.Types = {
@@ -45,6 +51,8 @@ var Measurement = (function() {
     constructor: Measurement,
 
     activate: function(type, params) {
+      this.active = true;
+
       this.type = type;
       this.params = params || {};
 
@@ -60,7 +68,9 @@ var Measurement = (function() {
       this.mtype = Marker.Types.none;
       this.ctype = Connector.Types.none;
 
-      this.result = {};
+      this.result = {
+        ready: false
+      };
 
       var mparams = {};
       var cparams = {};
@@ -96,6 +106,7 @@ var Measurement = (function() {
         this.params.normal = this.params.normal || axisToVector3(this.params.axis);
 
         // use this normal to create the plane marker
+        mparams.axis = this.params.axis;
         mparams.normal = this.params.normal;
       }
       else return;
@@ -127,6 +138,8 @@ var Measurement = (function() {
       this.calculateMeasurement(intersection);
 
       // position markers and connectors
+
+      // if plane, just position the marker given the measurement result
       if (this.isPlanar()) {
         var min = this.result.min;
         var max = this.result.max;
@@ -141,6 +154,7 @@ var Measurement = (function() {
         if (size.z <= 0) size.z = 1;
         marker.setScale(size);
       }
+      // else, position the 2-3 markers and their connectors
       else {
         // position marker
         marker.setPosition(point);
@@ -148,19 +162,18 @@ var Measurement = (function() {
         // position connector
         if (this.isLinear()) {
           if (this.mactive > 0) {
-            var mprev = this.markers[(this.midx - 1 + this.mnum) % this.mnum].getPosition();
+            var pprev = this.markers[(this.midx - 1 + this.mnum) % this.mnum].getPosition();
 
             connector.setFromPointPair(pprev, point);
           }
         }
         else if (this.isCircular()) {
-          var normal = this.result.normal;
-          var center = this.result.center;
-          var radius = this.result.radius;
+          // if result is valid, position the connector and turn it on
+          if (this.result.ready) {
+            var normal = this.result.normal;
+            var center = this.result.center;
+            var radius = this.result.radius;
 
-          // if center, radius, and normal are given, position the connector
-          // and turn it on
-          if (normal && center && radius) {
             connector.setFromNormalAndCenter(normal, center);
             connector.setScale(new THREE.Vector3().setScalar(radius));
 
@@ -171,6 +184,10 @@ var Measurement = (function() {
             connector.deactivate()
           }
         }
+      }
+
+      if (this.onResultReady) {
+        this.onResultReady(this.result);
       }
 
       marker.activate();
@@ -193,6 +210,7 @@ var Measurement = (function() {
         var p1 = point;
 
         this.result.length = p0.distanceTo(p1);
+        this.result.ready = true;
       }
       else if (this.type === Measurement.Types.angle) {
         var p0 = this.markers[(this.midx - 2 + this.mnum) % this.mnum].getPosition();
@@ -202,6 +220,8 @@ var Measurement = (function() {
         var dot = p0.clone().sub(p1).dot(p2.clone().sub(p1));
 
         this.result.angle = acos(dot);
+        this.result.angleDegrees = this.result.angle * 180.0 / Math.PI;
+        this.result.ready = true;
       }
       else if (this.type === Measurement.Types.circle) {
         var p0 = this.markers[(this.midx - 2 + this.mnum) % this.mnum].getPosition();
@@ -218,9 +238,12 @@ var Measurement = (function() {
         // normal
         var normal = sa.clone().cross(sb).normalize();
 
-        // if points are collinear, can't compute the circle, so do nothing
+        // if points are collinear, can't compute the circle, so unready the
+        // result and return
         if (normal.length() === 0) {
-          this.result = {};
+          this.result = {
+            ready: false
+          };
 
           return;
         }
@@ -258,6 +281,7 @@ var Measurement = (function() {
         this.result.area = radius * radius * Math.PI;
         this.result.center = center;
         this.result.normal = normal;
+        this.result.ready = true;
       }
       else if (this.type === Measurement.Types.crossSection) {
         var plane = new THREE.Plane();
@@ -267,6 +291,7 @@ var Measurement = (function() {
         this.result.crossSection = crossSectionData.crossSection;
         this.result.min = crossSectionData.min;
         this.result.max = crossSectionData.max;
+        this.result.ready = true;
       }
     },
 
@@ -274,7 +299,7 @@ var Measurement = (function() {
       var markers = this.markers;
       // start color and color increment
       var color = 0x2adeff;
-      var dcolor = 0x600000;
+      var dcolor = 0x300000;
 
       for (var m = 0; m < this.mnum; m++) {
         var idx = (this.midx - m + this.mnum) % this.mnum;
@@ -304,7 +329,24 @@ var Measurement = (function() {
       return this.type === Measurement.Types.circle;
     },
 
+    updateMarkers: function(camera) {
+      // only update if active and measurement uses non-plane markers
+      if (!this.active || this.isPlanar()) return;
+
+      for (var m = 0; m < this.mnum; m++) {
+        var marker = this.markers[m];
+
+        if (marker.type !== Marker.Types.point) continue;
+
+        var dist = camera.position.distanceTo(marker.getPosition());
+
+        marker.setRadius(dist * 0.005);
+      }
+    },
+
     deactivate: function() {
+      this.active = false;
+
       this.pointer.removeClickCallback(this.pointerCallbackIdx);
       this.pointerCallbackIdx = -1;
 
@@ -312,6 +354,8 @@ var Measurement = (function() {
 
       removeMeshByName(this.scene, "measurementMarker");
       removeMeshByName(this.scene, "measurementConnector");
+
+      this.onResultReady = null;
     }
 
   });
@@ -418,6 +462,11 @@ var Measurement = (function() {
 
     var dim = params.dim || 1;
     var geo = new THREE.PlaneBufferGeometry(dim, dim);
+
+    // geometry points up z by default, so reorient if necessary
+    if (params.axis === "x") geo.rotateY(Math.PI / 2);
+    else if (params.axis === "y") geo.rotateX(Math.PI / 2);
+
     var mat = params.material ? params.material.clone : new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
@@ -441,7 +490,6 @@ var Measurement = (function() {
     setPosition: function(point) {
       // position display mesh
       this.mesh.position.copy(point);
-      this.mesh.lookAt(point.clone().add(this.normal));
     },
 
     setScale: function(scale) {
