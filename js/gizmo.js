@@ -474,6 +474,7 @@ var Gizmo = (function() {
             if (this.activeHandle !== handle) this.deactivateHandle();
             this.activateHandle(handle);
           }
+          else this.deactivateHandle();
         }
         else {
           this.deactivateHandle();
