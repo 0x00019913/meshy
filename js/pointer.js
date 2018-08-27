@@ -99,6 +99,7 @@ var Pointer = (function() {
 
     deactivate: function() {
       this.active = false;
+      this.cursor.visible = false;
       return this;
     },
 
