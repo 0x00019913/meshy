@@ -11,7 +11,7 @@ function Slicer(src, params) {
     var mesh = meshes[m];
     if (!mesh) continue;
 
-    sourceGeo.merge(mesh.geometry);
+    sourceGeo.merge(mesh.geometry, mesh.matrixWorld);
   }
 
   this.sourceGeo = sourceGeo;
