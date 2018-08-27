@@ -1808,6 +1808,16 @@ Meshy.prototype.handleFile = function(file) {
 };
 
 Meshy.prototype.createModel = function(geometry, filename) {
+  // scale geometry to match internal units (assumes THREE.Geometry)
+  if (this.units !== this.importUnits) {
+    var vertices = geometry.vertices;
+    var convert = Units.getConverterV3(this.importUnits, this.units);
+
+    for (var v = 0; v < vertices.length; v++) {
+      vertices[v].copy(convert(vertices[v]));
+    }
+  }
+
   this.model = new Model(
     geometry,
     this.scene,
@@ -1841,66 +1851,7 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.pointer.setTarget(this.model);
 
   this.infoBox.update();
-
-  // todo: remove
-  this.measureCircle();
 }
-
-// todo: deprecate
-// Callback passed to model.import; puts the mesh into the viewport.
-/*Meshy.prototype.displayMesh = function(success, model) {
-  this.importEnabled = true;
-
-  if (!success) {
-    // it's necessary to clear file input box because it blocks importing
-    // a model with the same name twice in a row
-    this.fileInput.value = "";
-
-    this.importingMeshName = "";
-
-    this.model = null;
-    return;
-  }
-
-  // set model
-  this.model = model;
-
-  // failsafe
-  if (!this.model) {
-    removeMeshByName(this.scene, "model");
-    return;
-  }
-
-  this.buildEditFolder();
-
-  this.filename = this.model.filename;
-  this.gcodeFilename = this.filename;
-  this.gcodeFilenameController.updateDisplay();
-
-  if (this.autocenterOnImport) this.autoCenter();
-
-  // todo: remove
-  //this.generateSupports();
-  //this.activateSliceMode();
-  //this.gcodeSave();
-
-  this.cameraToModel();
-
-  // todo: remove
-  //this.currentSliceLevel = 39;
-  //this.setSliceLevel();
-
-  var ct = false ? new THREE.Vector3(9.281622759922609, 32.535200621303574, 1.0318610787252986) : null;
-  if (ct) {
-    this.controls.update({
-      origin: ct,
-      r: 0.01
-    });
-  }
-
-  this.setMeshMaterial();
-  this.updateUI();
-}*/
 
 // Interface for the dat.gui button. Saves the model.
 Meshy.prototype.export = function(format) {
