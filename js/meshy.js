@@ -429,7 +429,7 @@ Meshy.prototype.exportSTL = function() { this.export("stl"); }
 Meshy.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Meshy.prototype.undo = function() {
-  this.deactivateSliceMode();
+  this.endSliceMode();
   this.gizmo.transformFinish();
 
   try {
@@ -442,7 +442,7 @@ Meshy.prototype.undo = function() {
   this.infoBox.update();
 }
 Meshy.prototype.redo = function() {
-  this.deactivateSliceMode();
+  this.endSliceMode();
   this.gizmo.transformFinish();
 
   try {
@@ -1138,11 +1138,11 @@ Meshy.prototype.clearThicknessView = function() {
   if (this.model) this.model.clearThicknessView();
 }
 Meshy.prototype.generatePatch = function() {
-  this.deactivateSliceMode();
+  this.endSliceMode();
   if (this.model) this.model.generatePatch();
 }
 Meshy.prototype.acceptPatch = function() {
-  this.deactivateSliceMode();
+  this.endSliceMode();
   if (this.model) this.model.acceptPatch();
 }
 Meshy.prototype.cancelPatch = function() {
@@ -1257,9 +1257,9 @@ Meshy.prototype.buildSliceFolder = function(folder) {
   this.buildRaftFolder(folder);
   this.buildGcodeFolder(folder);
 
-  if (this.sliceModeOn) folder.add(this, "deactivateSliceMode").name("Slice mode off")
+  if (this.sliceModeOn) folder.add(this, "endSliceMode").name("Slice mode off")
     .title("Turn slice mode off.");
-  else folder.add(this, "activateSliceMode").name("Slice mode on")
+  else folder.add(this, "startSliceMode").name("Slice mode on")
     .title("Turn slice mode on.");
 }
 Meshy.prototype.buildLayerSettingsFolder = function(folder) {
@@ -1380,10 +1380,10 @@ Meshy.prototype.updateSlicerParams = function() {
   }
   this.setSliceLevel();
 }
-Meshy.prototype.activateSliceMode = function() {
+Meshy.prototype.startSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = true;
-    this.model.activateSliceMode(this.makeSlicerParams());
+    this.model.startSliceMode(this.makeSlicerParams());
     this.buildSliceFolder(this.supportSliceFolder);
   }
 }
@@ -1435,11 +1435,11 @@ Meshy.prototype.makeGcodeParams = function() {
     extruderPrecision: this.gcodeExtruderPrecision
   };
 }
-Meshy.prototype.deactivateSliceMode = function() {
+Meshy.prototype.endSliceMode = function() {
   if (this.model) {
     this.sliceModeOn = false;
     this.buildSupportSliceFolder();
-    //this.model.deactivateSliceMode();
+    this.model.endSliceMode();
   }
 }
 Meshy.prototype.setSliceLevel = function() {
@@ -1870,7 +1870,7 @@ Meshy.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
-  this.deactivateSliceMode();
+  this.endSliceMode();
 
   this.endMeasurement();
   if (this.model) {
