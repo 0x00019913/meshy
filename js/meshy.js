@@ -191,7 +191,7 @@ Meshy.prototype.generateUI = function() {
     .title("Measure cross-section on y axis.");
   measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
-  measurementFolder.add(this, "measurementEnd").name("End measurement")
+  measurementFolder.add(this, "endMeasurement").name("End measurement")
     .title("Turn off the current measurement.");
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
@@ -470,7 +470,15 @@ Meshy.prototype.makeTranslateTransform = function(invertible) {
     }
     return pos;
   }
-  transform.onApply = function(pos) { _this.model.translate(pos); };
+  transform.onApply = function(pos) {
+    // if measurement is active, translate markers
+    if (_this.measurement.active) {
+      var delta = pos.clone().sub(_this.model.getPosition());
+      _this.measurement.translate(delta);
+    }
+
+    _this.model.translate(pos);
+  };
   transform.onEnd = function() { _this.model.translateEnd(); };
   transform.invertible = invertible;
 
@@ -481,7 +489,14 @@ Meshy.prototype.makeRotateTransform = function(invertible) {
   if (this.dbg) console.log("make rotate transform");
   var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
-  transform.onApply = function(euler) { _this.model.rotate(euler); };
+  transform.onApply = function(euler) {
+    // disallow having an active measurement while rotating
+    if (_this.measurement && _this.measurement.active) {
+      _this.endMeasurement();
+    }
+
+    _this.model.rotate(euler);
+  };
   transform.onEnd = function() {
     _this.model.rotateEnd();
     if (_this.snapTransformationsToFloor) _this.floorZ(false);
@@ -501,6 +516,15 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
     if (scale.x <= 0) scale.x = 1;
     if (scale.y <= 0) scale.y = 1;
     if (scale.z <= 0) scale.z = 1;
+
+    // if measurement is active, scale markers with respect to mesh center
+    if (_this.measurement.active) {
+      var vfactor = scale.clone().divide(_this.model.getScale());
+      _this.measurement.scaleFromCenter(vfactor, _this.position);
+
+      _this.onChangeMeasurementToScale();
+    }
+
     _this.model.scale(scale);
   };
   transform.onEnd = function() {
@@ -859,7 +883,7 @@ Meshy.prototype.buildEditFolder = function() {
     .title("Select ring size.");
   ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
     .title("Scale the ring.");
-  ringSizeFolder.add(this, "measurementEnd").name("4. End measurement")
+  ringSizeFolder.add(this, "endMeasurement").name("4. End measurement")
     .title("Turn off the measurement tool.");
 
   var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
@@ -896,11 +920,39 @@ Meshy.prototype.scaleToMeasurement = function() {
   var currentValue = this.measurementResult[key];
 
   if (currentValue !== undefined) {
-    var ratio = this.newMeasurementValue / currentValue;
-    if (key == "crossSection" || key === "area") ratio = Math.sqrt(ratio);
+    var factor = this.newMeasurementValue / currentValue;
+    if (key == "crossSection" || key === "area") factor = Math.sqrt(factor);
 
+    this.scaleByFactor(factor);
   }
 }
+Meshy.prototype.scaleToRingSize = function() {
+  // must have an active circle measurement
+  if (!this.measurement
+    || !this.measurement.active
+    || this.measurement.type !== Measurement.Types.circle
+    // must have a measurement result and a diameter field in that result
+    || !this.measurementResult
+    || this.measurementResult.diameter === undefined)
+  {
+    this.printout.warn("Scaling to ring size requires an active, valid circle measurement.");
+    return;
+  }
+
+  var tmpVal = this.newMeasurementValue;
+  var tmpType = this.measurementToScale;
+
+  this.newMeasurementValue = this.newRingSize;
+  this.measurementToScale = "diameter";
+  this.scaleToMeasurement();
+
+  this.newMeasurementValue = tmpVal;
+  this.measurementToScale = tmpType;
+
+  // update the scale to measurement folder b/c the values changed
+  this.onChangeMeasurementToScale();
+}
+
 Meshy.prototype.measureLength = function() { this.startMeasurement(Measurement.Types.length); }
 Meshy.prototype.measureAngle = function() { this.startMeasurement(Measurement.Types.angle); }
 Meshy.prototype.measureCircle = function() { this.startMeasurement(Measurement.Types.circle); }
@@ -915,7 +967,19 @@ Meshy.prototype.measureCrossSectionZ = function() {
 }
 Meshy.prototype.startMeasurement = function(type, params) {
   // turn off previous measurement if one exists
-  this.measurementEnd();
+  this.endMeasurement();
+
+  // disable rotation and axis scaling handles on the gizmo
+  if (this.gizmo) {
+    this.gizmo.disableHandle(Gizmo.HandleTypes.rotate, "x");
+    this.gizmo.disableHandle(Gizmo.HandleTypes.rotate, "y");
+    this.gizmo.disableHandle(Gizmo.HandleTypes.rotate, "z");
+    this.gizmo.disableHandle(Gizmo.HandleTypes.rotate, "o");
+
+    this.gizmo.disableHandle(Gizmo.HandleTypes.scale, "x");
+    this.gizmo.disableHandle(Gizmo.HandleTypes.scale, "y");
+    this.gizmo.disableHandle(Gizmo.HandleTypes.scale, "z");
+  }
 
   if (this.model) {
     this.measurementResult = null;
@@ -943,8 +1007,19 @@ Meshy.prototype.startMeasurement = function(type, params) {
     }
 
     var _this = this;
-    this.measurement.onResultReady = function(result) {
+    this.measurement.onResultChange = function(result) {
+      // need to update the folder if no result or result ready status changed
+      var folderNeedsUpdate =
+        _this.measurementResult === null || _this.measurementResult.ready !== result.ready;
+
       _this.measurementResult = result;
+
+
+      if (folderNeedsUpdate) {
+        _this.buildScaleToMeasurementFolder();
+        _this.onChangeMeasurementToScale();
+      }
+
       list.update();
     }
 
@@ -953,13 +1028,108 @@ Meshy.prototype.startMeasurement = function(type, params) {
     this.buildScaleToMeasurementFolder();
   }
 }
-Meshy.prototype.measurementEnd = function() {
+Meshy.prototype.buildScaleToMeasurementFolder = function() {
+  this.clearFolder(this.scaleToMeasurementFolder);
+
+  if (!this.measurement || !this.measurement.active) return;
+  if (!this.measurementResult || !this.measurementResult.ready) return;
+
+  // measurement type
+  var type = this.measurement.type;
+  // measurement result
+  var result = this.measurementResult;
+  // measurements to scale
+  var keys = [];
+  this.scalableMeasurements = keys;
+
+  if (type === Measurement.Types.length) {
+    if (result.hasOwnProperty("length")) keys.push("length");
+  }
+  else if (type === Measurement.Types.circle) {
+    if (result.hasOwnProperty("radius")) keys.push("radius");
+    if (result.hasOwnProperty("diameter")) keys.push("diameter");
+    if (result.hasOwnProperty("circumference")) keys.push("circumference");
+    if (result.hasOwnProperty("area")) keys.push("area");
+  }
+  else if (type === Measurement.Types.crossSection) {
+    if (result.hasOwnProperty("crossSection")) keys.push("crossSection");
+  }
+  // do nothing if nothing to scale
+  else return;
+
+  this.measurementToScale = keys[0];
+  this.newMeasurementValue = 1;
+
+  this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements)
+    .name("Measurement to scale")
+    .title("Select an available measurement to which to scale.")
+    .onChange(this.onChangeMeasurementToScale.bind(this));
+  this.currentMeasurementValueController =
+    this.scaleToMeasurementFolder.add(this.measurementResult, this.measurementToScale)
+    .name("Current value")
+    .title("Current value of the measurement.");
+  this.disableController(this.currentMeasurementValueController);
+  this.newMeasurementValueController = this.scaleToMeasurementFolder.add(this, "newMeasurementValue")
+    .name("New value")
+    .title("New value: scale the mesh so that the measurement equals this value.");
+  this.scaleToMeasurementFolder.add(this, "scaleToMeasurement")
+    .name("Scale to measurement")
+    .title("Scale the mesh.");
+
+  this.setFolderDisplayPrecision(this.scaleToMeasurementFolder);
+}
+Meshy.prototype.onChangeMeasurementToScale = function() {
+  var currentController = this.currentMeasurementValueController;
+
+  if (currentController) {
+    // now the controller gets the current measurement to scale from the
+    // measurement result
+    currentController.object = this.measurementResult;
+    currentController.property = this.measurementToScale;
+    // update controller
+    currentController.updateDisplay();
+  }
+
+  // the new value defaults to the current value
+  this.newMeasurementValue = this.measurementResult[this.measurementToScale];
+
+  // update controller
+  var newController = this.newMeasurementValueController;
+
+  if (newController) {
+    newController.updateDisplay();
+  }
+}
+Meshy.prototype.endMeasurement = function() {
+  if (!this.measurement || !this.measurement.active) return;
+
   // measurement off
   if (this.measurement) this.measurement.deactivate();
+
+  // remove the result
+  this.measurementResult = null;
+
   // clear scale to measurement folder
-  if (this.scaleToMeasurementFolder) this.clearFolder(this.scaleToMeasurementFolder);
+  if (this.scaleToMeasurementFolder) {
+    this.clearFolder(this.scaleToMeasurementFolder);
+    this.measurementToScale = "";
+    this.currentMeasurementValueController = null;
+    this.newMeasurementValueController = null;
+  }
   // if infobox measurement list exists, remove it
   if (this.infoBox && this.measurementInfoList) this.infoBox.removeList(this.measurementInfoList);
+
+  // reenable rotation and axis scaling handles on the gizmo
+  if (this.gizmo) {
+    this.gizmo.enableHandle(Gizmo.HandleTypes.rotate, "x");
+    this.gizmo.enableHandle(Gizmo.HandleTypes.rotate, "y");
+    this.gizmo.enableHandle(Gizmo.HandleTypes.rotate, "z");
+    this.gizmo.enableHandle(Gizmo.HandleTypes.rotate, "o");
+
+    this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "x");
+    this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "y");
+    this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "z");
+  }
 }
 Meshy.prototype.viewThickness = function() {
   if (this.model) this.model.viewThickness(this.thicknessThreshold);
@@ -1282,35 +1452,6 @@ Meshy.prototype.gcodeSave = function() {
     this.model.gcodeSave(this.makeGcodeParams());
   }
 }
-Meshy.prototype.buildScaleToMeasurementFolder = function() {
-  this.clearFolder(this.scaleToMeasurementFolder);
-
-  if (!this.measurement || !this.measurement.active) return;
-
-  var type = this.measurement.type;
-  var keys = [];
-  this.scalableMeasurements = keys;
-
-  if (type === Measurement.Types.length) {
-    keys.push("length");
-  }
-  else if (type === Measurement.Types.circle) {
-    keys.push("radius", "diameter", "circumference", "area");
-  }
-  else if (type === Measurement.Types.crossSection) {
-    keys.push("crossSection");
-  }
-
-  this.measurementToScale = keys[0];
-  this.newMeasurementValue = 1;
-
-  this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements).name("Measurement to scale")
-    .title("Select an available measurement to which to scale.");
-  this.scaleToMeasurementFolder.add(this, "newMeasurementValue", 0).name("New value")
-    .title("New value by which to scale the mesh so that the measurement equals the given value.");
-  this.scaleToMeasurementFolder.add(this, "scaleToMeasurement").name("Scale to measurement")
-    .title("Scale the mesh.");
-}
 Meshy.prototype.clearFolder = function(folder) {
   for (var i=folder.__controllers.length-1; i>=0; i--) {
     folder.remove(folder.__controllers[i]);
@@ -1345,25 +1486,6 @@ Meshy.prototype.setFolderDisplayPrecision = function(folder) {
     this.setFolderDisplayPrecision(folder.__folders[fkey]);
   }
 }
-Meshy.prototype.scaleToRingSize = function() {
-  if (this.model &&
-  this.model.measurement.active &&
-  this.scalableMeasurements.includes("diameter")) {
-    var tmpVal = this.newMeasurementValue;
-    var tmpType = this.measurementToScale;
-
-    this.newMeasurementValue = this.newRingSize;
-    this.measurementToScale = "diameter";
-    this.scaleToMeasurement();
-
-    this.newMeasurementValue = tmpVal;
-    this.measurementToScale = tmpType;
-  }
-  else {
-    this.printout.warn("A circle measurement must be active to scale to ring size.");
-  }
-}
-
 Meshy.prototype.toggleBuildVolume = function() {
   this.buildVolumeVisible = !this.buildVolumeVisible;
   this.setBuildVolumeState();
@@ -1502,7 +1624,7 @@ Meshy.prototype.initViewport = function() {
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
       else if (k=="g") _this.toggleGizmo();
-      else if (e.keyCode === 27) _this.measurementEnd();
+      else if (e.keyCode === 27) _this.endMeasurement();
       else caught = false;
     }
 
@@ -1525,7 +1647,7 @@ Meshy.prototype.initViewport = function() {
       _this.pointer.updateCursor();
     }
     if (_this.measurement && _this.measurement.active) {
-      _this.measurement.updateMarkers(_this.camera);
+      _this.measurement.updateFromCamera(_this.camera);
     }
     _this.axisWidget.update();
 
@@ -1799,7 +1921,7 @@ Meshy.prototype.delete = function() {
 
   this.deactivateSliceMode();
 
-  this.measurementEnd();
+  this.endMeasurement();
   if (this.model) {
     this.model.dispose();
   }
@@ -1809,7 +1931,7 @@ Meshy.prototype.delete = function() {
   }
   this.model = null;
   this.editStack.clear();
-  this.clearFolder(this.editFolder);
+  this.buildEditFolder();
   this.gizmo.visible = false;
 
   this.printout.log("Model deleted.");
