@@ -204,12 +204,8 @@ Meshy.prototype.generateUI = function() {
     .title("Clear the color indicating parts of the mesh that are too thin.");
 
   var repairFolder = this.gui.addFolder("Repair (beta)", "Repair missing polygons.");
-  repairFolder.add(this, "generatePatch").name("Generate patch")
-    .title("Generate a patch of faces to make the mesh manifold.");
-  repairFolder.add(this, "acceptPatch").name("Accept patch")
-    .title("Integrate the patch into the mesh.");
-  repairFolder.add(this, "cancelPatch").name("Cancel patch")
-    .title("Remove the generated patch.");
+  repairFolder.add(this, "repair").name("Repair")
+    .title("Repair mesh.");
 
   this.layerHeight = .05;//todo: back to 0.1
   this.lineWidth = 0.05;
@@ -279,7 +275,8 @@ Meshy.prototype.generateUI = function() {
 
   this.infoBox = new InfoBox(this.displayPrecision);
   this.infoBox.add("Units", this, "units");
-  this.infoBox.add("Polycount", this, ["model","getPolycount"]);
+  this.infoBox.add("Polycount", this, ["model","getPolyCount"]);
+  this.infoBox.add("Vertex count", this, ["model","getVertexCount"]);
   this.infoBox.add("x range", this, ["model","getXRange"]);
   this.infoBox.add("y range", this, ["model","getYRange"]);
   this.infoBox.add("z range", this, ["model","getZRange"]);
@@ -1137,16 +1134,11 @@ Meshy.prototype.viewThickness = function() {
 Meshy.prototype.clearThicknessView = function() {
   if (this.model) this.model.clearThicknessView();
 }
-Meshy.prototype.generatePatch = function() {
+Meshy.prototype.repair = function() {
   this.endSliceMode();
-  if (this.model) this.model.generatePatch();
-}
-Meshy.prototype.acceptPatch = function() {
-  this.endSliceMode();
-  if (this.model) this.model.acceptPatch();
-}
-Meshy.prototype.cancelPatch = function() {
-  if (this.model) this.model.cancelPatch();
+  if (this.model) this.model.repair();
+
+  this.infoBox.update();
 }
 Meshy.prototype.generateSupports = function() {
   if (this.model) {
@@ -1873,6 +1865,7 @@ Meshy.prototype.delete = function() {
   this.endSliceMode();
 
   this.endMeasurement();
+
   if (this.model) {
     this.model.dispose();
   }
@@ -1880,14 +1873,17 @@ Meshy.prototype.delete = function() {
     this.printout.warn("No model to delete.");
     return;
   }
+
   this.model = null;
   this.editStack.clear();
   this.buildEditFolder();
   this.gizmo.visible = false;
 
-  this.printout.log("Model deleted.");
+  this.pointer.setTarget(null);
 
   this.infoBox.update();
+
+  this.printout.log("Model deleted.");
 }
 
 // Reposition the camera to look at the model.
