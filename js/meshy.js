@@ -299,6 +299,8 @@ Meshy.prototype.generateUI = function() {
   // normal rotate handles, then orthogonal handle(s), then translate handles;
   // this ensures that everything is spaced correctly
 
+  this.gizmoVisible = false;
+
   this.gizmoSpacing = 1;
 
   // current radial boundary; next handle begins one spacing unit away from here
@@ -1278,7 +1280,7 @@ Meshy.prototype.buildLayerSettingsFolder = function(folder) {
   sliceLayerSettingsFolder.add(this, "sliceInfillOverlap", 0, 1).name("Infill overlap")
     .title("Defines how much infill overlaps with the innermost wall. 0 gives a separation of a full line width, 1 means the printline of an infill line starts and ends on the centerline of the wall.");
   if (this.sliceModeOn) {
-    sliceLayerSettingsFolder.add(this, "updateSlicerParams").name("Update params")
+    sliceLayerSettingsFolder.add(this, "updateSlicerParams").name("Apply")
       .title("Update the layer parameters and recalculate as necessary.");
   }
 }
@@ -1311,7 +1313,7 @@ Meshy.prototype.buildRaftFolder = function(folder) {
   sliceRaftFolder.add(this, "sliceRaftWriteWalls").name("Print perimeter")
     .title("Optionally print the raft with walls around the infill.");
   if (this.sliceModeOn) {
-    sliceRaftFolder.add(this, "updateSlicerParams").name("Update raft params")
+    sliceRaftFolder.add(this, "updateSlicerParams").name("Apply")
       .title("Update the raft parameters and recalculate as necessary.");
   }
 }
@@ -1378,6 +1380,7 @@ Meshy.prototype.startSliceMode = function() {
     this.model.startSliceMode(this.makeSlicerParams());
     this.buildSliceFolder(this.supportSliceFolder);
   }
+  this.handleGizmoVisibility();
 }
 Meshy.prototype.makeSlicerParams = function() {
   return {
@@ -1433,6 +1436,7 @@ Meshy.prototype.endSliceMode = function() {
     this.buildSupportSliceFolder();
     this.model.endSliceMode();
   }
+  this.handleGizmoVisibility();
 }
 Meshy.prototype.setSliceLevel = function() {
   if (this.model) {
@@ -1491,8 +1495,12 @@ Meshy.prototype.setBuildVolumeState = function() {
 Meshy.prototype.toggleGizmo = function() {
   if (!this.gizmo) return;
 
-  var visible = this.gizmo.visible;
-  this.gizmo.visible = !!this.model && !visible;
+  this.gizmoVisible = !!this.model && !this.gizmoVisible;
+
+  this.handleGizmoVisibility();
+}
+Meshy.prototype.handleGizmoVisibility = function() {
+  this.gizmo.visible = this.sliceModeOn ? false : this.gizmoVisible;
 }
 Meshy.prototype.toggleCOM = function() {
   if (this.model) {
@@ -1623,8 +1631,10 @@ Meshy.prototype.initViewport = function() {
     if (caught) e.preventDefault();
   }
 
+  this.animationID = -1;
+
   function animate() {
-    requestAnimationFrame(animate);
+    _this.animationID = requestAnimationFrame(animate);
     render();
   }
 
@@ -1648,6 +1658,10 @@ Meshy.prototype.initViewport = function() {
     _this.renderer.clearDepth();
     _this.renderer.render(_this.gizmoScene, _this.camera);
   }
+}
+
+Meshy.prototype.stopAnimation = function() {
+  cancelAnimationFrame(this.animationID);
 }
 
 Meshy.prototype.calculateBuildVolumeBounds = function() {
@@ -1838,7 +1852,8 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.setMeshMaterial();
   this.updateUI();
 
-  this.gizmo.visible = true;
+  this.gizmoVisible = true;
+  this.handleGizmoVisibility();
 
   this.pointer.setTarget(this.model);
 
