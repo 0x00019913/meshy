@@ -52,14 +52,13 @@ Object.assign(MCG.Sweep, (function() {
 
       var ev = dequeue();
 
-      //if (ev.p.h==-564133 && ev.p.v==772518) debug.point(ev.p.toVector3(THREE.Vector3, srcA.context), 0.2, axis);
-
       updateFront(ev);
 
       //printEvents = dbg && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       //printEvents = dbg && inRange(ev.p.h, 6.0*p, 7.1*p) && inRange(ev.p.v, -1.0*p, -0.5*p);
       //printEvents = dbg && inRange(ev.p.h, 9.28*p, 9.30*p);
-      printEvents = dbg && inRange(ct, 31117, 31211) && ((ev.twin.p.v-ev.p.v)*(ev.isLeft?1:-1) > 0);
+      //printEvents = dbg && inRange(ct, 31117, 31211) && ((ev.twin.p.v-ev.p.v)*(ev.isLeft?1:-1) > 0);
+      printEvents = dbg && ev.p.v < -6.7*p && ev.p.h > -1.0*p && ev.p.h < 0.5*p;
       drawEvents = false;
       incr = 0.00001;
 
@@ -75,6 +74,18 @@ Object.assign(MCG.Sweep, (function() {
 
         var [up, dn] = eventGetAdjacent(ev);
         if (printEvents && up && dn) console.log(up.intersects(dn));
+
+        // if the up event has the same starting point, it's possible that it
+        // was initially below the current event in slope but then became above
+        // in slope due to an intersection, so now the current is is below when
+        // it should've been above according to the initial placement in the
+        // queue; requeue both and continue
+        if (up && ev.hvcompare(up) === 0) {
+          requeue(up);
+          requeue(ev);
+
+          continue;
+        }
 
         ev.setDepthFromBelow(dn);
 
@@ -109,7 +120,7 @@ Object.assign(MCG.Sweep, (function() {
           eventDraw(ev, 0.50151, 0x99ff99, printEvents);
           eventDraw(dn, 0.50150, 0x9999ff, printEvents);
         }
-        debug.point(new MCG.Vector(context, 928611, 3256127).toVector3(THREE.Vector3), 0.50148, context.axis);
+        //debug.point(new MCG.Vector(context, 928611, 3256127).toVector3(THREE.Vector3), 0.50148, context.axis);
         if (up) eventPrint(up, "uR");
         eventPrint(ev);
         if (dn) eventPrint(dn, "dR");
@@ -122,7 +133,7 @@ Object.assign(MCG.Sweep, (function() {
         eventDraw(ev, o);
       }
 
-      if (ct > 31193) statusPrint();
+      if (ct >= 1121) statusPrint();
       else statusPrintShort();
 
       if (drawEvents) o += incr*10;
@@ -305,32 +316,6 @@ Object.assign(MCG.Sweep, (function() {
         p = e;
       }
     }
-
-    /*function depthCorrect(e) {
-      var iter = status.findIter(e);
-      var c, p = e;
-
-      while ((c = iter.next()) !== null) {
-        if (c.seqcompare(e) !== -1) {
-          c.setDepthFromBelow(p);
-          if (printEvents) console.log("corrected depth", p.id, c.id, "from", e.id);
-        }
-
-        p = c;
-      }
-    }
-
-    function handlePastEvent(e) {
-      if (front === null) {
-        front = e;
-        return;
-      }
-
-      var tc = e.seqcompare(front);
-
-      if (tc === 1) front = e;
-      else depthCorrect(e);
-    }*/
 
     function updateFront(ev) {
       if (front === null || ev.hvcompare(front) > 0) front = ev;
