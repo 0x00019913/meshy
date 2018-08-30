@@ -244,6 +244,8 @@ var Measurement = (function() {
     positionPlaneMarker: function() {
       if (!this.isPlanar()) return;
 
+      var marker = this.markers[0];
+
       var min = this.result.min;
       var max = this.result.max;
 
