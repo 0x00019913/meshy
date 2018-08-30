@@ -447,9 +447,6 @@ Slicer.prototype.gcodeSave = function(params) {
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  // unnecessary
-  //this.makeGeometry();
-
   this.setLevel(this.currentLevel);
 }
 
@@ -485,6 +482,7 @@ Slicer.prototype.getLevelPos = function(level) {
 Slicer.prototype.setLevel = function(level) {
   if (level === undefined) level = this.getCurrentLevel();
   level = clamp(level, this.getMinLevel(), this.getMaxLevel());
+
   var prevLevel = this.currentLevel;
   this.currentLevel = level;
 
@@ -551,24 +549,6 @@ Slicer.prototype.setLevel = function(level) {
         else if (bounds.min < slicePos) {
           slicedFaces.push(face);
         }
-
-        /*// if min above slice level, need to hide the face
-        if (bounds.min >= slicePos) {
-          face.materialIndex = 1;
-        }
-        // else min <= slice level
-        else {
-          // if max below slice level, need to show the face
-          if (bounds.max < slicePos) {
-            faces.push(face);
-            face.materialIndex = 0;
-          }
-          // else, face is cut
-          else {
-            face.materialIndex = 1;
-            slicedFaces.push(face);
-          }
-        }*/
       }
 
       // handle the sliced faces: slice them and insert them (and associated verts)
@@ -628,20 +608,12 @@ Slicer.prototype.setLevel = function(level) {
             newFace1.materialIndex = 0;
             newFace2.materialIndex = 0;
 
-            //faces[fidx++] = newFace1;
-            //faces[fidx++] = newFace2;
             faces.push(newFace1);
             faces.push(newFace2);
           }
         });
-
-        //faces.length = fidx;
       }
     }
-
-    //debug.cleanup();
-
-    //debug.lines();
   }
   else if (this.mode === Slicer.Modes.full) {
     var allContoursGeo = geos.allContours.geo;
@@ -789,43 +761,36 @@ Slicer.prototype.setLevel = function(level) {
 
     // debugging for calculating disjoint infill contours wrt k neighboring layers
     if (0) {
-      var idx0 = layer.params.idx0, idxk = layers.length - 1;
-      var contour = layer.getInfillContour();
+      var numTopLayers = layer.params.numTopLayers;
+      var idx = layer.params.idx;
       var neighborContours = new MCG.SegmentSet(context);
+      var numLayers = 0;
+      var contour = layer.getInfillContour();
 
-      for (var i = 1; i <= layer.params.numTopLayers; i++) {
-        if (level + i <= idxk) {
-          neighborContours.merge(layers[level + i].getInfillContour());
-          layers[level+i].getInfillContour().forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3(THREE.Vector3, context);
-            var v2 = p2.toVector3(THREE.Vector3, context);
-            //debug.line(v1, v2, 1, false, 0.5, axis);
-          });
+      if (idx < numTopLayers || idx > layer.params.layers.length - 1 - numTopLayers) return;
+
+      // if optimizing top layer computation (and there are more than 2 top
+      // layers), only use the adjacent layers and the farthest layers
+      if (layer.params.optimizeTopLayers && numTopLayers > 2) {
+        neighborContours.merge(layers[idx + 1].getInfillContour());
+        neighborContours.merge(layers[idx - 1].getInfillContour());
+        neighborContours.merge(layers[idx + numTopLayers].getInfillContour());
+        neighborContours.merge(layers[idx - numTopLayers].getInfillContour());
+
+        numLayers = 4;
+      }
+      else {
+        for (var i = 1; i <= numTopLayers; i++) {
+          neighborContours.merge(layers[idx + i].getInfillContour());
+          neighborContours.merge(layers[idx - i].getInfillContour());
         }
-        if (level - i >= idx0) {
-          neighborContours.merge(layers[level - i].getInfillContour());
-          layers[level-i].getInfillContour().forEachPointPair(function(p1, p2) {
-            var v1 = p1.toVector3(THREE.Vector3, context);
-            var v2 = p2.toVector3(THREE.Vector3, context);
-            //debug.line(v1, v2, 1, false, 0.5, axis);
-          });
-        }
+
+        numLayers = numTopLayers * 2;
       }
 
-      contour.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.50001, axis);
-      });
-      neighborContours.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.2, axis);
-      });
-
       var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
-        minDepthB: layer.params.numTopLayers * 2,
-        dbg: false
+        minDepthB: numLayers,
+        dbg: true
       });
 
       var adj = fullDifference.intersection.makeAdjacencyMap();
@@ -834,36 +799,41 @@ Slicer.prototype.setLevel = function(level) {
         console.log(level, adj.map, key, adj.map[key]);
         var v = adj.map[key].pt.toVector3(THREE.Vector3, context);
         debug.line(v.clone().setZ(context.d),v.clone().setZ(context.d+3.1));
-        debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(THREE.Vector3, context), 0.51, context.axis);
-        debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(THREE.Vector3, context), 0.51, context.axis);
+        //debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(THREE.Vector3, context), 0.51, context.axis);
+        //debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(THREE.Vector3, context), 0.51, context.axis);
       }
 
       function sliverFilterFn(poly) { return !poly.isSliver(); }
 
+      neighborContours.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.5, axis);
+      });
       contour.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.0, axis);
+        debug.line(v1, v2, 1, false, 0.501, axis);
       });
       fullDifference.intersection.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.1, axis);
+        debug.line(v1, v2, 1, false, 2.5, axis);
       });
       fullDifference.intersection.toPolygonSet().forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.25, axis);
+        debug.line(v1, v2, 1, false, 2.7, axis);
       });
       fullDifference.AminusB.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, -0.1, axis);
+        debug.line(v1, v2, 1, false, 3.5, axis);
       });
       fullDifference.AminusB.toPolygonSet().forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, -0.25, axis);
+        debug.line(v1, v2, 1, false, 3.7, axis);
       });
 
       var ires = MCG.Math.ftoi(this.lineWidth, context);
@@ -884,36 +854,13 @@ Slicer.prototype.setLevel = function(level) {
       infillInner.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
+        //debug.line(v1, v2, 1, false, 0.0, axis);
       });
       infillSolid.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 1, false, 0.0, axis);
+        //debug.line(v1, v2, 1, false, 0.0, axis);
       });
-
-      debug.lines();
-      return;
-    }
-
-    var infill = layer.getInfill();
-
-    if (infill) {
-      if (infill.inner) {
-        infill.inner.forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 0.0, axis);
-        });
-      }
-
-      if (infill.solid) {
-        infill.solid.forEachPointPair(function(p1, p2) {
-          var v1 = p1.toVector3(THREE.Vector3, context);
-          var v2 = p2.toVector3(THREE.Vector3, context);
-          debug.line(v1, v2, 1, false, 0.0, axis);
-        });
-      }
     }
   }*/
 }
