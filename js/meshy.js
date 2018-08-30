@@ -209,7 +209,7 @@ Meshy.prototype.generateUI = function() {
 
   this.layerHeight = .05;//todo: back to 0.1
   this.lineWidth = 0.05;
-  this.upAxis = "z";
+  this.sliceAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)",
     "Generate supports, slice the mesh, and export the resulting G-code.");
   this.supportAngle = 45;
@@ -583,7 +583,7 @@ Meshy.prototype.onRotate = function() {
   if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
-  this.currentTransform.apply(this.rotation);
+  this.currentTransform.apply(this.rotation.clone());
 }
 // called on rotation end
 Meshy.prototype.onFinishRotate = function() {
@@ -726,6 +726,64 @@ Meshy.prototype.autoCenter = function(invertible) {
   this.updatePosition();
 }
 
+Meshy.prototype.setBase = function() {
+  this.endMeasurement();
+
+  if (!this.pointer) return;
+
+  this.pointer.deactivate();
+  this.pointer.addClickCallback(this.faceOrientDown.bind(this));
+  this.pointer.setCursor(1);
+  this.pointer.activate();
+}
+
+Meshy.prototype.faceOrientDown = function(intersection) {
+  if (!intersection) return;
+
+  // get the normal in world space
+  var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
+  var normal = intersection.face.normal.clone().applyMatrix3(rotation);
+
+  var down = new THREE.Vector3(0, 0, -1);
+
+  var axis = new THREE.Vector3();
+  var angle = 0;
+
+  // if already pointing down, do nothing
+  if (normal.equals(down)) {
+    return;
+  }
+  // if pointing up, arbitrarily set rotation axis to x
+  else if (normal.dot(down) === -1) {
+    axis.set(1, 0, 0);
+    angle = Math.PI;
+  }
+  // else, get the axis via cross-product
+  else {
+    axis.crossVectors(normal, down).normalize();
+    angle = acos(normal.dot(down));
+  }
+
+  // make the transform and apply it (this operation is always invertible)
+  var transform = this.makeRotateTransform();
+
+  // rotate
+  var q = new THREE.Quaternion().setFromEuler(this.rotation);
+  var dq = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+  this.rotation.setFromQuaternion(q.premultiply(dq));
+
+  transform.apply(this.rotation.clone());
+  transform.end();
+
+  this.pushEdit(transform, this.updateRotation.bind(this));
+  this.updateRotation();
+  this.updatePosition();
+  this.updateSize();
+  this.infoBox.update();
+
+  this.pointer.deactivate();
+}
+
 Meshy.prototype.flipNormals = function() {
   if (this.model) this.model.flipNormals();
 }
@@ -795,6 +853,9 @@ Meshy.prototype.buildEditFolder = function() {
   if (!this.model) {
     return;
   }
+
+  this.editFolder.add(this, "setBase").name("Set base")
+    .title("Select a face to align so that its normal points down.");
 
   // position vector
   this.position = new THREE.Vector3();
@@ -1157,7 +1218,7 @@ Meshy.prototype.generateSupports = function() {
       subdivs: this.supportSubdivs,
       radiusFn: this.supportRadiusFnMap[this.supportRadiusFnName],
       radiusFnK: this.supportRadiusFnK,
-      axis: this.upAxis
+      axis: this.sliceAxis
     });
   }
 }
@@ -1177,7 +1238,7 @@ Meshy.prototype.buildSupportSliceFolder = function() {
       .title("Height of each mesh slice layer.");
     supportSliceFolder.add(this, "lineWidth", .0001, 1).name("Line width")
       .title("Width of the print line. Affects minimum resolvable detail size, decimation of sliced contours, and extrusion in the exported G-code.");
-    supportSliceFolder.add(this, "upAxis", ["x", "y", "z"]).name("Up axis")
+    supportSliceFolder.add(this, "sliceAxis", ["x", "y", "z"]).name("Up axis")
       .title("Axis normal to the slicing planes.");
 
     var supportFolder = supportSliceFolder.addFolder("Supports", "Generate supports for printing the model.");
@@ -1385,7 +1446,7 @@ Meshy.prototype.startSliceMode = function() {
 Meshy.prototype.makeSlicerParams = function() {
   return {
     mode: this.sliceMode,
-    axis: this.upAxis,
+    axis: this.sliceAxis,
     layerHeight: this.layerHeight,
     lineWidth: this.lineWidth,
     numWalls: this.sliceNumWalls,
@@ -1624,7 +1685,10 @@ Meshy.prototype.initViewport = function() {
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
       else if (k=="g") _this.toggleGizmo();
-      else if (e.keyCode === 27) _this.endMeasurement();
+      else if (e.keyCode === 27) {
+        _this.endMeasurement();
+        if (_this.pointer) _this.pointer.deactivate();
+      }
       else caught = false;
     }
 

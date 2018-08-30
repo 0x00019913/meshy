@@ -15,25 +15,40 @@ var Pointer = (function() {
     // contains functions invoked on mouse up
     this.clickCallbacks = [];
 
-    // cursor mesh
+    // create the cursors
+    this.cursors = [];
+    this.cursorIdx = 0;
+
     this.cursorColor = 0x999999;
     this.cursorColorDown = 0xffff00;
-    this.cursorSegments = 32;
+    var cursorSegments = 32;
 
-    var cursorGeo = new THREE.Geometry();
-    var cursorMat = new THREE.LineBasicMaterial({color: this.cursorColor});
-    var dtheta = 2 * Math.PI / this.cursorSegments;
+    // circle cursor
+    var cursor0Geo = new THREE.Geometry();
+    var cursor0Mat = new THREE.LineBasicMaterial({ color: this.cursorColor });
+    var dtheta = 2 * Math.PI / cursorSegments;
 
-    for (var i = 0; i <= this.cursorSegments; i++) {
+    for (var i = 0; i <= cursorSegments; i++) {
       var theta = i * dtheta;
-      cursorGeo.vertices.push(new THREE.Vector3(Math.cos(theta), Math.sin(theta), 0));
+      cursor0Geo.vertices.push(new THREE.Vector3(Math.cos(theta), Math.sin(theta), 0));
     }
 
-    this.cursor = new THREE.Line(cursorGeo, cursorMat);
-    this.cursor.name = "cursor";
-    this.cursor.visible = false;
+    this.cursors.push(new THREE.Line(cursor0Geo, cursor0Mat));
 
-    this.scene.add(this.cursor);
+    // normal arrow cursor
+    var cursor1Geo = new THREE.ConeBufferGeometry(1, 2, cursorSegments);
+    cursor1Geo.rotateX(Math.PI / 2);
+    cursor1Geo.translate(0, 0, 1);
+    var cursor1Mat = new THREE.MeshStandardMaterial({ color: this.cursorColor });
+    this.cursors.push(new THREE.Mesh(cursor1Geo, cursor1Mat))
+
+    for (var c = 0; c < this.cursors.length; c++) {
+      var cursor = this.cursors[c];
+
+      cursor.name = "cursor";
+      cursor.visible = false;
+      this.scene.add(cursor);
+    }
 
     // mouse interaction
 
@@ -94,13 +109,29 @@ var Pointer = (function() {
 
     activate: function() {
       this.active = true;
+
       return this;
     },
 
     deactivate: function() {
+      // clear callbacks
+      this.clickCallbacks.length = 0;
+
+      // make inactive and invisible
       this.active = false;
-      this.cursor.visible = false;
+      this.getCursor().visible = false;
+
       return this;
+    },
+
+    setCursor: function(idx) {
+      this.cursorIdx = clamp(idx, 0, this.cursors.length - 1);
+
+      return this;
+    },
+
+    getCursor: function() {
+      return this.cursors[this.cursorIdx];
     },
 
     addClickCallback: function(callback) {
@@ -127,18 +158,24 @@ var Pointer = (function() {
       // if intersecting mesh, get the first intersection
       if (intersects.length > 0) {
         var intersection = intersects[0];
-        var normal = intersection.face.normal;
+
+        // get the normal in world space
+        var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
+        var normal = intersection.face.normal.clone().applyMatrix3(rotation);
+
         var point = intersection.point;
 
-        this.cursor.position.copy(point);
-        this.cursor.lookAt(point.clone().add(normal));
-        this.cursor.visible = true;
+        var cursor = this.getCursor();
+
+        cursor.position.copy(point);
+        cursor.lookAt(point.clone().add(normal));
+        cursor.visible = true;
         this.updateCursor();
 
         this.intersection = intersection;
       }
       else {
-        this.cursor.visible = false;
+        this.getCursor().visible = false;
 
         this.intersection = null;
       }
@@ -150,7 +187,7 @@ var Pointer = (function() {
       if (pointer.button !== 0) return;
 
       this.clickPixelCoords = pointer.pixelCoords;
-      this.cursor.material.color.set(this.cursorColorDown);
+      this.getCursor().material.color.set(this.cursorColorDown);
     },
 
     mouseup: function(pointer) {
@@ -165,15 +202,17 @@ var Pointer = (function() {
       }
 
       this.clickPixelCoords = null;
-      this.cursor.material.color.set(this.cursorColor);
+      this.getCursor().material.color.set(this.cursorColor);
     },
 
     updateCursor: function() {
-      if (!this.active || !this.cursor.visible) return;
+      var cursor = this.getCursor();
 
-      var dist = this.cursor.position.distanceTo(this.camera.position);
+      if (!this.active || !cursor.visible) return;
 
-      this.cursor.scale.setScalar(dist * 0.005);
+      var dist = cursor.position.distanceTo(this.camera.position);
+
+      cursor.scale.setScalar(dist * 0.005);
     }
 
   });

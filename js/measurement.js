@@ -116,6 +116,7 @@ var Measurement = (function() {
       }
 
       this.pointerCallbackIdx = this.pointer.addClickCallback(this.onClick.bind(this));
+      this.pointer.setCursor(0);
       this.pointer.activate();
     },
 
