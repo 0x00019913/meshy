@@ -62,7 +62,6 @@ Meshy = function() {
   this.renderer = null;
   this.axisWidget = null;
   this.printout = new Printout();
-  this.progressBarContainer = document.getElementById("progressBarContainer");
 
   // verify that WebGL is enabled
   if (!Detector.webgl) {
@@ -1889,8 +1888,7 @@ Meshy.prototype.handleFile = function(file) {
     this.camera,
     this.container,
     this.printout,
-    this.infoBox,
-    this.progressBarContainer
+    this.infoBox
   );
 
   var importParams = {
@@ -1920,8 +1918,7 @@ Meshy.prototype.createModel = function(geometry, filename) {
     this.camera,
     this.container,
     this.printout,
-    this.infoBox,
-    this.progressBarContainer
+    this.infoBox
   );
 
   this.importEnabled = true;
