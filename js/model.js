@@ -15,11 +15,10 @@
    instance of Printout, or console by default), and an output for
    measurements.
 */
-function Model(geometry, scene, camera, container, printout, infoOutput, progressBarContainer) {
+function Model(geometry, scene, camera, container, printout) {
   this.scene = scene;
   this.camera = camera;
   this.container = container;
-  this.infoOutput = infoOutput;
   this.printout = printout ? printout : console;
 
   //store header to export back out identically
@@ -80,17 +79,9 @@ function Model(geometry, scene, camera, container, printout, infoOutput, progres
   // three orthogonal planes that intersect at the center of the mesh
   this.centerOfMassIndicator = null;
 
-  //this.measurement = new Measurement(this.scene, this.camera, this.container, this.printout);
-  //this.measurement.setOutput(this.infoOutput);
-
   // for supports
   this.supportGenerator = null;
   this.supportsGenerated = false;
-
-  // currently active non-thread-blocking calculations; each is associated with
-  // an iterator and a progress bar and label in the UI
-  this.iterators = {};
-  this.progressBarContainer = progressBarContainer;
 }
 
 Model.Materials = {
@@ -362,291 +353,7 @@ Model.prototype.flipNormals = function() {
   geo.normalsNeedUpdate = true;
 }
 
-//// Translate the model on axis ("x"/"y"/"z") by amount (always a Vector3).
-// Translate the model to a new position.
-/*Model.prototype.translate = function(target) {
-  var diff = target.clone().sub(this.baseMesh.position);
 
-  this.baseMesh.position.copy(target);
-  if (this.supportMesh) this.supportMesh.position.copy(target);
-
-  this.min.add(diff);
-  this.max.add(diff);
-
-  if (this.centerOfMass) {
-    this.centerOfMass.add(diff)
-    // transform center of mass indicator
-    this.positionTargetPlanes(this.centerOfMass);
-  }
-
-  return;
-
-  // float precision for printout
-  var d = 4;
-
-  // if we're translating on all axes
-  if (axis=="all") {
-    var amountString = amount.x.toFixed(d)+", "+amount.y.toFixed(d)+", "+amount.z.toFixed(d);
-    this.printout.log("translation by ("+amountString+") units on x, y, z");
-  }
-  // if we're translating on only one axis
-  else {
-    this.printout.log("translation by "+amount[axis].toFixed(d)+" units on "+axis+" axis");
-  }
-
-  // translate vertices
-  for (var v=0; v<this.vertices.length; v++) this.vertices[v].add(amount);
-
-  // set tags and clean up
-
-  this.baseMesh.geometry.verticesNeedUpdate = true;
-  this.baseMesh.geometry.normalsNeedUpdate = true;
-  this.baseMesh.geometry.boundingSphere = null;
-  this.baseMesh.geometry.boundingBox = null;
-
-  this.min.add(amount);
-  this.max.add(amount);
-
-  if (this.centerOfMass) {
-    this.centerOfMass.add(amount)
-    // transform center of mass indicator
-    this.positionTargetPlanes(this.centerOfMass);
-  }
-
-  this.removePatchMesh();
-
-  // invalidate the octree and stop any active iterators
-  this.octree = null;
-  this.stopIterator();
-
-  this.removeSupports();
-  this.supportGenerator = null;
-
-  // erase the vertex colors signifying thickness
-  this.clearThicknessView();
-
-  this.measurement.translate(amount);
-}*/
-
-// Rotate the model on axis ("x"/"y"/"z") by "amount" degrees.
-/*Model.prototype.rotate = function(axis, amount) {
-  var degree = amount[axis]*Math.PI/180.0;
-
-  this.printout.log("rotation by "+amount[axis]+" degrees about "+axis+" axis");
-  this.resetBounds();
-  // need a Vector3 for rotating vertices
-  var axisVector = axisToVector3(axis);
-
-  for (var v=0; v<this.vertices.length; v++) {
-    var vertex = this.vertices[v];
-    vertex.applyAxisAngle(axisVector, degree);
-    this.updateBoundsV(vertex);
-  }
-  for (var f=0; f<this.faces.length; f++) {
-    this.faces[f].normal.applyAxisAngle(axisVector, degree);
-  }
-
-  this.baseMesh.geometry.verticesNeedUpdate = true;
-  this.baseMesh.geometry.normalsNeedUpdate = true;
-  this.baseMesh.geometry.boundingSphere = null;
-  this.baseMesh.geometry.boundingBox = null;
-  if (this.centerOfMass) {
-    // transform center of mass
-    this.centerOfMass.applyAxisAngle(axisToVector3(axis),degree);
-    this.positionTargetPlanes(this.centerOfMass);
-  }
-
-  this.removePatchMesh();
-
-  // invalidate the octree and stop any active iterators
-  this.octree = null;
-  this.stopIterator();
-
-  this.removeSupports();
-  this.supportGenerator = null;
-
-  // erase the vertex colors signifying thickness
-  this.clearThicknessView();
-
-  // size argument is necessary for resizing things that aren't rotationally
-  // symmetric
-  this.measurement.rotate(axis, degree, this.getSize());
-}*/
-
-// Scale the model on axis ("x"/"y"/"z") by amount.
-/*Model.prototype.scale = function (axis, amount) {
-  // float precision for printout
-  var d = 4;
-
-  // if we're scaling on all axes
-  if (axis=="all") {
-    var amountString = amount.x.toFixed(d)+", "+amount.y.toFixed(d)+", "+amount.z.toFixed(d);
-    this.printout.log("scale by a factor of ("+amountString+") units on x, y, z");
-  }
-  // if we're scaling on only one axis
-  else {
-    var amountString = amount[axis].toFixed(d);
-    this.printout.log("scale by a factor of "+amountString+" units on "+axis+" axis");
-  }
-  for (var v=0; v<this.baseMesh.geometry.vertices.length; v++) {
-    this.baseMesh.geometry.vertices[v].multiply(amount);
-  }
-  // normals may shift as a result of the scaling, so recompute
-  this.baseMesh.geometry.computeFaceNormals();
-
-  this.baseMesh.geometry.verticesNeedUpdate = true;
-  this.baseMesh.geometry.normalsNeedUpdate = true;
-  this.baseMesh.geometry.boundingSphere = null;
-  this.baseMesh.geometry.boundingBox = null;
-  this.surfaceArea = null;
-  this.volume = null;
-  this.min.multiply(amount);
-  this.max.multiply(amount);
-  if (this.centerOfMass) {
-    // transform center of mass
-    this.centerOfMass.multiply(amount);
-    this.positionTargetPlanes(this.centerOfMass);
-  }
-
-  this.removePatchMesh();
-
-  // invalidate the octree and stop any active iterators
-  this.octree = null;
-  this.stopIterator();
-
-  this.removeSupports();
-  this.supportGenerator = null;
-
-  // erase the vertex colors signifying thickness
-  this.clearThicknessView();
-
-  this.measurement.scale(amount);
-}*/
-
-// Mirror the mesh along an axis.
-/*Model.prototype.mirror = function(axis) {
-  this.printout.log("mirror along "+axis+" axis");
-
-  var scaleVector = new THREE.Vector3(1,1,1);
-  scaleVector[axis] = -1;
-  for (var v=0; v<this.vertices.length; v++) {
-    this.vertices[v].multiply(scaleVector);
-  }
-  // flip the normal component and also flip the winding order
-  for (var f=0; f<this.faces.length; f++) {
-    var face = this.faces[f];
-    var tmp = face.a;
-    face.a = face.b;
-    face.b = tmp;
-    face.normal[axis] *= -1;
-  }
-
-  this.baseMesh.geometry.verticesNeedUpdate = true;
-  this.baseMesh.geometry.elementsNeedUpdate = true;
-  this.baseMesh.geometry.boundingSphere = null;
-  this.baseMesh.geometry.boundingBox = null;
-  // swap the min/max and negate
-  var tmp = this.min[axis];
-  this.min[axis] = -1*this.max[axis];
-  this.max[axis] = -1*tmp;
-
-  if (this.centerOfMass) {
-    // transform center of mass
-    this.centerOfMass[axis] *= -1;
-    this.positionTargetPlanes(this.centerOfMass);
-  }
-
-  this.removePatchMesh();
-
-  // invalidate the octree and stop any active iterators
-  this.octree = null;
-  this.stopIterator();
-
-  this.removeSupports();
-  this.supportGenerator = null;
-
-  // erase the vertex colors signifying thickness
-  this.clearThicknessView();
-
-  this.measurement.scale(scaleVector);
-}*/
-
-/*Model.prototype.flipNormals = function() {
-  // flip the normal component and also flip the winding order
-  for (var f=0; f<this.faces.length; f++) {
-    var face = this.faces[f];
-    var tmp = face.a;
-    face.a = face.b;
-    face.b = tmp;
-    face.normal.multiplyScalar(-1);
-  }
-
-  this.baseMesh.geometry.elementsNeedUpdate = true;
-  this.baseMesh.geometry.normalsNeedUpdate = true;
-}*/
-
-/* MEASUREMENT */
-
-// If current measurement has the given "type", return its value.
-Model.prototype.getMeasuredValue = function (type) {
-  if (this.measurement) {
-    if (this.measurement.active) {
-      var currentValue = this.measurement.getMeasuredValue(type);
-      if (currentValue!==null) {
-        if (currentValue>0) return currentValue;
-        else {
-          this.printout.warn("New value can't be 0 or negative.");
-          return null;
-        }
-      }
-      else {
-        this.printout.warn("The currently active measurement doesn't contain the attribute '" + type + "'.");
-        return null;
-      }
-    }
-    else {
-      this.printout.warn("Can't get value for " + type + "; no measurement currently active.");
-      return null;
-    }
-  }
-  return null;
-}
-
-// Get an array of names for values that are being measured, as long as it's
-// possible to scale to them.
-Model.prototype.getScalableMeasurements = function() {
-  if (this.measurement && this.measurement.active) {
-    return this.measurement.getScalableMeasurements();
-  }
-  return null;
-}
-
-Model.prototype.activateMeasurement = function (type, param) {
-  if (this.measurement) {
-    var activated;
-    // If param supplied, need to pass in extra information in a params object.
-    // If calculating cross-section, the param is an axis; also pass size,
-    // center, and a function to calculate cross-section.
-    if (param) {
-      var params = {};
-      if (type=="crossSection") {
-        params.axis = param;
-        params.size = this.getSize();
-        params.center = this.getCenter();
-        params.fn = this.calcCrossSection.bind(this);
-      }
-
-      activated = this.measurement.activate(type, params);
-    }
-    else {
-      activated = this.measurement.activate(type);
-    }
-    return activated;
-  }
-}
-Model.prototype.deactivateMeasurement = function () {
-  if (this.measurement) this.measurement.deactivate();
-}
 
 /* CALCULATIONS */
 
@@ -674,88 +381,9 @@ Model.prototype.calcCrossSection = function(axis, pos) {
   var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(axisVector, point);
 
   return Calculate.crossSection(plane, this.baseMesh);
-
-  return;
-
-  var crossSection = 0;
-  // for finding the range of the cross-section; axis1 and axis2 are the two
-  // axes that
-  var axis1 = cycleAxis(axis);
-  var minAxis1 = Infinity, maxAxis1 = -Infinity;
-  var axis2 = cycleAxis(axis1);
-  var minAxis2 = Infinity, maxAxis2 = -Infinity;
-
-  for (var i=0; i<this.faces.length; i++) {
-    var face = this.faces[i];
-    var segment = this.faceIntersection(face, axis, pos);
-    if (segment && segment.length==2) {
-      // update the min and max
-      minAxis1 = Math.min(minAxis1, segment[0][axis1]);
-      maxAxis1 = Math.max(maxAxis1, segment[0][axis1]);
-      minAxis2 = Math.min(minAxis2, segment[0][axis2]);
-      maxAxis2 = Math.max(maxAxis2, segment[0][axis2]);
-
-      // Calculate cross-section. Algorithm is like this:
-      // 1. shift segment endpoints down to 0 on axis,
-      // 2. calculate area of the triangle formed by segment and origin,
-      // 3. multiply by sign, accumulate for all triangles
-      segment[0][axis] = 0;
-      segment[1][axis] = 0;
-      var area = segment[0].cross(segment[1]).multiplyScalar(1/2).length();
-      var sign = Math.sign(segment[1].dot(face.normal));
-      crossSection += sign * area;
-    }
-  }
-
-  var result = { crossSection: crossSection};
-  result[axis1+"size"] = maxAxis1-minAxis1;
-  result[axis2+"size"] = maxAxis2-minAxis2;
-  return result;
 }
 
-// Calculate the endpoints of the segment formed by the intersection of this
-// triangle and a plane normal to the given axis.
-// Returns an array of two Vector3s in the plane.
-Model.prototype.faceIntersection = function(face, axis, pos) {
-  var verts = faceGetVerts(face, this.vertices);
-  var min = verts[0][axis], max = min;
-  for (var i=1; i<3; i++) {
-    var bound = verts[i][axis];
-    if (bound<min) min = bound;
-    if (bound>max) max = bound;
-  }
-  if (max<=pos || min>=pos) return [];
 
-  var segment = [];
-  for (var i=0; i<3; i++) {
-    var v1 = verts[i];
-    var v2 = verts[(i+1)%3];
-    if ((v1[axis]<pos && v2[axis]>pos) || (v1[axis]>pos && v2[axis]<pos)) {
-      var d = v2[axis]-v1[axis];
-      if (d==0) return;
-      var factor = (pos-v1[axis])/d;
-      // more efficient to have a bunch of cases than being clever and calculating
-      // the orthogonal axes and building a Vector3 from basis vectors, etc.
-      if (axis=="x") {
-        var y = v1.y + (v2.y-v1.y)*factor;
-        var z = v1.z + (v2.z-v1.z)*factor;
-        segment.push(new THREE.Vector3(pos,y,z));
-      }
-      else if (axis=="y") {
-        var x = v1.x + (v2.x-v1.x)*factor;
-        var z = v1.z + (v2.z-v1.z)*factor;
-        segment.push(new THREE.Vector3(x,pos,z));
-      }
-      else { // axis=="z"
-        var x = v1.x + (v2.x-v1.x)*factor;
-        var y = v1.y + (v2.y-v1.y)*factor;
-        segment.push(new THREE.Vector3(x,y,pos));
-      }
-    }
-  }
-  if (segment.length!=2) console.log("Plane-triangle intersection: strange segment length: ", segment);
-  return segment;
-}
 
 /* UI AND RENDERING */
 
@@ -967,37 +595,6 @@ Model.prototype.updateSliceMeshesInScene = function() {
   }
 }
 
-// TODO: DEPRECATE
-// Set the geometry on the current slice mesh.
-Model.prototype.setSliceMeshGeometry = function() {
-  if (!this.slicer) return;
-
-  var sliceGeometry = this.slicer.getGeometry();
-
-  var sliceVertices = sliceGeometry.vertices;
-  var sliceFaces = sliceGeometry.faces;
-
-  if (this.slicer.mode==Slicer.Modes.preview) {
-    var mesh = this.sliceFullMesh;
-    if (!mesh) return;
-
-    mesh.geometry.vertices = sliceVertices;
-
-    mesh.geometry.verticesNeedUpdate = true;
-    mesh.geometry.lineDistancesNeedUpdate = true;
-  }
-  else if (this.slicer.mode==Slicer.Modes.full) {
-    var mesh = this.sliceFullMesh;
-    if (!mesh) return;
-
-    mesh.geometry = new THREE.Geometry();
-    mesh.geometry.vertices = sliceVertices;
-
-    mesh.geometry.verticesNeedUpdate = true;
-    mesh.geometry.lineDistancesNeedUpdate = true;
-  }
-}
-
 // make display meshes for slice mode
 Model.prototype.makeSliceMeshes = function() {
   if (!this.slicer) return;
@@ -1058,79 +655,23 @@ Model.prototype.makeSliceMeshes = function() {
 // params:
 //  d: optional depth argument; else, we determine it as ~log of polycount
 //  nextIterator: optionally start this iterator when done building octree
-Model.prototype.buildOctree = function(d, nextIterator) {
-  // it's possible that the octree is being constructed right now; add the
-  // callback if we have one, then return
-  if (this.getIterator("octree")) {
-    if (nextIterator) this.addNext("octree", nextIterator);
-    return;
-  }
-
+Model.prototype.buildOctree = function(d) {
   // create the octree; the last argument means that we will manually fill out
   // the geometry
   this.octree = new Octree(this.baseMesh);
-
-
-  // fill out the octree in a non-blocking way
-
-  // start by making the iterator
-  var iterListEntry = this.makeIterator(
-    {
-      f: this.octree.addFace.bind(this.octree),
-      n: this.faces.length,
-      batchSize: clamp(this.faces.length/100, 1, 5000),
-      onProgress: onProgress.bind(this),
-      onDone: onDone.bind(this)
-    },
-    "octree",
-    "Building octree..."
-  );
-  if (!iterListEntry) return;
-  // add the next iterator if we have one
-  if (nextIterator) this.addNext("octree", nextIterator);
-  // and... begin
-  this.startIterator("octree");
-
-  // run this at every iteration; updates the progress bar
-  function onProgress(i) {
-    var bar = this.getIterator("octree").bar;
-    if (bar) bar.set(i/this.faces.length);
-  }
-
-  function onDone() {
-    this.printout.log("Octree constructed.");
-  }
 }
 
 
 /* MESH THICKNESS */
 
+// todo: redo
+
 // color the verts according to their local diameter
 Model.prototype.viewThickness = function(threshold) {
-  var iterListEntry = this.getIterator("thickness");
-  if (iterListEntry) return;
+  // if octree doesn't exist, build it
+  if (!this.octree) this.buildOctree(null);
 
-  iterListEntry = this.makeIterator(
-    {
-      f: viewFaceThickness.bind(this),
-      n: this.faces.length,
-      batchSize: clamp(this.faces.length/25, 1, 5000),
-      onDone: onDone.bind(this),
-      onProgress: onProgress.bind(this)
-    },
-    "thickness",
-    "Calculating mesh thickness..."
-  );
-
-  // if octree doesn't exist, build it and tell it to calculate thickness after
-  if (!this.octree) this.buildOctree(null, "thickness");
-  else {
-    // if octree currently being calculated, tell it to calculate thickness
-    // after it's done; else, just start calculating mesh thickness now
-    var octreeIterator = this.getIterator("octree");
-    if (octreeIterator) this.addNext("octree", "thickness");
-    else this.startIterator("thickness");
-  }
+  // todo: fill in
 
   function viewFaceThickness(i) {
     var face = this.faces[i];
@@ -1145,18 +686,6 @@ Model.prototype.viewThickness = function(threshold) {
 
     var level = Math.min(dist/threshold, 1.0);
     face.color.setRGB(1.0, level, level);
-  }
-
-
-  function onDone() {
-    this.baseMesh.geometry.colorsNeedUpdate = true;
-
-    this.printout.log("Mesh thickness below the threshold is displayed in red.");
-  }
-
-  function onProgress(i) {
-    var bar = this.getIterator("thickness").bar;
-    if (bar) bar.set(i/this.faces.length);
   }
 }
 
@@ -1198,166 +727,6 @@ Model.prototype.resetGeometryColors = function() {
   }
 
   this.baseMesh.geometry.colorsNeedUpdate = true;
-}
-
-
-/* UTILITIES FOR DOING NON-BLOCKING CALCULATIONS. USE THESE TO AVOID LOCKING UP
-   THE THREAD WHILE PERFORMING OUR CALCULATIONS. */
-
-// create an iterator for calculation 'type' and store it in the 'iterators'
-// table; only allowed to create one of a certain type at a time
-// params:
-//  params: object containing key-value pairs corresponding to the
-//    parameters of functionIterator (see utils.js)
-//  type: string identifying the type of calculation the iterator will perform
-//  labelText: the label that will go on the progress bar
-Model.prototype.makeIterator = function(params, type, labelText) {
-  // check if an iterator of the same type already exists
-  var iterListEntry = this.getIterator(type);
-  if (iterListEntry) return null;
-
-  // create the iterator
-  var iterator = new functionIterator(
-    params.f,
-    params.n,
-    params.batchSize,
-    onDone.bind(this),
-    params.onProgress,
-    params.onStop
-  );
-  // create the iterator list entry and put it on the list
-  iterListEntry = {
-    iterator: iterator,
-    labelText: labelText,
-    next: []
-  };
-  this.iterators[type] = iterListEntry;
-
-  // return the entry if successful
-  return iterListEntry;
-
-  function onDone() {
-    this.removeIterator(type);
-
-    if (params.onDone) params.onDone();
-
-    var nextAll = iterListEntry.next;
-    if (nextAll.length>0) {
-      var next = nextAll[0];
-      nextAll.splice(0,1);
-      // preserve the remaining "next" iterators so that they'll run after the
-      // one we will start now
-      this.addNext(next, nextAll);
-
-      this.startIterator(next);
-    }
-  }
-}
-
-// set up the UI for the (existing) iterator of a given type and start the
-// calculation
-Model.prototype.startIterator = function(type) {
-  var iterListEntry = this.getIterator(type);
-  if (!iterListEntry) return null;
-
-  // do the UI setup - progress bar and its label
-
-  // progress bar
-  var bar = new ProgressBar.Line(
-    "#progressBarContainer",
-    {
-      easing: 'easeInOut',
-      color: '#dddddd',
-      trailColor: 'rgba(255, 255, 255, 0.2)',
-      strokeWidth: 0.25,
-      duration: 16
-    }
-  );
-  // need this to be able to remove the progress bar
-  var barElement = this.progressBarContainer.lastChild;
-  // text labeling the progress bar
-  var label = document.createElement('span');
-  label.className = "progressBarLabel";
-  label.textContent = iterListEntry.labelText;
-  this.progressBarContainer.appendChild(label);
-
-  iterListEntry.bar = bar;
-  iterListEntry.barElement = barElement;
-  iterListEntry.label = label;
-
-  // finally, start
-  iterListEntry.iterator.start();
-}
-
-// given an existing iterator (can be in progress), add another iterator to its
-// queue of iterators to run after it's done (the next param can be an array)
-Model.prototype.addNext = function(type, next) {
-  var iterListEntry = this.getIterator(type);
-  if (!iterListEntry) return;
-
-  if (isArray(next)) iterListEntry.next.concat(next);
-  else iterListEntry.next.push(next);
-}
-
-// get an iterator from the iterator list
-Model.prototype.getIterator = function(type) {
-  return this.iterators[type]
-}
-
-// remove an iterator from the list and remove its progress bar + label; doesn't
-// check whether the iterator is running or not
-Model.prototype.removeIterator = function(type) {
-  var removeProc = removeSingleIterator.bind(this);
-  // if type specified, remove only that iterator; else, remove all
-  if (type) removeProc(type);
-  else {
-    for (var key in this.iterators) removeProc(key);
-  }
-
-  function removeSingleIterator(key) {
-    var iterListEntry = this.iterators[key];
-    // if the given iterator type not found
-    if (!iterListEntry) return;
-
-    delete this.iterators[key];
-
-    // remove progress bar and its label
-    var barElement = iterListEntry.barElement;
-    if (barElement) this.progressBarContainer.removeChild(barElement);
-    var label = iterListEntry.label;
-    if (label) this.progressBarContainer.removeChild(label);
-  }
-}
-
-// force-stop a running iterator and remove it
-Model.prototype.stopIterator = function(type) {
-  var stopProc = stopSingleIterator.bind(this);
-  // if type specified, stop only that iterator; else, stop all
-  if (type) stopProc(type);
-  else {
-    for (var key in this.iterators) stopProc(key);
-  }
-
-  function stopSingleIterator(key) {
-    this.printout.warn("Calculation canceled (" + key + ").");
-
-    var iterListEntry = this.iterators[key];
-    // if the given iterator type not found
-    if (!iterListEntry) return;
-
-    var iterator = iterListEntry.iterator;
-    // stop the iterator
-    if (iterator.running()) iterator.stop();
-
-    // remove the iterator
-    this.removeIterator(key);
-
-    // also remove all of its "next" iterators
-    var nextAll = iterListEntry.next;
-    for (var i=0; i<nextAll; i++) {
-      this.removeIterator(nextAll[i]);
-    }
-  }
 }
 
 
@@ -1959,19 +1328,12 @@ Model.prototype.export = function(format, name) {
   }
 }*/
 
-// Turn off the measurement and delete the THREE.Mesh because these
-// wouldn't be automatically disposed of when the Model instance
-// disappears.
+// Delete the THREE.Mesh because these wouldn't be automatically disposed of
+// when the Model instance disappears.
 Model.prototype.dispose = function() {
   if (!this.scene) return;
-
-  // stop any current non-blocking calculations
-  this.stopIterator();
 
   removeMeshByName(this.scene, "base");
   removeMeshByName(this.scene, "slice");
   removeMeshByName(this.scene, "centerOfMassIndicator");
-
-  // remove measurement markers, etc. from the scene
-  //this.measurement.dispose();
 }
