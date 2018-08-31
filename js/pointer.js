@@ -19,8 +19,8 @@ var Pointer = (function() {
     this.cursors = [];
     this.cursorIdx = 0;
 
-    this.cursorColor = 0x999999;
-    this.cursorColorDown = 0xffff00;
+    this.cursorColor = 0xcccccc;
+    this.cursorColorDown = 0x2adeff;
     var cursorSegments = 32;
 
     // circle cursor
@@ -35,11 +35,21 @@ var Pointer = (function() {
 
     this.cursors.push(new THREE.Line(cursor0Geo, cursor0Mat));
 
-    // normal arrow cursor
-    var cursor1Geo = new THREE.ConeBufferGeometry(1, 2, cursorSegments);
-    cursor1Geo.rotateX(Math.PI / 2);
-    cursor1Geo.translate(0, 0, 1);
-    var cursor1Mat = new THREE.MeshStandardMaterial({ color: this.cursorColor });
+    // normal-pointing arrow cursor
+    var cursor1ConeBufferGeo = new THREE.ConeBufferGeometry(0.75, 3.0, cursorSegments);
+    cursor1ConeBufferGeo.rotateX(Math.PI / 2);
+    cursor1ConeBufferGeo.translate(0, 0, 3.0);
+    var cursor1SphereBufferGeo = new THREE.SphereBufferGeometry(0.75, cursorSegments, cursorSegments / 2);
+
+    var cursor1Geo = new THREE.Geometry();
+    cursor1Geo.merge(new THREE.Geometry().fromBufferGeometry(cursor1ConeBufferGeo));
+    cursor1Geo.merge(new THREE.Geometry().fromBufferGeometry(cursor1SphereBufferGeo));
+
+    var cursor1Mat = new THREE.MeshStandardMaterial({
+      color: this.cursorColor,
+      roughness: 0.0,
+      metalness: 0.5
+    });
     this.cursors.push(new THREE.Mesh(cursor1Geo, cursor1Mat))
 
     for (var c = 0; c < this.cursors.length; c++) {
