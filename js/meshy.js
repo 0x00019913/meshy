@@ -465,7 +465,7 @@ Meshy.prototype.makeTranslateTransform = function(invertible) {
     pos = pos.clone();
     // if snapping to floor, floor the model
     if (_this.snapTransformationsToFloor) {
-      pos.z = _this.model.getSize().z / 2;
+      pos.z = _this.model.getPosition().z - _this.model.getMin().z;
     }
     return pos;
   }
@@ -683,7 +683,8 @@ Meshy.prototype.floor = function(axis, invertible) {
 
   var transform = this.makeTranslateTransform(invertible);
 
-  this.position[axis] = this.buildVolumeMin[axis] + this.model.getSize()[axis] / 2;
+  this.position[axis] =
+    this.buildVolumeMin[axis] + this.model.getPosition()[axis] - this.model.getMin()[axis];
   transform.apply(this.position.clone());
   transform.end();
 
@@ -726,15 +727,38 @@ Meshy.prototype.autoCenter = function(invertible) {
   this.updatePosition();
 }
 
-Meshy.prototype.setBase = function() {
+Meshy.prototype.setBaseToggle = function() {
   this.endMeasurement();
 
   if (!this.pointer) return;
+
+  // if currently setting the base, cancel
+  if (this.pointer.active) {
+    this.endSetBase();
+  }
+  // else, start
+  else {
+    this.startSetBase();
+  }
+}
+
+Meshy.prototype.startSetBase = function() {
+  if (this.setBaseController) {
+    this.setBaseController.name("Cancel (ESC)");
+  }
 
   this.pointer.deactivate();
   this.pointer.addClickCallback(this.faceOrientDown.bind(this));
   this.pointer.setCursor(1);
   this.pointer.activate();
+}
+
+Meshy.prototype.endSetBase = function() {
+  if (this.setBaseController) {
+    this.setBaseController.name("Set base");
+  }
+
+  if (this.pointer) this.pointer.deactivate();
 }
 
 Meshy.prototype.faceOrientDown = function(intersection) {
@@ -781,7 +805,7 @@ Meshy.prototype.faceOrientDown = function(intersection) {
   this.updateSize();
   this.infoBox.update();
 
-  this.pointer.deactivate();
+  this.endSetBase();
 }
 
 Meshy.prototype.flipNormals = function() {
@@ -854,7 +878,7 @@ Meshy.prototype.buildEditFolder = function() {
     return;
   }
 
-  this.editFolder.add(this, "setBase").name("Set base")
+  this.setBaseController = this.editFolder.add(this, "setBaseToggle").name("Set base")
     .title("Select a face to align so that its normal points down.");
 
   // position vector
@@ -1028,6 +1052,8 @@ Meshy.prototype.measureCrossSectionZ = function() {
 Meshy.prototype.startMeasurement = function(type, params) {
   // turn off previous measurement if one exists
   this.endMeasurement();
+  // likewise for set base function
+  this.endSetBase();
 
   // disable rotation and axis scaling handles on the gizmo
   if (this.gizmo) {
@@ -1687,7 +1713,7 @@ Meshy.prototype.initViewport = function() {
       else if (k=="g") _this.toggleGizmo();
       else if (e.keyCode === 27) {
         _this.endMeasurement();
-        if (_this.pointer) _this.pointer.deactivate();
+        _this.endSetBase();
       }
       else caught = false;
     }
