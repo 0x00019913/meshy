@@ -1967,10 +1967,6 @@ Meshy.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
-  this.endSliceMode();
-
-  this.endMeasurement();
-
   if (this.model) {
     this.model.dispose();
   }
@@ -1978,6 +1974,11 @@ Meshy.prototype.delete = function() {
     this.printout.warn("No model to delete.");
     return;
   }
+
+  this.endSliceMode();
+
+  this.endMeasurement();
+  this.endSetBase();
 
   this.model = null;
   this.editStack.clear();
