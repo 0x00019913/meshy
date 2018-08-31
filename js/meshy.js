@@ -192,7 +192,7 @@ Meshy.prototype.generateUI = function() {
   measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
   measurementFolder.add(this, "endMeasurement").name("End measurement")
-    .title("Turn off the current measurement.");
+    .title("Turn off the current measurement (ESC).");
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
   this.thicknessThreshold = 0.1;
@@ -968,7 +968,7 @@ Meshy.prototype.buildEditFolder = function() {
   ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
     .title("Scale the ring.");
   ringSizeFolder.add(this, "endMeasurement").name("4. End measurement")
-    .title("Turn off the measurement tool.");
+    .title("Turn off the measurement tool (ESC).");
 
   var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
   mirrorFolder.add(this, "mirrorX").name("Mirror on x")
