@@ -98,7 +98,7 @@ var Calculate = (function() {
   function _traverseFaces(mesh, callback) {
     var geo = mesh.geometry;
     var faces = geo.faces, vertices = geo.vertices;
-    var matrix = mesh.matrix;
+    var matrix = mesh.worldMatrix;
 
     for (var f = 0; f < faces.length; f++) {
       callback(faces[f], vertices, matrix);
