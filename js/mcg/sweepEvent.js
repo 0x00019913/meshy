@@ -216,7 +216,7 @@ Object.assign(MCG.Sweep, (function() {
       return 0;
     },
 
-    toString: function(pref, fullslope) {
+    toString: function(pref) {
       var src = this.isLeft ? this : this.twin;
       var pst = (src.weightA!==0?"A":"-") + (src.weightB!==0?"B":"-");
       pref = (pref || pst);
@@ -239,7 +239,7 @@ Object.assign(MCG.Sweep, (function() {
           this.p.v, ')',
           '(', this.twin.p.h,
           this.twin.p.v, ')',
-          fullslope ? slope.toFixed(5) : cslope,
+          cslope, slope.toFixed(6),
           this.p.vectorTo(this.twin.p).length().toFixed(0),
           "w", src.weightA, src.weightB,
           "d", src.depthBelowA, src.depthBelowA+src.weightA, src.depthBelowB, src.depthBelowB+src.weightB,
@@ -250,7 +250,7 @@ Object.assign(MCG.Sweep, (function() {
           d+3, 1,
           2, d+3,
           d+3, 1,
-          fullslope ? 7 : 2,
+          2, 10,
           9,
           2, 2, 2,
           2, 4, 4, 4, 4,

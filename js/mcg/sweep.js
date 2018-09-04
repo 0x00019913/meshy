@@ -21,6 +21,7 @@ Object.assign(MCG.Sweep, (function() {
     var efactory = new MCG.Sweep.SweepEventFactory(context);
 
     var store = operation.initStore(context, srcA, srcB);
+    var handleIntersections = store.handleIntersections;
     var dbg = store.dbg;
 
     // priority queue storing events from left to right
@@ -55,10 +56,10 @@ Object.assign(MCG.Sweep, (function() {
       updateFront(ev);
 
       //printEvents = dbg && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
-      //printEvents = dbg && inRange(ev.p.h, 6.0*p, 7.1*p) && inRange(ev.p.v, -1.0*p, -0.5*p);
+      printEvents = dbg && inRange(ev.p.h, -1.25*p, -1.20*p) && inRange(ev.p.v, -0.05*p, 0.05*p);
       //printEvents = dbg && inRange(ev.p.h, 9.28*p, 9.30*p);
       //printEvents = dbg && inRange(ct, 31117, 31211) && ((ev.twin.p.v-ev.p.v)*(ev.isLeft?1:-1) > 0);
-      printEvents = dbg && ev.p.v < -6.7*p && ev.p.h > -1.0*p && ev.p.h < 0.5*p;
+      //printEvents = dbg && ev.p.v < -6.7*p && ev.p.h > -1.0*p && ev.p.h < 0.5*p;
       drawEvents = false;
       incr = 0.00001;
 
@@ -89,18 +90,16 @@ Object.assign(MCG.Sweep, (function() {
 
         ev.setDepthFromBelow(dn);
 
-        eventPrint(ev);
-
-        if (dn) eventPrint(dn, "dn");
         if (up) eventPrint(up, "up");
+        eventPrint(ev);
+        if (dn) eventPrint(dn, "dn");
 
-        handleEventIntersection(ev, dn);
-        handleEventIntersection(up, ev);
+        if (handleIntersections) {
+          handleEventIntersection(ev, dn);
+          handleEventIntersection(up, ev);
+        }
 
-        //eventDraw(ev, o+incr, 0x999999, printEvents);
         if (printEvents) o += incr;
-
-        //depthValidate();
       }
       else {
         var tev = ev.twin;
@@ -128,12 +127,12 @@ Object.assign(MCG.Sweep, (function() {
         eventPairComparisonPrint(up, dn);
 
         // handle possible intersection
-        handleEventIntersection(up, dn);
+        if (handleIntersections) handleEventIntersection(up, dn);
 
         eventDraw(ev, o);
       }
 
-      if (ct >= 1121) statusPrint();
+      if (ct >= 0) statusPrint();
       else statusPrintShort();
 
       if (drawEvents) o += incr*10;
@@ -449,8 +448,7 @@ Object.assign(MCG.Sweep, (function() {
 
         pi = t.interpolate(h);
 
-        //if (pi.h > t.twin.p.h) pi = t.twin.p;
-
+        // update coincidence flags
         ca = coincident(pi, pa), cta = coincident(pi, pta);
         cb = coincident(pi, pb), ctb = coincident(pi, ptb);
 
@@ -459,9 +457,9 @@ Object.assign(MCG.Sweep, (function() {
           eventPrint(a, "a ", true);
           eventPrint(b, "b ", true);
           console.log(a.p.h-pi.h, b.p.h-pi.h, pi);
-          debug.point(pa.toVector3(THREE.Vector3, context), 0.15, context.axis);
-          debug.point(pb.toVector3(THREE.Vector3, context), 0.20, context.axis);
-          debug.point(pi.toVector3(THREE.Vector3, context), 0.25, context.axis);
+          //debug.point(pa.toVector3(THREE.Vector3, context), 0.15, context.axis);
+          //debug.point(pb.toVector3(THREE.Vector3, context), 0.20, context.axis);
+          //debug.point(pi.toVector3(THREE.Vector3, context), 0.25, context.axis);
         }
       }
 
@@ -525,18 +523,50 @@ Object.assign(MCG.Sweep, (function() {
         ta = a.twin;
         tb = b.twin;
 
+        var ia = false, ib = false;
+
         // if a's twin is before or at the front, a is entirely in the past, so
         // handle its right event immediately
         if (front.hvcompare(ta) >= 0) handleRightEvent(ta);
         // else, if a split b, it may not have the correct depth, so requeue it
         else if (ca) queue(a);
         // else, just insert it back
-        else if (rma) insert(a);
+        else if (rma) ia = insert(a);
 
         // likewise for b
         if (front.hvcompare(tb) >= 0) handleRightEvent(tb);
         else if (cb) queue(b);
-        else if (rmb) insert(b);
+        else if (rmb) ib = insert(b);
+
+        // error correction: it's possible that initially adjacent events are
+        // reinserted into the status structure but now they're not neighbors
+        // (b appears below some events sharing the same start point, and/or
+        // a appears above some events sharing the same start point)
+        if (ia && ib) {
+          var iter = status.findIter(b);
+          var next = iter.next();
+
+          if (next !== a) {
+            if (printEvents) {
+              statusPrint();
+              console.log("intersection reinserted events in new order");
+            }
+
+            // prev initialized to event below b, curr initialized to b
+            iter.prev();
+            var prev = iter.prev();
+            var curr = iter.next();
+
+            // iterate upward from b, updating depths for all events that cross
+            // the scanline at the same point b/c those used to be above b
+            while (curr && curr.vlinecompare(b) === 0 && curr !== a) {
+              curr.setDepthFromBelow(prev);
+
+              prev = curr;
+              curr = iter.next();
+            }
+          }
+        }
       }
 
       return pi;

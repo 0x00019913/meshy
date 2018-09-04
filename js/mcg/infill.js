@@ -68,7 +68,8 @@ Object.assign(MCG.Infill, (function() {
     // make the sweep operation
     var op = MCG.Sweep.Operations.linearInfill({
       spacing: spacing,
-      connectLines: connectLines
+      connectLines: connectLines,
+      handleIntersections: false
     });
 
     // clone and rotate the contour by the initial angle
