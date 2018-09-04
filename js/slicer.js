@@ -854,12 +854,12 @@ Slicer.prototype.setLevel = function(level) {
       infillInner.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.0, axis);
+        debug.line(v1, v2, 1, false, 0.2, axis);
       });
       infillSolid.forEachPointPair(function(p1, p2) {
         var v1 = p1.toVector3(THREE.Vector3, context);
         var v2 = p2.toVector3(THREE.Vector3, context);
-        //debug.line(v1, v2, 1, false, 0.0, axis);
+        debug.line(v1, v2, 1, false, 0.4, axis);
       });
     }
   }*/
