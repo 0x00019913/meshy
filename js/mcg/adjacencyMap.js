@@ -43,37 +43,37 @@ MCG.DirectedAdjacencyMap = (function() {
     node1.addNode(node2);
   }
 
-  DirectedAdjacencyMap.prototype.nodeSelectors = {
-    noPredecessors: function(node) { return node.predcount === 0; },
+  DirectedAdjacencyMap.NodeSelectors = {
+    noPredecessors: function(node) { return node.predcount === 0 && node.count > 0; },
     oneNeighbor: function(node) { return node.count === 1; },
     neighbors: function(node) { return node.count > 0; },
     noNeighbors: function(node) { return node.count === 0; }
   }
 
   DirectedAdjacencyMap.prototype.getKeyWithNoPredecessors = function() {
-    return this.getKey(this.nodeSelectors.noPredecessors);
+    return this.getKey(DirectedAdjacencyMap.NodeSelectors.noPredecessors);
   }
 
   DirectedAdjacencyMap.prototype.getKeyWithOneNeighbor = function() {
-    return this.getKey(this.nodeSelectors.oneNeighbor);
+    return this.getKey(DirectedAdjacencyMap.NodeSelectors.oneNeighbor);
   }
 
   // get a key that has some neighbors; prioritize nodes with one neighbor
   DirectedAdjacencyMap.prototype.getKeyWithNeighbors = function() {
-    res = this.getKey(this.nodeSelectors.oneNeighbor);
+    res = this.getKey(DirectedAdjacencyMap.NodeSelectors.oneNeighbor);
     if (res) return res;
 
-    return this.getKey(this.nodeSelectors.neighbors);
+    return this.getKey(DirectedAdjacencyMap.NodeSelectors.neighbors);
   }
 
   DirectedAdjacencyMap.prototype.getKeyWithNoNeighbors = function() {
-    return this.getKey(this.nodeSelectors.noNeighbors);
+    return this.getKey(DirectedAdjacencyMap.NodeSelectors.noNeighbors);
   }
 
   // get the key to a node that satisfies selector sel
   DirectedAdjacencyMap.prototype.getKey = function(sel) {
     var m = this.map;
-    if (sel === undefined) sel = this.nodeSelectors.oneNeighbor;
+    if (sel === undefined) sel = DirectedAdjacencyMap.NodeSelectors.oneNeighbor;
 
     for (var key in m) {
       if (sel(m[key])) return key;
@@ -82,18 +82,19 @@ MCG.DirectedAdjacencyMap = (function() {
     return null;
   }
 
-  // return a closed loop of points
+  // return a loop of points
+  // if allowOpen (true by default), get the open vertex loops first and count
+  // them as closed, then the closed loops
   // NB: this mutates the adjacency map
-  DirectedAdjacencyMap.prototype.getLoop = function() {
+  DirectedAdjacencyMap.prototype.getLoop = function(allowOpen) {
     var m = this.map;
+    var _this = this;
+    if (allowOpen === undefined) allowOpen = true;
 
     var startkey;
 
     // get a key from the map
-    while ((startkey = this.getKeyWithNeighbors()) !== null) {
-      // if couldn't get key, no loop to find
-      if (startkey === null) return null;
-
+    while ((startkey = getNewKey()) !== null) {
       var start = m[startkey];
       var current = start;
       var prev = null;
@@ -112,12 +113,27 @@ MCG.DirectedAdjacencyMap = (function() {
       } while (current !== start);
 
       // if complete loop, return that
-      if (current === start) return loop;
-      //else debug.point(current.pt.toVector3(), 0.05, this.context.axis);
+      if (current === start || allowOpen) return loop;
     }
 
     // failed to find a loop
     return null;
+
+    function getNewKey() {
+      var key = null;
+
+      // if allowing open polygons, find the start of an open vertex chain
+      if (allowOpen) key = _this.getKeyWithNoPredecessors();
+
+      // didn't find a key at the start of an open vertex chain; now just find
+      // a key with some neighbors
+      if (key === null) {
+        key = _this.getKeyWithNeighbors();
+        allowOpen = false;
+      }
+
+      return key;
+    }
   }
 
   // return as many loops as the adjacency map has
