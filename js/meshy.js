@@ -101,6 +101,10 @@ Meshy.prototype.generateUI = function() {
   this.filename = "meshy";
   this.filenameController = exportFolder.add(this, "filename").name("Filename")
     .title("Filename for the exported mesh.");
+  this.exportUnits = this.units;
+  exportFolder.add(this, "exportUnits", { mm: Units.mm, cm: Units.cm, inches: Units.inches })
+    .name("Export units")
+    .title("Units of the exported mesh.");
   exportFolder.add(this, "exportOBJ").name("Export OBJ")
     .title("Export as OBJ file.");
   exportFolder.add(this, "exportSTL").name("Export STL")
@@ -1954,7 +1958,20 @@ Meshy.prototype.export = function(format) {
     return;
   }
 
-  this.model.export(format, this.filename);
+  var factor = Units.getFactor(this.units, this.exportUnits);
+  var exporter = new Exporter();
+  exporter.littleEndian = this.isLittleEndian;
+  exporter.p = this.vertexPrecision;
+
+  try {
+    exporter.export(this.model.getMesh(), format, this.filename, factor);
+    this.printout.log("Saved file '" + this.filename + "' as " + format.toUpperCase());
+  }
+  catch (e) {
+    this.printout.error(e);
+  }
+
+  //this.model.export(format, this.filename, factor);
 }
 
 // Interface for the dat.gui button. Completely removes the model and resets

@@ -213,6 +213,9 @@ Model.prototype.getRotation = function() {
 Model.prototype.getScale = function() {
   return this.baseMesh.scale;
 }
+Model.prototype.getMesh = function() {
+  return this.baseMesh;
+}
 
 // todo: possibly deprecate?
 // set the precision factor used to merge geometries
@@ -239,8 +242,8 @@ Model.prototype.shiftBaseGeometryToOrigin = function() {
 
   // shift geometry center to origin
   mesh.position.copy(center.negate());
-  mesh.updateMatrix();
-  mesh.geometry.applyMatrix(mesh.matrix);
+  mesh.updateMatrixWorld();
+  mesh.geometry.applyMatrix(mesh.matrixWorld);
 
   // reset mesh position to 0
   mesh.position.set(0, 0, 0);
@@ -856,7 +859,7 @@ Model.prototype.gcodeSave = function(params) {
 /* IMPORT AND EXPORT */
 
 // Generate file output representing the model and save it.
-Model.prototype.export = function(format, name) {
+/*Model.prototype.export = function(format, name) {
   var isLittleEndian = this.isLittleEndian;
   var blob;
   var fname;
@@ -994,7 +997,7 @@ Model.prototype.export = function(format, name) {
     });
   }
   this.printout.log("Saved file '" + fname + "' as " + format.toUpperCase());
-}
+}*/
 
 // TODO: either split importers into separate files and replace THREE loaders
 // with these, or just deprecate
