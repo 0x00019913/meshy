@@ -206,14 +206,14 @@ Meshy.prototype.generateUI = function() {
   thicknessFolder.add(this, "clearThicknessView").name("Clear thickness view")
     .title("Clear the color indicating parts of the mesh that are too thin.");
 
-  var repairFolder = this.gui.addFolder("Repair (beta)", "Repair missing polygons.");
+  var repairFolder = this.gui.addFolder("Repair", "Repair missing polygons.");
   repairFolder.add(this, "repair").name("Repair")
     .title("Repair mesh.");
 
   this.layerHeight = .05;//todo: back to 0.1
   this.lineWidth = 0.05;
   this.sliceAxis = "z";
-  this.supportSliceFolder = this.gui.addFolder("Supports & Slicing (beta)",
+  this.supportSliceFolder = this.gui.addFolder("Supports & Slicing",
     "Generate supports, slice the mesh, and export the resulting G-code.");
   this.supportAngle = 45;
   this.supportSpacingFactor = 6;
