@@ -39,6 +39,12 @@ var Calculate = (function() {
     return volume / 6;
   }
 
+  function _faceCenter(face, vertices, matrix) {
+    var [a, b, c] = _faceVertices(face, vertices, matrix);
+
+    return a.clone().add(b).add(c).divideScalar(3);
+  }
+
   // center of mass of an irregular tetrahedron with one vertex at the origin
   // and the given face forming the remaining three vertices
   function _faceCenterOfMass(face, vertices, matrix) {
@@ -98,7 +104,7 @@ var Calculate = (function() {
   function _traverseFaces(mesh, callback) {
     var geo = mesh.geometry;
     var faces = geo.faces, vertices = geo.vertices;
-    var matrix = mesh.worldMatrix;
+    var matrix = mesh.matrixWorld;
 
     for (var f = 0; f < faces.length; f++) {
       callback(faces[f], vertices, matrix);
@@ -190,6 +196,7 @@ var Calculate = (function() {
 
   return {
     faceArea: _faceArea,
+    faceCenter: _faceCenter,
     surfaceArea: _surfaceArea,
     volume: _volume,
     centerOfMass: _centerOfMass,
