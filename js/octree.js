@@ -1,21 +1,23 @@
-// Octree constructor
-// Octree instance contains the root node for the octree and some data (scene,
-// references to geometry lists) that apply to the entire octree.
+// Octree.js
+// Octree instance contains the root node for the octree and some data that
+// apply to the entire octree.
 // params:
 //  depth: depth at the root node; child nodes will have smaller depth
 //  origin: coords of the corner with the smallest coordinates
 //  size: side length; same for all sides
-//  scene: optional, used for visualizing the octree
 var Octree = (function() {
+
   function Octree(mesh, params) {
     if (!mesh) return;
 
     var faces = mesh.geometry.faces;
     var vertices = mesh.geometry.vertices;
-    
+
     if (!faces || !vertices) return;
     params = params || {};
 
+    this.mesh = mesh;
+    this.matrixWorld = mesh.matrixWorld;
     this.faces = faces;
     this.vertices = vertices;
 
@@ -23,19 +25,35 @@ var Octree = (function() {
     this.min = null;
     this.max = null;
 
-    if (!params.origin || !params.size) this.calculateBounds();
+    this.calculateBounds();
 
     // set params
 
-    // small overflow so that mesh is entirely contained in the top node
+    // small overflow so that mesh is entirely contained in the root node
     var overflow = params.overflow || 0.00001;
-    // heuristic is that the tree should be as deep as necessary to have 1-10 faces
-    // per leaf node so as to make raytracing cheap; the effectiveness will vary
-    // between different meshes, of course, but I estimate that ln(polycount)*0.6
-    // should be good
-    var depth = params.depth || Math.round(Math.log(faces.length) * 0.6);
     var origin = params.origin || this.min.clone().subScalar(overflow / 2);
     var size = params.size || vector3MaxElement(this.max.clone().sub(this.min)) + overflow;
+    var depth;
+
+    if (params.hasOwnProperty("depth")) {
+      depth = params.depth;
+    }
+    else {
+      // heuristic is that the tree should be as deep as necessary to have 1-10 faces
+      // per leaf node so as to make raytracing cheap; the effectiveness will vary
+      // between different meshes, of course, but I estimate that ln(polycount)*0.6
+      // should be good
+      depth = Math.round(Math.log(faces.length) * 0.6);
+
+      // adjustment for meshes that may occupy only a small fraction of the
+      // octree root volume - increment the depth based on the ratio of the
+      // octree root volume to the mesh bounding box volume (the factor is
+      // based on some testing)
+      var vsize = this.max.clone().sub(this.min);
+      var vratio = (size * size * size) / (vsize.x * vsize.y * vsize.z);
+      
+      depth += Math.round(vratio / 16);
+    }
 
     this.depth = depth;
     this.origin = origin;
@@ -43,26 +61,15 @@ var Octree = (function() {
 
     this.node = new TreeNode(depth, origin, size);
 
+    // construct the octree
+    for (var f = 0, l = faces.length; f < l; f++) this.addFace(f);
+
     // for visualizing the octree, optional
-    this.scene = params.scene;
     this.density = 0;
-  }
-
-  // construct the entire octree at once
-  Octree.prototype.construct = function() {
-    var faces = this.faces;
-
-    for (var i=0; i<faces.length; i++) {
-      this.addFace(i);
-    }
   }
 
   // add the ith face to the octree
   Octree.prototype.addFace = function(i) {
-    // check for invalid i
-    if (i>this.faces.length) return;
-
-    // add face to the octree
     var face = this.faces[i];
     this.node.addFace({
       verts: faceGetVerts(face, this.vertices),
@@ -92,35 +99,41 @@ var Octree = (function() {
   // return the distance traveled by the ray before it hits a face that has a
   // normal with a positive component along the ray direction
   // params:
-  //  p: ray origin (THREE.Vector3)
-  //  d: ray direction, assumed normalized (THREE.Vector3)
-  // (variable names are as per the convention of "An Efficient Parametric
-  // Algorithm for Octree Traversal")
-  Octree.prototype.castRayInternal = function(p, d) {
-    if (!this.raycasterInternal) {
-      this.raycasterInternal = new Raycaster(raycasterTypes.internal);
-    }
+  //  ray: THREE.Ray
+  Octree.prototype.raycastInternal = (function() {
+    var inverseMatrix = new THREE.Matrix4();
+    var newRay = new THREE.Ray();
 
-    return this.raycasterInternal.castRay(this.node, p, d, this.faces, this.vertices);
-  }
+    return function(ray) {
+      if (!this.raycasterInternal) {
+        this.raycasterInternal = new Raycaster(raycasterTypes.internal);
+      }
 
-  // same as above, but for external raycasts
-  Octree.prototype.castRayExternal = function(p, d) {
+      inverseMatrix.getInverse(this.matrixWorld);
+      newRay.copy(ray).applyMatrix4(inverseMatrix);
+
+      return this.raycasterInternal.castRay(this.node, newRay, this.mesh);
+    };
+
+  })();
+
+  // same as above, but for external (normal) raycasts
+  Octree.prototype.raycast = function(ray) {
     if (!this.raycasterExternal) {
       this.raycasterExternal = new Raycaster(raycasterTypes.external);
     }
 
-    return this.raycasterExternal.castRay(this.node, p, d, this.faces, this.vertices);
+    return this.raycasterExternal.castRay(this.node, ray, this.mesh);
   }
 
   // visualize the octree
   // params:
   //  drawLines: if true, draw an outline along the edges of every cube; if false,
-  //    just draw a point in the center of
+  //    just draw a point in the center of a node
   //  depthLimit: if provided, draw nodes at this depth (depth at leaf nodes is
   //    0); if not provided, draw the leaf nodes
-  Octree.prototype.visualize = function(drawLines, depthLimit) {
-    if (!this.scene) return;
+  Octree.prototype.visualize = function(scene, drawLines, depthLimit) {
+    if (!scene) return;
     this.unvisualize();
 
     var outlineGeo = new THREE.Geometry();
@@ -138,7 +151,7 @@ var Octree = (function() {
       var outlineMesh = new THREE.Points(outlineGeo, outlineMat);
     }
     outlineMesh.name = "octree";
-    this.scene.add(outlineMesh);
+    scene.add(outlineMesh);
 
     var boxGeo = new THREE.Geometry();
     v = this.node.nodeVertices();
@@ -161,17 +174,17 @@ var Octree = (function() {
     var boxMat = new THREE.LineBasicMaterial({color: 0xff0000});
     var boxMesh = new THREE.LineSegments(boxGeo, boxMat);
     boxMesh.name = "octree";
-    this.scene.add(boxMesh);
+    scene.add(boxMesh);
   }
 
   // remove visualization
-  Octree.prototype.unvisualize = function() {
-    if (!this.scene) return;
+  Octree.prototype.unvisualize = function(scene) {
+    if (!scene) return;
 
-    for (var i=this.scene.children.length-1; i>=0; i--) {
-      var child = this.scene.children[i];
+    for (var i=scene.children.length-1; i>=0; i--) {
+      var child = scene.children[i];
       if (child.name=="octree") {
-        this.scene.remove(child);
+        scene.remove(child);
       }
     }
   }
@@ -180,23 +193,23 @@ var Octree = (function() {
     this.node.calculateEdgeIntersections(this.faces, this.vertices);
   }
 
-  Octree.prototype.visualizeBorderEdges = function() {
-    if (!this.scene) return;
+  Octree.prototype.visualizeBorderEdges = function(scene) {
+    if (!scene) return;
 
     var borderGeo = new THREE.Geometry();
     this.node.visualizeBorderEdges(borderGeo);
     var borderMat = new THREE.LineBasicMaterial({color: 0x00ff00});
     var borderMesh = new THREE.LineSegments(borderGeo, borderMat);
     borderMesh.name = "octree";
-    this.scene.add(borderMesh);
+    scene.add(borderMesh);
   }
   Octree.prototype.unvisualizeBorderEdges = function() {
-    if (!this.scene) return;
+    if (!scene) return;
 
-    for (var i=this.scene.children.length-1; i>=0; i--) {
-      var child = this.scene.children[i];
+    for (var i=scene.children.length-1; i>=0; i--) {
+      var child = scene.children[i];
       if (child.name=="octreeBorderEdges") {
-        this.scene.remove(child);
+        scene.remove(child);
       }
     }
   }
@@ -439,8 +452,7 @@ var Octree = (function() {
   // component along the ray direction;; if no hit, return null
   // params:
   //  node: starting node in the octree
-  //  p: ray origin (THREE.Vector3)
-  //  d: ray direction, assumed normalized (THREE.Vector3)
+  //  ray: THREE.Ray
   //  faces: face array; need these for intersection testing
   //  vertices: vertex array; need this to get vertices out of a face
   // (variable names are as per the convention of "An Efficient Parametric
@@ -451,11 +463,15 @@ var Octree = (function() {
   //   dist: distance from ray origin to intersection point
   //   meshHit: true if mesh was hit; false if the ray hit the side of the octree
   //  }
-  Raycaster.prototype.castRay = function(node, p, d, faces, vertices) {
+  Raycaster.prototype.castRay = function(node, ray, mesh) {
+    var p = ray.origin;
+    var d = ray.direction;
+
     this.p = p;
     this.d = d;
-    this.faces = faces;
-    this.vertices = vertices;
+    this.mesh = mesh;
+    this.faces = mesh.geometry.faces;
+    this.vertices = mesh.geometry.vertices;
 
     // correct d for values equal to -0: the negative sign breaks our math
     if (d.x==-0) d.x = 0;
@@ -483,17 +499,8 @@ var Octree = (function() {
     // get the point where the ray exits the far end of the root node
     this.rayEnd = p.clone().addScaledVector(d, vector3MinElement(t1));
 
-    // cast the ray and get the point at which it hits
-    var hit = this.castRayProc(node, t0, t1);
-
-    var meshHit = hit !== null;
-    var hitPoint = meshHit ? hit : this.rayEnd;
-
-    return {
-      point: hitPoint,
-      dist: p.distanceTo(hitPoint),
-      meshHit: meshHit
-    };
+    // cast the ray, get the intersection object or null if no intersection
+    return this.castRayProc(node, t0, t1);
 
     function swapAttributes(v0, v1, attr) {
       var tmp = v0[attr];
@@ -527,12 +534,11 @@ var Octree = (function() {
     if (internal) [a, b, c] = faceGetVerts(face, this.vertices);
     else [b, a, c] = faceGetVerts(face, this.vertices);
 
-    // get the intersection of the face with the ray
-    var intersection = triSegmentIntersection(a, b, c, this.p, this.rayEnd);
+    // get the intersection point of the face with the ray
+    var point = triSegmentIntersection(a, b, c, this.p, this.rayEnd);
 
-    // if intersection exists, compute distance from ray source and return it;
-    // else, return this.rayEnd because we hit the side of the octree
-    return intersection;
+    // if intersection point exists, return it
+    return point;
   }
 
   // returns the distance from the ray origin to the closest face it hits
@@ -543,19 +549,33 @@ var Octree = (function() {
     // if at a leaf node
     if (node.depth==0) {
       var children = node.children;
+      var intersection = null;
+
       for (var i=0; i<children.length; i++) {
         // check for intersection between a face and the ray
         var faceIdx = children[i];
 
-        // get the distance to the face
-        // (note that there may be multiple suitable faces in the node, but, given
-        // a sufficiently fine octree, the impact of only taking the first one
-        // should be negligible)
-        var hit = this.hitTest(faceIdx);
-        if (hit) return hit;
+        // get the intersection point
+        var point = this.hitTest(faceIdx);
+
+        // if point exists, need to set the intersection object
+        if (point) {
+          var distance = this.p.distanceTo(point);
+
+          // ... but only if no intersection so far or this is a closer intersection
+          if (intersection === null || distance < intersection.distance) {
+            intersection = {
+              point: point,
+              distance: distance,
+              faceIndex: faceIdx,
+              face: this.faces[faceIdx],
+              object: this.mesh
+            };
+          }
+        }
       }
 
-      return null;
+      return intersection;
     }
     // if not at a leaf node, need to propagate the ray intersection testing to
     // each child node the ray crosses (in the order it crosses them)
@@ -617,10 +637,10 @@ var Octree = (function() {
 
         // child node may be undefined; if so, skip recursion and go to next child
         if (child) {
-          var hit = this.castRayProc(child, childParams.t0, childParams.t1);
+          var intersection = this.castRayProc(child, childParams.t0, childParams.t1);
           // if a child node has returned a collision, return that; the return
           // value will propagate up the recursion
-          if (hit) return hit;
+          if (intersection) return intersection;
         }
 
         currentChildIdx = this.getNextChild(currentChildIdx, childParams.t1);

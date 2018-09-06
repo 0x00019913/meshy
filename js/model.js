@@ -38,6 +38,7 @@ function Model(geometry, scene, camera, container, printout) {
   // for display
   this.wireframe = false;
   this.wireframeMesh = null;
+  this.generateMaterials();
 
   // instance of module responsible for slicing
   this.slicer = null;
@@ -84,66 +85,77 @@ function Model(geometry, scene, camera, container, printout) {
   this.supportsGenerated = false;
 }
 
-Model.Materials = {
-  base: new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    vertexColors: THREE.FaceColors,
-    roughness: 0.3,
-    metalness: 0.5,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1
-  }),
-  wireframe: new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    wireframe: true
-  }),
-  sliceOneLayerBase: new THREE.LineBasicMaterial({
-    color: 0x666666,
-    linewidth: 1
-  }),
-  sliceOneLayerContour: new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    linewidth: 1
-  }),
-  sliceOneLayerInfill: new THREE.LineBasicMaterial({
-    color: 0xffffff,
-    linewidth: 1
-  }),
-  sliceAllContours: new THREE.LineBasicMaterial({
-    color: 0x666666,
-    linewidth: 1
-  }),
-  slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
-    side: THREE.DoubleSide,
-    color: 0x0f0f30,
-    roughness: 0.8,
-    metalness: 0.3,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1
-  }),
-  slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
-    transparent: true,
-    opacity: 0
-  }),
-  slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
-    color: 0x0f0f30,
-    transparent: true,
-    opacity: 0.3,
-    roughness: 0.7,
-    metalness: 0.3,
-    polygonOffset: true,
-    polygonOffsetFactor: 1,
-    polygonOffsetUnits: 1
-  }),
-  centerOfMassPlane: new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.5
-  })
-};
+Model.prototype.generateMaterials = function() {
+  this.materials = {
+    base: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.3,
+      metalness: 0.5,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    }),
+    wireframe: new THREE.MeshBasicMaterial({
+      color: 0x000000,
+      wireframe: true
+    }),
+    thicknessPreview: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      vertexColors: THREE.FaceColors,
+      roughness: 0.3,
+      metalness: 0.5,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    }),
+    sliceOneLayerBase: new THREE.LineBasicMaterial({
+      color: 0x666666,
+      linewidth: 1
+    }),
+    sliceOneLayerContour: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
+    }),
+    sliceOneLayerInfill: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      linewidth: 1
+    }),
+    sliceAllContours: new THREE.LineBasicMaterial({
+      color: 0x666666,
+      linewidth: 1
+    }),
+    slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
+      side: THREE.DoubleSide,
+      color: 0x0f0f30,
+      roughness: 0.8,
+      metalness: 0.3,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    }),
+    slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0
+    }),
+    slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
+      color: 0x0f0f30,
+      transparent: true,
+      opacity: 0.3,
+      roughness: 0.7,
+      metalness: 0.3,
+      polygonOffset: true,
+      polygonOffsetFactor: 1,
+      polygonOffsetUnits: 1
+    }),
+    centerOfMassPlane: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.5
+    })
+  };
+}
+
 
 // Bounding box functions.
 
@@ -247,7 +259,7 @@ Model.prototype.shiftBaseGeometryToOrigin = function() {
 
   // reset mesh position to 0
   mesh.position.set(0, 0, 0);
-  mesh.updateMatrix();
+  mesh.updateMatrixWorld();
 
   // shift bounds appropriately
   this.boundingBox.translate(shift);
@@ -259,7 +271,7 @@ Model.prototype.translate = function(position) {
   this.baseMesh.position.copy(position);
   if (this.supportMesh) this.supportMesh.position.copy(position);
   if (this.wireframeMesh) this.wireframeMesh.position.copy(position);
-  this.baseMesh.updateMatrix();
+  this.baseMesh.updateMatrixWorld();
 
   this.boundingBox.translate(diff);
 
@@ -276,7 +288,7 @@ Model.prototype.translateEnd = function() {
 Model.prototype.rotate = function(euler) {
   this.baseMesh.rotation.copy(euler);
   if (this.wireframeMesh) this.wireframeMesh.rotation.copy(euler);
-  this.baseMesh.updateMatrix();
+  this.baseMesh.updateMatrixWorld();
 }
 Model.prototype.rotateEnd = function() {
   this.computeBoundingBox();
@@ -286,9 +298,10 @@ Model.prototype.rotateEnd = function() {
 Model.prototype.scale = function(scale) {
   this.baseMesh.scale.copy(scale);
   if (this.wireframeMesh) this.wireframeMesh.scale.copy(scale);
-  this.baseMesh.updateMatrix();
+  this.baseMesh.updateMatrixWorld();
 }
 Model.prototype.scaleEnd = function() {
+  this.clearThicknessView();
   this.computeBoundingBox();
   this.calculateVolume();
   this.calculateSurfaceArea();
@@ -406,7 +419,7 @@ Model.prototype.setWireframeVisibility = function(visible) {
 Model.prototype.makeWireframeMesh = function() {
   var mesh = this.baseMesh.clone();
 
-  mesh.material = Model.Materials.wireframe;
+  mesh.material = this.materials.wireframe;
   mesh.visible = false;
   mesh.name = "wireframe";
   this.scene.add(mesh);
@@ -419,14 +432,14 @@ Model.prototype.getMeshColor = function() {
   if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
 Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
-  var mat = Model.Materials.base;
+  var mat = this.materials.base;
 
   mat.color.set(color);
   mat.roughness = roughness;
   mat.metalness = metalness;
 }
 Model.prototype.setWireframeMaterial = function(color) {
-  var mat = Model.Materials.wireframe;
+  var mat = this.materials.wireframe;
 
   mat.color.set(color);
 }
@@ -454,7 +467,7 @@ Model.prototype.generateCenterOfMassIndicator = function() {
   var ygeo = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2); // normal y
   var zgeo = new THREE.PlaneGeometry(1, 1); // normal z
 
-  var planeMat = Model.Materials.centerOfMassPlane;
+  var planeMat = this.materials.centerOfMassPlane;
 
   centerOfMassIndicator.add(
     new THREE.Mesh(xgeo, planeMat),
@@ -520,7 +533,7 @@ Model.prototype.setMode = function(mode, params) {
 Model.prototype.makeBaseMesh = function(geo) {
   if (!this.baseMesh) {
     //var geo = new THREE.Geometry();
-    this.baseMesh = new THREE.Mesh(geo, Model.Materials.base);
+    this.baseMesh = new THREE.Mesh(geo, this.materials.base);
     this.baseMesh.name = "base";
   }
 
@@ -529,7 +542,7 @@ Model.prototype.makeBaseMesh = function(geo) {
 Model.prototype.makeSupportMesh = function() {
   if (!this.supportMesh) {
     var geo = new THREE.Geometry();
-    this.supportMesh = new THREE.Mesh(geo, Model.Materials.base);
+    this.supportMesh = new THREE.Mesh(geo, this.materials.base);
     this.supportMesh.name = "support";
   }
 
@@ -608,7 +621,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's base contour
   mesh = new THREE.LineSegments(
     geos.currentLayerBase.geo,
-    Model.Materials.sliceOneLayerBase
+    this.materials.sliceOneLayerBase
   );
   mesh.name = "slice";
   this.sliceOneLayerBaseMesh = mesh;
@@ -616,7 +629,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's print contours
   mesh = new THREE.LineSegments(
     geos.currentLayerContours.geo,
-    Model.Materials.sliceOneLayerContour
+    this.materials.sliceOneLayerContour
   );
   mesh.name = "slice";
   this.sliceOneLayerContourMesh = mesh;
@@ -624,7 +637,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for current layer's infill
   mesh = new THREE.LineSegments(
     geos.currentLayerInfill.geo,
-    Model.Materials.sliceOneLayerInfill
+    this.materials.sliceOneLayerInfill
   );
   mesh.name = "slice";
   this.sliceOneLayerInfillMesh = mesh;
@@ -632,7 +645,7 @@ Model.prototype.makeSliceMeshes = function() {
   // make mesh for all non-current layer contours
   mesh = new THREE.LineSegments(
     geos.allContours.geo,
-    Model.Materials.sliceAllContours
+    this.materials.sliceAllContours
   );
   mesh.name = "slice";
   this.sliceAllContourMesh = mesh;
@@ -641,60 +654,77 @@ Model.prototype.makeSliceMeshes = function() {
   // faces visible and invisible
   mesh = new THREE.Mesh(
     geos.slicedMesh.geo,
-    [Model.Materials.slicePreviewMeshVisible, Model.Materials.slicePreviewMeshTransparent]
+    [this.materials.slicePreviewMeshVisible, this.materials.slicePreviewMeshTransparent]
   );
   mesh.name = "slice";
   this.slicePreviewSlicedMesh = mesh;
 
   // to make the ghost, just clone the base mesh and assign ghost material
-  mesh = new THREE.Mesh(geos.source.geo, Model.Materials.slicePreviewMeshGhost);
+  mesh = new THREE.Mesh(geos.source.geo, this.materials.slicePreviewMeshGhost);
   mesh.name = "slice";
   this.slicePreviewGhostMesh = mesh;
 }
 
 
 
-// use the geometry to build an octree; this is quite computationally expensive
-// params:
-//  d: optional depth argument; else, we determine it as ~log of polycount
-//  nextIterator: optionally start this iterator when done building octree
-Model.prototype.buildOctree = function(d) {
-  // create the octree; the last argument means that we will manually fill out
-  // the geometry
-  this.octree = new Octree(this.baseMesh);
+// get the octree, build it if necessary
+Model.prototype.getOctree = function() {
+  if (this.octree === null) this.octree = new Octree(this.baseMesh);
+
+  return this.octree;
 }
 
 
 /* MESH THICKNESS */
 
-// todo: redo
-
 // color the verts according to their local diameter
 Model.prototype.viewThickness = function(threshold) {
-  // if octree doesn't exist, build it
-  if (!this.octree) this.buildOctree(null);
+  var octree = this.getOctree();
 
-  // todo: fill in
+  // set the material
+  this.baseMesh.material = this.materials.thicknessPreview;
 
-  function viewFaceThickness(i) {
-    var face = this.faces[i];
+  // make sure the world matrix is up to date
+  this.baseMesh.updateMatrixWorld();
 
-    var faceCenter = faceGetCenter(face, this.vertices);
-    var negativeNormal = face.normal.clone().negate();
+  var geo = this.baseMesh.geometry;
+  var vertices = geo.vertices;
+  var faces = geo.faces;
+  var matrixWorld = this.baseMesh.matrixWorld;
 
-    var intersection = this.octree.castRayInternal(faceCenter, negativeNormal);
+  var ray = new THREE.Ray();
+  var normal = new THREE.Vector3();
+  var pointWorld = new THREE.Vector3();
 
-    var dist = 0;
-    if (intersection.meshHit) dist = intersection.dist;
+  this.resetFaceColors();
 
-    var level = Math.min(dist/threshold, 1.0);
-    face.color.setRGB(1.0, level, level);
+  for (var f = 0, l = faces.length; f < l; f++) {
+    var face = faces[f];
+
+    // compute ray in world space
+    ray.origin = Calculate.faceCenter(face, vertices, matrixWorld);
+    ray.direction = normal.copy(face.normal).transformDirection(matrixWorld).normalize().negate();
+
+    var intersection = octree.raycastInternal(ray);
+
+    if (intersection) {
+      pointWorld.copy(intersection.point).applyMatrix4(matrixWorld);
+
+      var dist = pointWorld.distanceTo(ray.origin);
+      var level = Math.min(dist/threshold, 1.0);
+
+      face.color.setRGB(1.0, level, level);
+    }
   }
+
+  geo.colorsNeedUpdate = true;
 }
 
 // clear any coloration that occurred as part of thickness visualization
 Model.prototype.clearThicknessView = function() {
-  this.resetFaceColors();
+  this.baseMesh.material = this.materials.base;
+
+  //this.resetFaceColors();
 }
 
 // reset face colors to white
@@ -713,22 +743,14 @@ Model.prototype.resetVertexColors = function() {
   for (var f = 0; f < faces.length; f++) {
     var vertexColors = faces[f].vertexColors;
 
-    if (vertexColors) {
-      for (var c = 0; c < vertexColors.length; c++) {
-        vertexColors[c].setRGB(1.0, 1.0, 1.0);
-      }
-    }
+    if (vertexColors) vertexColors.length = 0;
   }
 
   this.baseMesh.geometry.colorsNeedUpdate = true;
 }
 
 Model.prototype.resetGeometryColors = function() {
-  var colors = this.baseMesh.geometry.colors;
-  for (var c = 0; c < colors.length; c++) {
-    colors[c].setRGB(1.0, 1.0, 1.0);
-  }
-
+  this.baseMesh.geometry.colors.length = 0;
   this.baseMesh.geometry.colorsNeedUpdate = true;
 }
 

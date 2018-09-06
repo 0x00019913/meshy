@@ -198,7 +198,7 @@ Meshy.prototype.generateUI = function() {
     .title("Turn off the current measurement (ESC).");
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
-  this.thicknessThreshold = 0.1;
+  this.thicknessThreshold = 1.0;
   thicknessFolder.add(this, "thicknessThreshold", 0).name("Threshold")
     .title("Thickness threshold: parts of the mesh below this thickness are shown as too thin.");
   thicknessFolder.add(this, "viewThickness").name("View thickness")
