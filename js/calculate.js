@@ -53,6 +53,20 @@ var Calculate = (function() {
     return a.add(b).add(c).divideScalar(4);
   }
 
+  function _faceBoundingBox(face, vertices, matrix) {
+    var [a, b, c] = _faceVertices(face, vertices, matrix);
+    var boundingBox = new THREE.Box3();
+
+    boundingBox.min.min(a);
+    boundingBox.min.min(b);
+    boundingBox.min.min(c);
+    boundingBox.max.max(a);
+    boundingBox.max.max(b);
+    boundingBox.max.max(c);
+
+    return boundingBox;
+  }
+
   // calculate the intersection of a face with an arbitrary plane
   function _planeFaceIntersection(plane, face, vertices, matrix) {
     var [a, b, c] = _faceVertices(face, vertices, matrix);
@@ -195,8 +209,10 @@ var Calculate = (function() {
   }
 
   return {
+    faceVertices: _faceVertices,
     faceArea: _faceArea,
     faceCenter: _faceCenter,
+    faceBoundingBox: _faceBoundingBox,
     surfaceArea: _surfaceArea,
     volume: _volume,
     centerOfMass: _centerOfMass,

@@ -694,7 +694,6 @@ Model.prototype.viewThickness = function(threshold) {
 
   var ray = new THREE.Ray();
   var normal = new THREE.Vector3();
-  var pointWorld = new THREE.Vector3();
 
   this.resetFaceColors();
 
@@ -703,15 +702,12 @@ Model.prototype.viewThickness = function(threshold) {
 
     // compute ray in world space
     ray.origin = Calculate.faceCenter(face, vertices, matrixWorld);
-    ray.direction = normal.copy(face.normal).transformDirection(matrixWorld).normalize().negate();
+    ray.direction = normal.copy(face.normal).transformDirection(matrixWorld).negate();
 
     var intersection = octree.raycastInternal(ray);
 
     if (intersection) {
-      pointWorld.copy(intersection.point).applyMatrix4(matrixWorld);
-
-      var dist = pointWorld.distanceTo(ray.origin);
-      var level = Math.min(dist/threshold, 1.0);
+      var level = Math.min(intersection.distance / threshold, 1.0);
 
       face.color.setRGB(1.0, level, level);
     }
@@ -780,7 +776,7 @@ Model.prototype.generateSupports = function(params) {
   this.removeSupports();
 
   if (!this.supportGenerator) {
-    this.supportGenerator = new SupportGenerator(this.baseMesh);
+    this.supportGenerator = new SupportGenerator(this.baseMesh, this.getOctree());
   }
 
   // add mesh min and max to the params and pass them to the support generator
@@ -790,7 +786,11 @@ Model.prototype.generateSupports = function(params) {
   });
 
   var supportMesh = this.makeSupportMesh();
-  supportMesh.geometry = this.supportGenerator.generate(params);
+  var supportGeometry = this.supportGenerator.generate(params);
+
+  if (!supportGeometry) return;
+
+  supportMesh.geometry = supportGeometry;
   this.scene.add(supportMesh);
   this.supportsGenerated = true;
 }

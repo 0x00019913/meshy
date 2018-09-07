@@ -2,17 +2,18 @@
 // This is a modified version of "Clever Support: Efficient Support Structure
 // Generation for Digital Fabrication" by Vanek et al. The main difference is
 // that we don't use the GPU to find the nearest point-mesh interesection,
-// instead using an octree to check the down and diagonal directions only.
+// instead casting a ray to check the down and diagonal directions only.
 //
 // params:
 //  faces, vertices: the geometry of the mesh for which we'll generate supports
 var SupportGenerator = (function() {
-  function SupportGenerator(mesh) {
+  function SupportGenerator(mesh, octree) {
     this.mesh = mesh;
     this.faces = mesh.geometry.faces;
     this.vertices = mesh.geometry.vertices;
+    this.matrixWorld = mesh.matrixWorld;
 
-    this.octree = null;
+    this.octree = octree;
   }
 
   SupportGenerator.RadiusFunctions = {
@@ -46,24 +47,18 @@ var SupportGenerator = (function() {
     var radiusFn = params.radiusFn || SupportGenerator.RadiusFunctions.sqrt;
     var radiusFnK = params.radiusFnK || 0.01;
     var axis = params.axis || "z";
-    var min = params.min || null;
-    var max = params.max || null;
-    var epsilon = params.epsilon || 0.0000001;
+    var epsilon = params.epsilon || 1e-5;
 
+    var octree = this.octree;
+    var matrixWorld = this.matrixWorld;
 
-    // if bounds not given, calculate them
-    if (min === null || max === null) {
-      min = new THREE.Vector3().setScalar(Infinity);
-      max = new THREE.Vector3().setScalar(-Infinity);
+    var vs = this.vertices;
+    var fs = this.faces;
 
-      var vertices = this.vertices;
+    var nv = vs.length;
+    var nf = fs.length;
 
-      for (var i = 0; i < vertices.length; i++) {
-        var v = vertices[i];
-        min.min(v);
-        max.max(v);
-      }
-    }
+    var boundingBox = new THREE.Box3().setFromObject(this.mesh);
 
     // axes in the horizontal plane
     var ah = cycleAxis(axis);
@@ -71,15 +66,9 @@ var SupportGenerator = (function() {
 
     // angle in radians
     var angle = (90 - angleDegrees) * Math.PI / 180;
-    var minHeight = min[axis];
+    var minHeight = boundingBox.min[axis];
     var resolution = resolution;
     var minSupportLength = 3 * radius;
-
-    var vs = this.vertices;
-    var fs = this.faces;
-
-    var nv = vs.length;
-    var nf = fs.length;
 
     // used to determine overhangs
     var dotProductCutoff = Math.cos(Math.PI / 2 - angle);
@@ -88,22 +77,14 @@ var SupportGenerator = (function() {
     down[axis] = -1;
     var up = down.clone().negate();
 
-    // need an octree for raycasting
-
-    if (this.octree === null) {
-      this.octree = new Octree(this.mesh);
-      this.octree.construct();
-    }
-
-    // generate islands of overhang faces in the mesh
-    var overhangFaceSets = getOverhangFaceSets();
+    // generate an array of faces that require support
+    var supportFaces = getSupportFaces();
 
     // rasterize each overhang face set to find sampling points over every set
-    var pointSets = samplePoints(overhangFaceSets);
+    var points = samplePoints(supportFaces);
 
-    var octree = this.octree;
-
-    var supportTrees = buildSupportTrees(pointSets);
+    // create the underlying structure for the support trees
+    var supportTrees = buildSupportTrees(points);
 
     var supportTreeGeometry = new THREE.Geometry();
 
@@ -119,259 +100,282 @@ var SupportGenerator = (function() {
 
     for (var s=0; s<supportTrees.length; s++) {
       var tree = supportTrees[s];
-      //tree.debug();
-      tree.writeToGeometry(treeWriteParams);
+      tree.debug();
+      //tree.writeToGeometry(treeWriteParams);
     }
 
     supportTreeGeometry.computeFaceNormals();
 
-    //debug.lines();
-
     return supportTreeGeometry;
 
-    function getOverhangFaceSets() {
-      // halfedge data structure
-      var hds = new HDS(vs, fs);
+    function getSupportFaces() {
+      var normal = new THREE.Vector3();
+      var minFaceMax = minHeight + layerHeight / 2;
+      var supportFaces = [];
 
-      //return hds.groupIntoIslands(isOverhang);
-      return [hds.filterFaces(isOverhang)];
+      for (var f = 0, l = fs.length; f < l; f++) {
+        var face = fs[f];
+        var [a, b, c] = Calculate.faceVertices(face, vs, matrixWorld);
+        var faceMax = Math.max(a[axis], b[axis], c[axis]);
 
-      // return true if the given HDS face is an overhang and above the base plane
-      function isOverhang(face) {
-        var face3 = face.face3;
-        var normal = face3.normal;
-        var mx = faceGetMaxAxis(face3, vs, axis);
+        normal.copy(face.normal).transformDirection(matrixWorld).normalize();
 
-        return down.dot(normal) > dotProductCutoff && mx > minHeight;
+        if (down.dot(normal) > dotProductCutoff && faceMax > minFaceMax) {
+          supportFaces.push(face);
+        }
       }
+
+      return supportFaces;
     }
 
-    function samplePoints(faceSets) {
-      var pointSets = [];
-
+    function samplePoints(supportFaces) {
       // rasterization lower bounds on h and v axes
-      var rhmin = min[ah];
-      var rvmin = min[av];
+      var rhmin = boundingBox.min[ah];
+      var rvmin = boundingBox.min[av];
 
-      // for each face set
-      for (var i = 0; i < faceSets.length; i++) {
-        var faceSet = faceSets[i];
-        var faces = faceSet.faces;
-        var points = [];
+      var normal = new THREE.Vector3();
+      var pt = new THREE.Vector3();
 
-        // iterate over all faces in the face set
-        for (var f = 0; f < faces.length; f++) {
-          var face3 = faces[f].face3;
-          var normal = face3.normal;
-          var [a, b, c] = faceGetVerts(face3, vs);
-          // bounding box
-          var bb = faceGetBounds(face3, vs);
+      var points = [];
 
-          // this face's lower bounds in rasterization space
-          var hmin = rhmin + Math.floor((bb.min[ah] - rhmin) / resolution) * resolution;
-          var vmin = rvmin + Math.floor((bb.min[av] - rvmin) / resolution) * resolution;
-          // this face's upper bounds in rasterization space
-          var hmax = rhmin + Math.ceil((bb.max[ah] - rhmin) / resolution) * resolution;
-          var vmax = rvmin + Math.ceil((bb.max[av] - rvmin) / resolution) * resolution;
+      // iterate over all faces in the face set
+      for (var f = 0, l = supportFaces.length; f < l; f++) {
+        var face = supportFaces[f];
+        var [a, b, c] = Calculate.faceVertices(face, vs, matrixWorld);
 
-          // iterate over all possible points
-          for (var ph = hmin; ph < hmax; ph += resolution) {
-            for (var pv = vmin; pv < vmax; pv += resolution) {
-              var pt = new THREE.Vector3();
-              pt[ah] = ph;
-              pt[av] = pv;
+        // bounding box for the face
+        var facebb = Calculate.faceBoundingBox(face, vs, matrixWorld);
 
-              // two triangle verts are flipped because the triangle faces down
-              // and is thus wound CW when looking into the plane
-              if (pointInsideTriangle(pt, b, a, c, axis, epsilon)) {
-                points.push({
-                  v: projectToPlaneOnAxis(pt, a, normal, axis),
-                  normal: normal
-                });
-              }
+        // normal in world space
+        normal.copy(face.normal).transformDirection(matrixWorld);
+
+        // this face's lower bounds in rasterization space
+        var hmin = rhmin + Math.floor((facebb.min[ah] - rhmin) / resolution) * resolution;
+        var vmin = rvmin + Math.floor((facebb.min[av] - rvmin) / resolution) * resolution;
+        // this face's upper bounds in rasterization space
+        var hmax = rhmin + Math.ceil((facebb.max[ah] - rhmin) / resolution) * resolution;
+        var vmax = rvmin + Math.ceil((facebb.max[av] - rvmin) / resolution) * resolution;
+
+        // iterate over all possible points
+        for (var ph = hmin; ph < hmax; ph += resolution) {
+          for (var pv = vmin; pv < vmax; pv += resolution) {
+            pt[ah] = ph;
+            pt[av] = pv;
+
+            // two triangle verts are flipped because the triangle faces down
+            // and is thus wound CW when looking into the plane
+            if (pointInsideTriangle(pt, b, a, c, axis, epsilon)) {
+              points.push({
+                v: projectToPlaneOnAxis(pt, a, normal, axis),
+                normal: normal
+              });
             }
           }
         }
-
-        // if the point set is too small to hit any points in rasterization space,
-        // just store the center of its first face
-        if (points.length == 0 && faceSet.count > 0) {
-          var center = faceGetCenter(faces[0].face3, vs);
-          points.push({
-            v: center,
-            normal: faces[0].normal
-          });
-        }
-
-        pointSets.push(points);
       }
 
-      return pointSets;
+      // if the point set is too small to hit any points in rasterization space,
+      // just store the center of its first face
+      if (points.length === 0 && supportFaces.length > 0) {
+        var face = supportFaces[0];
+        var center = Calculate.faceCenter(face, vs, matrixWorld);
+
+        normal.copy(face.normal).transformDirection(matrixWorld);
+
+        points.push({
+          v: center,
+          normal: normal
+        });
+      }
+
+      return points;
     }
 
-    function buildSupportTrees(pointSets) {
+    function buildSupportTrees(points) {
       // iterate through sampled points, build support trees
 
       // list of support tree roots
       var result = [];
 
-      // for every island's point set
-      for (var psi = 0; psi < pointSets.length; psi++) {
-        var points = pointSets[psi];
+      // support tree nodes for this island
+      var nodes = [];
 
-        // support tree nodes for this island
-        var nodes = [];
+      var ray = new THREE.Ray();
+      var faceNormal = new THREE.Vector3();
 
-        // orders a priority queue from highest to lowest coordinate on axis
-        var pqComparator = function (a, b) { return nodes[b].v[axis] - nodes[a].v[axis]; }
-        var pq = new PriorityQueue({
-          comparator: pqComparator
-        });
-        var activeIndices = new Set();
+      // orders a priority queue from highest to lowest coordinate on axis
+      var pqComparator = function (a, b) { return nodes[b].v[axis] - nodes[a].v[axis]; }
+      var pq = new PriorityQueue({
+        comparator: pqComparator
+      });
+      var activeIndices = new Set();
 
-        // put the point indices on the priority queue;
-        // also put them into a set of active indices so that we can take a point
-        // and test it against all other active points to find the nearest
-        // intersection; we could just iterate over the pq.priv.data to do the same,
-        // but that's a hack that breaks encapsulation
-        for (var pi = 0; pi < points.length; pi++) {
-          var point = points[pi];
-          var v = point.v;
-          var normal = point.normal;
+      // put the point indices on the priority queue;
+      // also put them into a set of active indices so that we can take a point
+      // and test it against all other active points to find the nearest
+      // intersection; we could just iterate over the pq.priv.data to do the same,
+      // but that's a hack that breaks encapsulation
+      for (var pi = 0; pi < points.length; pi++) {
+        var point = points[pi];
+        var v = point.v;
+        var normal = point.normal;
 
-          // one of the leaves of the support tree ends here
-          var startNode = new SupportTreeNode(v);
-          var idx = nodes.length;
+        // one of the leaves of the support tree ends here
+        var startNode = new SupportTreeNode(v);
+        var idx = nodes.length;
 
-          nodes.push(startNode);
+        nodes.push(startNode);
 
-          // attempt to extend a short support strut from the starting point
-          // along the normal
-          var strutLength = minSupportLength;
-          var rayNormal = octree.castRayExternal(v, normal);
-          var nv = v.clone().addScaledVector(normal, strutLength);
+        // attempt to extend a short support strut from the starting point
+        // along the normal
+        var raycastNormal = octree.raycast(ray.set(v, normal));
+        var nv = v.clone().addScaledVector(normal, minSupportLength);
 
-          // if a ray cast along the normal hits too close, goes below mesh
-          // min, or can be more directly extended less than a strut length
-          // straight down, just leave the original node
-          if (rayNormal.dist < strutLength ||
-              nv[axis] < minHeight ||
-              (v[axis] - minHeight < strutLength)) {
-            activeIndices.add(idx);
-            pq.queue(idx);
-          }
-          // else, connect a new support node to the start node
-          else {
-            var newNode = new SupportTreeNode(nv, startNode);
+        // if a ray cast along the normal hits too close, goes below mesh
+        // min, or can be more directly extended less than a strut length
+        // straight down, just leave the original node
+        if ((raycastNormal && raycastNormal.distance < minSupportLength) ||
+            nv[axis] < minHeight ||
+            (v[axis] - minHeight < minSupportLength)) {
+          activeIndices.add(idx);
+          pq.queue(idx);
+        }
+        // else, connect a new support node to the start node
+        else {
+          var newNode = new SupportTreeNode(nv, startNode);
 
-            nodes.push(newNode);
-            idx++;
-            activeIndices.add(idx);
-            pq.queue(idx);
+          nodes.push(newNode);
+          idx++;
+          activeIndices.add(idx);
+          pq.queue(idx);
+        }
+      }
+
+      var ct = 0;
+      while (pq.length > 0) {
+        var pi = pq.dequeue();
+
+        if (!activeIndices.has(pi)) continue;
+        activeIndices.delete(pi);
+
+        var p = nodes[pi];
+
+        // find the closest intersection between p's cone and another cone
+        var intersection = null;
+        var intersectionDist = Infinity;
+        var qiFinal = -1;
+
+        for (var qi of activeIndices) {
+          var q = nodes[qi];
+          var ixn = coneConeIntersection(p.v, q.v, angle, axis);
+
+          // if valid intersection and it's inside the mesh boundary
+          if (ixn && (ixn[axis] - minHeight > radius)) {
+            var pidist = p.v.distanceTo(ixn);
+            var qidist = q.v.distanceTo(ixn);
+            if (pidist < intersectionDist && pidist > radius && qidist > radius) {
+              intersectionDist = pidist;
+              intersection = ixn;
+              qiFinal = qi;
+            }
           }
         }
 
-        var ct = 0;
-        while (pq.length > 0) {
-          var pi = pq.dequeue();
+        // build one or two struts
 
-          if (!activeIndices.has(pi)) continue;
-          activeIndices.delete(pi);
+        // will need to check if connecting down is cheaper than connecting in
+        // the direction of intersection
+        var raycastDown = octree.raycast(ray.set(p.v, down));
+        // ray may hit the bottom side of the octree, which may not coincide
+        // with mesh min; calculate the point and distance for a ray pointed
+        // straight down
+        var pointDown = new THREE.Vector3();
+        var distanceDown = 0;
 
-          var p = nodes[pi];
+        if (raycastDown) {
+          pointDown.copy(raycastDown.point);
+          pointDown[axis] = Math.max(pointDown[axis], minHeight);
+          distanceDown = Math.min(distanceDown, p.v[axis] - minHeight);
+        }
+        else {
+          pointDown.copy(p.v);
+          pointDown[axis] = minHeight;
+          distanceDown = p.v[axis] - minHeight;
+        }
 
-          // find the closest intersection between p's cone and another cone
-          var intersection = null;
-          var minDist = Infinity;
-          var qiFinal = -1;
+        // one or two nodes will connect to the target point
+        var q = null;
+        var target = null;
+        var dist = 0;
 
-          for (var qi of activeIndices) {
-            var q = nodes[qi];
-            var ixn = coneConeIntersection(p.v, q.v, angle, axis);
+        // if p-q intersection exists, either p and q connect or p's ray to q hits
+        // the mesh first
+        if (intersection) {
+          var d = intersection.clone().sub(p.v).normalize();
+          // cast a ray from p to the intersection
+          var raycastP = octree.raycast(ray.set(p.v, d));
 
-            // if valid intersection and it's inside the mesh boundary
-            if (ixn && (ixn[axis] - minHeight > radius)) {
-              var pidist = p.v.distanceTo(ixn);
-              var qidist = q.v.distanceTo(ixn);
-              if (pidist < minDist && pidist > radius && qidist > radius) {
-                minDist = pidist;
-                intersection = ixn;
-                qiFinal = qi;
+          // if p's ray to the intersection hits the mesh first, join it to the
+          // mesh and leave q to join to something else later
+          if (raycastP && raycastP.distance < intersectionDist) {
+            // hit along p's ray to intersection is closer than intersection
+            // itself, so join there
+            if (raycastP.distance < distanceDown) {
+              // get face normal in world space at the ray hit
+              faceNormal.copy(raycastP.face.normal).transformDirection(matrixWorld);
+
+              // if angle is not too shallow, connect at the mesh
+              if (Math.acos(Math.abs(faceNormal.dot(d))) <= Math.PI / 4 + epsilon) {
+                target = raycastP.point;
+                dist = raycastP.distance;
               }
-            }
-          }
-
-          // build one or two struts
-
-          // will need to check if connecting down is cheaper than connecting in
-          // the direction of intersection
-          var rayDown = octree.castRayExternal(p.v, down);
-          // ray may hit the bottom side of the octree, which may not coincide
-          // with mesh min
-          rayDown.point[axis] = Math.max(rayDown.point[axis], minHeight);
-          rayDown.dist = Math.min(rayDown.dist, p.v[axis] - minHeight);
-
-          // one or two nodes will connect to the target point
-          var q = null;
-          var target = null;
-          var dist = 0;
-
-          // if p-q intersection exists, either p and q connect or p's ray to q hits
-          // the mesh first
-          if (intersection) {
-            var d = intersection.clone().sub(p.v).normalize();
-            var rayQ = octree.castRayExternal(p.v, d);
-
-            // if p's ray to the intersection hits the mesh first, join it to the
-            // mesh and leave q to join to something else later
-            if (rayQ.dist < minDist) {
-              // hit along p's ray to intersection is closer, so join there
-              if (rayQ.dist < rayDown.dist) {
-                target = rayQ.point;
-                dist = rayQ.dist;
-              }
-              // downward connection is closer, so join downward
+              // else, connect down
               else {
-                target = rayDown.point;
-                dist = rayDown.dist;
+                target = pointDown;
+                dist = distanceDown;
               }
             }
-            // p and q can be safely joined
+            // downward connection is closer, so join downward
             else {
-              q = nodes[qiFinal];
-              target = intersection;
-              dist = p.v.distanceTo(intersection);
+              target = pointDown;
+              dist = distanceDown;
             }
           }
-          // if no intersection between p and q, cast a ray down and build a strut
-          // where it intersects the mesh or the ground
+          // p and q can be safely joined
           else {
-            target = rayDown.point;
-            dist = rayDown.dist;
-          }
-
-          // if distance somehow ended up as 0, ignore this point
-          if (dist === 0) continue;
-
-          // if the strut hits the bottom of the mesh's bounding box, force it
-          // to not taper at the end
-          var noTaper = target === rayDown.point && !rayDown.meshHit;
-
-          nodes.push(new SupportTreeNode(target, p, q, { noTaper: noTaper }));
-
-          if (q !== null) {
-            activeIndices.delete(qiFinal);
-
-            var newidx = nodes.length - 1;
-            activeIndices.add(newidx);
-            pq.queue(newidx);
+            q = nodes[qiFinal];
+            target = intersection;
+            dist = p.v.distanceTo(intersection);
           }
         }
-
-        // store the root nodes
-        for (var i = 0; i < nodes.length; i++) {
-          if (nodes[i].isRoot()) result.push(nodes[i]);
+        // if no intersection between p and q, cast a ray down and build a strut
+        // where it intersects the mesh or the ground
+        else {
+          target = pointDown;
+          dist = distanceDown;
         }
+
+        // if distance somehow ended up as 0, ignore this point
+        if (dist === 0) continue;
+
+        // if the strut hits the bottom of the mesh's bounding box, force it
+        // to not taper at the end
+        var noTaper = target.equals(pointDown) && !raycastDown;
+
+        nodes.push(new SupportTreeNode(target, p, q, { noTaper: noTaper }));
+
+        if (q !== null) {
+          activeIndices.delete(qiFinal);
+
+          var newidx = nodes.length - 1;
+          activeIndices.add(newidx);
+          pq.queue(newidx);
+        }
+      }
+
+      // store the root nodes
+      for (var i = 0; i < nodes.length; i++) {
+        if (nodes[i].isRoot()) result.push(nodes[i]);
       }
 
       return result;
@@ -787,7 +791,7 @@ var SupportGenerator = (function() {
     if (this.b0) this.b0.connectProfiles(params);
     if (this.b1) this.b1.connectProfiles(params);
 
-    //if (this.isRoot()) debug.lines(12);
+    if (this.isRoot()) debug.lines(12);
   }
 
   // connect a node to one of its branch nodes
@@ -966,7 +970,7 @@ var SupportGenerator = (function() {
       this.b1.debug();
     }
 
-    //if (this.isRoot()) debug.lines(12);
+    if (this.isRoot()) debug.lines(12);
   }
 
 

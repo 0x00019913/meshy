@@ -51,7 +51,7 @@ var Octree = (function() {
       // based on some testing)
       var vsize = this.max.clone().sub(this.min);
       var vratio = (size * size * size) / (vsize.x * vsize.y * vsize.z);
-      
+
       depth += Math.round(vratio / 16);
     }
 
@@ -99,23 +99,14 @@ var Octree = (function() {
   // return the distance traveled by the ray before it hits a face that has a
   // normal with a positive component along the ray direction
   // params:
-  //  ray: THREE.Ray
-  Octree.prototype.raycastInternal = (function() {
-    var inverseMatrix = new THREE.Matrix4();
-    var newRay = new THREE.Ray();
+  //  ray: THREE.Ray in world space
+  Octree.prototype.raycastInternal = function(ray) {
+    if (!this.raycasterInternal) {
+      this.raycasterInternal = new Raycaster(raycasterTypes.internal);
+    }
 
-    return function(ray) {
-      if (!this.raycasterInternal) {
-        this.raycasterInternal = new Raycaster(raycasterTypes.internal);
-      }
-
-      inverseMatrix.getInverse(this.matrixWorld);
-      newRay.copy(ray).applyMatrix4(inverseMatrix);
-
-      return this.raycasterInternal.castRay(this.node, newRay, this.mesh);
-    };
-
-  })();
+    return this.raycasterInternal.castRay(this.node, ray, this.mesh);
+  }
 
   // same as above, but for external (normal) raycasts
   Octree.prototype.raycast = function(ray) {
@@ -460,18 +451,27 @@ var Octree = (function() {
   // returns:
   //  {
   //   point: intersection point, possibly on the side of the octree
-  //   dist: distance from ray origin to intersection point
-  //   meshHit: true if mesh was hit; false if the ray hit the side of the octree
+  //   distance: distance from ray origin to intersection point
+  //   face: face that was hit
+  //   faceIndex: self-explanatory
+  //   object: mesh
   //  }
   Raycaster.prototype.castRay = function(node, ray, mesh) {
-    var p = ray.origin;
-    var d = ray.direction;
-
-    this.p = p;
-    this.d = d;
     this.mesh = mesh;
     this.faces = mesh.geometry.faces;
     this.vertices = mesh.geometry.vertices;
+
+    // ray in object space
+    var rayLocal = new THREE.Ray();
+    var inverseMatrix = new THREE.Matrix4();
+
+    inverseMatrix.getInverse(this.mesh.matrixWorld);
+    rayLocal.copy(ray).applyMatrix4(inverseMatrix);
+
+    var p = rayLocal.origin;
+    var d = rayLocal.direction;
+    this.p = p;
+    this.d = d;
 
     // correct d for values equal to -0: the negative sign breaks our math
     if (d.x==-0) d.x = 0;
@@ -555,18 +555,20 @@ var Octree = (function() {
         // check for intersection between a face and the ray
         var faceIdx = children[i];
 
-        // get the intersection point
+        // get the intersection point in world space
         var point = this.hitTest(faceIdx);
 
         // if point exists, need to set the intersection object
         if (point) {
-          var distance = this.p.distanceTo(point);
+          var pointWorld = point.clone().applyMatrix4(this.mesh.matrixWorld);
+          var originWorld = this.p.clone().applyMatrix4(this.mesh.matrixWorld);
+          var distanceWorld = originWorld.distanceTo(pointWorld);
 
           // ... but only if no intersection so far or this is a closer intersection
-          if (intersection === null || distance < intersection.distance) {
+          if (intersection === null || distanceWorld < intersection.distance) {
             intersection = {
-              point: point,
-              distance: distance,
+              point: pointWorld,
+              distance: distanceWorld,
               faceIndex: faceIdx,
               face: this.faces[faceIdx],
               object: this.mesh

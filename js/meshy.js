@@ -1949,6 +1949,8 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.pointer.setTarget(this.model);
 
   this.infoBox.update();
+
+  this.generateSupports();
 }
 
 // Interface for the dat.gui button. Saves the model.
