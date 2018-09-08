@@ -43,9 +43,17 @@ Object.assign(MCG.Sweep, (function() {
     // process events in order
 
     var o = 0.5;
+    var srclen = 0;
+    if (srcA.type === MCG.Types.segmentSet) {
+      srclen = srcA.count();
+    }
+    else {
+      srcA.forEach(function(poly) { srclen += poly.count(); })
+    }
+    //console.log(srclen, store.result);
     var ct = 0, lim = dbg ? 50000 : 100000;
     while (events.length > 0) {
-      if (ct++ > lim) {
+      if (false && ct++ > lim) {
         if (!dbg) throw "exceeded event limit " + lim;
         console.log("exceeded event limit " + lim);
         break;
@@ -54,6 +62,11 @@ Object.assign(MCG.Sweep, (function() {
       var ev = dequeue();
 
       updateFront(ev);
+
+      if (ev.hvcompare(front) < 0) {
+        console.log("caught past event");
+        break;
+      }
 
       //printEvents = dbg && inRange(ev.p.h, 1.3*p, 1.37*p) && inRange(ev.p.v, -5.43*p, -5.2*p);
       printEvents = dbg && inRange(ev.p.h, -1.25*p, -1.20*p) && inRange(ev.p.v, -0.05*p, 0.05*p);
@@ -139,6 +152,8 @@ Object.assign(MCG.Sweep, (function() {
     }
 
     //debug.lines();
+
+    //console.log(srclen, ct, srclen === 0 ? 0 : ct / srclen);
 
     return store.result;
 
