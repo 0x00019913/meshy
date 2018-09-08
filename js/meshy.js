@@ -1278,7 +1278,7 @@ Meshy.prototype.buildSupportSliceFolder = function() {
   }
 }
 Meshy.prototype.buildSupportFolder = function(folder) {
-  folder.add(this, "supportAngle", 0, 90).name("Angle")
+  folder.add(this, "supportAngle", 0, 89).name("Angle")
     .title("Angle defining faces that need support.");
   folder.add(this, "supportSpacingFactor", 1, 100).name("Spacing factor")
     .title("Greater spacing factor makes supports more sparse.");
@@ -1521,9 +1521,9 @@ Meshy.prototype.makeGcodeParams = function() {
   };
 }
 Meshy.prototype.endSliceMode = function() {
+  this.sliceModeOn = false;
+  this.buildSupportSliceFolder();
   if (this.model) {
-    this.sliceModeOn = false;
-    this.buildSupportSliceFolder();
     this.model.endSliceMode();
   }
   this.handleGizmoVisibility();
@@ -1949,8 +1949,6 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.pointer.setTarget(this.model);
 
   this.infoBox.update();
-
-  this.generateSupports();
 }
 
 // Interface for the dat.gui button. Saves the model.
@@ -1985,6 +1983,7 @@ Meshy.prototype.delete = function() {
 
   if (this.model) {
     this.model.dispose();
+    this.model = null;
   }
   else {
     this.printout.warn("No model to delete.");
@@ -1996,7 +1995,6 @@ Meshy.prototype.delete = function() {
   this.endMeasurement();
   this.endSetBase();
 
-  this.model = null;
   this.editStack.clear();
   this.buildEditFolder();
   this.gizmo.visible = false;

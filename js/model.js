@@ -286,6 +286,7 @@ Model.prototype.translateEnd = function() {
 }
 
 Model.prototype.rotate = function(euler) {
+  this.removeSupports();
   this.baseMesh.rotation.copy(euler);
   if (this.wireframeMesh) this.wireframeMesh.rotation.copy(euler);
   this.baseMesh.updateMatrixWorld();
@@ -296,6 +297,7 @@ Model.prototype.rotateEnd = function() {
 }
 
 Model.prototype.scale = function(scale) {
+  this.removeSupports();
   this.baseMesh.scale.copy(scale);
   if (this.wireframeMesh) this.wireframeMesh.scale.copy(scale);
   this.baseMesh.updateMatrixWorld();
@@ -544,6 +546,10 @@ Model.prototype.makeSupportMesh = function() {
     var geo = new THREE.Geometry();
     this.supportMesh = new THREE.Mesh(geo, this.materials.base);
     this.supportMesh.name = "support";
+
+    this.supportMesh.position.copy(this.baseMesh.position);
+    this.supportMesh.rotation.copy(this.baseMesh.rotation);
+    this.supportMesh.scale.copy(this.baseMesh.scale);
   }
 
   return this.supportMesh;
@@ -779,16 +785,15 @@ Model.prototype.generateSupports = function(params) {
     this.supportGenerator = new SupportGenerator(this.baseMesh, this.getOctree());
   }
 
-  // add mesh min and max to the params and pass them to the support generator
-  Object.assign(params, {
-    min: this.boundingBox.min,
-    max: this.boundingBox.max
-  });
-
   var supportMesh = this.makeSupportMesh();
   var supportGeometry = this.supportGenerator.generate(params);
 
   if (!supportGeometry) return;
+
+  // support geometry is generated in world space; put it in the base mesh's
+  // object space so that they can be transformed with the same matrix
+  var inverseMatrix = new THREE.Matrix4().getInverse(this.baseMesh.matrixWorld);
+  supportGeometry.applyMatrix(inverseMatrix);
 
   supportMesh.geometry = supportGeometry;
   this.scene.add(supportMesh);
@@ -1359,6 +1364,7 @@ Model.prototype.dispose = function() {
   if (!this.scene) return;
 
   removeMeshByName(this.scene, "base");
+  removeMeshByName(this.scene, "support");
   removeMeshByName(this.scene, "slice");
   removeMeshByName(this.scene, "centerOfMassIndicator");
 }

@@ -38,7 +38,7 @@ var SupportGenerator = (function() {
   SupportGenerator.prototype.generate = function(params) {
     params = params || {};
 
-    var angleDegrees = params.angleDegrees || 45;
+    var angleDegrees = params.angle || 45;
     var resolution = params.resolution || 0.3;
     var layerHeight = params.layerHeight || 0.1;
     var radius = params.radius || 0.1;
@@ -100,8 +100,8 @@ var SupportGenerator = (function() {
 
     for (var s=0; s<supportTrees.length; s++) {
       var tree = supportTrees[s];
-      tree.debug();
-      //tree.writeToGeometry(treeWriteParams);
+      //tree.debug();
+      tree.writeToGeometry(treeWriteParams);
     }
 
     supportTreeGeometry.computeFaceNormals();
@@ -133,7 +133,6 @@ var SupportGenerator = (function() {
       var rhmin = boundingBox.min[ah];
       var rvmin = boundingBox.min[av];
 
-      var normal = new THREE.Vector3();
       var pt = new THREE.Vector3();
 
       var points = [];
@@ -147,7 +146,7 @@ var SupportGenerator = (function() {
         var facebb = Calculate.faceBoundingBox(face, vs, matrixWorld);
 
         // normal in world space
-        normal.copy(face.normal).transformDirection(matrixWorld);
+        var normal = face.normal.clone().transformDirection(matrixWorld);
 
         // this face's lower bounds in rasterization space
         var hmin = rhmin + Math.floor((facebb.min[ah] - rhmin) / resolution) * resolution;
@@ -174,13 +173,15 @@ var SupportGenerator = (function() {
         }
       }
 
+      // todo: reenable?
+
       // if the point set is too small to hit any points in rasterization space,
       // just store the center of its first face
-      if (points.length === 0 && supportFaces.length > 0) {
+      if (false && points.length === 0 && supportFaces.length > 0) {
         var face = supportFaces[0];
         var center = Calculate.faceCenter(face, vs, matrixWorld);
 
-        normal.copy(face.normal).transformDirection(matrixWorld);
+        var normal = face.normal.clone().transformDirection(matrixWorld);
 
         points.push({
           v: center,
@@ -235,7 +236,7 @@ var SupportGenerator = (function() {
         // min, or can be more directly extended less than a strut length
         // straight down, just leave the original node
         if ((raycastNormal && raycastNormal.distance < minSupportLength) ||
-            nv[axis] < minHeight ||
+            (nv[axis] < minHeight) ||
             (v[axis] - minHeight < minSupportLength)) {
           activeIndices.add(idx);
           pq.queue(idx);
@@ -295,7 +296,7 @@ var SupportGenerator = (function() {
         if (raycastDown) {
           pointDown.copy(raycastDown.point);
           pointDown[axis] = Math.max(pointDown[axis], minHeight);
-          distanceDown = Math.min(distanceDown, p.v[axis] - minHeight);
+          distanceDown = Math.min(raycastDown.distance, p.v[axis] - minHeight);
         }
         else {
           pointDown.copy(p.v);
@@ -308,8 +309,8 @@ var SupportGenerator = (function() {
         var target = null;
         var dist = 0;
 
-        // if p-q intersection exists, either p and q connect or p's ray to q hits
-        // the mesh first
+        // if p-q intersection exists, either p and q connect or p's ray to
+        // intersection hits the mesh first
         if (intersection) {
           var d = intersection.clone().sub(p.v).normalize();
           // cast a ray from p to the intersection
@@ -341,11 +342,21 @@ var SupportGenerator = (function() {
               dist = distanceDown;
             }
           }
-          // p and q can be safely joined
+          // no obstacle for p's strut
           else {
-            q = nodes[qiFinal];
-            target = intersection;
-            dist = p.v.distanceTo(intersection);
+            // intersection joint may be too close to a point on the mesh - cast
+            // a ray down from there, and, if it's too close, join p downward
+            var raycastIntersectionDown = octree.raycast(ray.set(intersection, down));
+
+            if (raycastIntersectionDown && raycastIntersectionDown.distance < minSupportLength) {
+              target = pointDown;
+              dist = distanceDown;
+            }
+            else {
+              q = nodes[qiFinal];
+              target = intersection;
+              dist = p.v.distanceTo(intersection);
+            }
           }
         }
         // if no intersection between p and q, cast a ray down and build a strut
@@ -790,8 +801,6 @@ var SupportGenerator = (function() {
 
     if (this.b0) this.b0.connectProfiles(params);
     if (this.b1) this.b1.connectProfiles(params);
-
-    if (this.isRoot()) debug.lines(12);
   }
 
   // connect a node to one of its branch nodes
