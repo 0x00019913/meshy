@@ -115,12 +115,12 @@ var Measurement = (function() {
         connector.addToScene(scene);
       }
 
-      this.pointerCallbackIdx = this.pointer.addClickCallback(this.onClick.bind(this));
+      this.pointerCallbackIdx = this.pointer.addClickCallback(this.placeMarker.bind(this));
       this.pointer.setCursor(0);
       this.pointer.activate();
     },
 
-    onClick: function(intersection) {
+    placeMarker: function(point, mesh) {
       this.mactive = Math.min(this.mnum, this.mactive + 1);
 
       var marker = this.markers[this.midx];
@@ -129,13 +129,13 @@ var Measurement = (function() {
       this.setConnectorColors();
 
       // position marker to use it for calculation
-      marker.setPosition(intersection.point);
+      marker.setPosition(point);
       marker.activate();
       // advance current marker idx; now, the most recently placed marker is at
       // index this.midx - 1
       this.midx = (this.midx + 1) % this.mnum;
 
-      this.calculateMeasurement(intersection);
+      this.calculateMeasurement(point, mesh);
 
       if (this.onResultChange) {
         this.onResultChange(this.result);
@@ -150,9 +150,7 @@ var Measurement = (function() {
       this.positionConnectors();
     },
 
-    calculateMeasurement: function(intersection) {
-      var point = intersection.point;
-
+    calculateMeasurement: function(point, mesh) {
       // if not enough markers, do nothing
       if (this.mactive < this.mnum) return;
 
@@ -234,7 +232,7 @@ var Measurement = (function() {
         var plane = new THREE.Plane();
         plane.setFromNormalAndCoplanarPoint(this.params.normal, point);
 
-        var crossSectionData = Calculate.crossSection(plane, intersection.object);
+        var crossSectionData = Calculate.crossSection(plane, mesh);
         this.result.crossSection = crossSectionData.crossSection;
         this.result.min = crossSectionData.min;
         this.result.max = crossSectionData.max;

@@ -7,7 +7,7 @@ var Pointer = (function() {
     // for displaying the cursor
     this.scene = scene;
 
-    this.target = null;
+    this.meshes = [];
     this.active = false;
 
     this.raycaster = new THREE.Raycaster();
@@ -112,8 +112,21 @@ var Pointer = (function() {
 
   Object.assign(Pointer.prototype, {
 
-    setTarget: function(target) {
-      this.target = target;
+    addMesh: function(mesh) {
+      this.meshes.push(mesh);
+      return this;
+    },
+
+    removeMesh: function(mesh) {
+      var idx = this.meshes.indexOf(mesh);
+
+      if (idx > -1) this.meshes.splice(idx);
+
+      return this;
+    },
+
+    removeMeshes: function() {
+      this.meshes.length = 0;
       return this;
     },
 
@@ -158,12 +171,11 @@ var Pointer = (function() {
     },
 
     mousemove: function(pointer) {
-      if (!this.active || !this.target) return;
+      if (!this.active) return;
 
       this.raycaster.setFromCamera(pointer.coords, this.camera);
 
-      // recursive is false b/c target doesn't have children
-      var intersects = this.raycaster.intersectObject(this.target, false);
+      var intersects = this.raycaster.intersectObjects(this.meshes, false);
 
       // if intersecting mesh, get the first intersection
       if (intersects.length > 0) {
@@ -192,7 +204,7 @@ var Pointer = (function() {
     },
 
     mousedown: function(pointer) {
-      if (!this.active || !this.target) return;
+      if (!this.active) return;
       if (!this.intersection) return;
       if (pointer.button !== 0) return;
 
@@ -201,13 +213,13 @@ var Pointer = (function() {
     },
 
     mouseup: function(pointer) {
-      if (!this.active || !this.target) return;
+      if (!this.active) return;
       if (!this.clickPixelCoords) return;
 
       var dist = pointer.pixelCoords.distanceTo(this.clickPixelCoords);
       if (dist < this.clickAllowance) {
         for (var c = 0; c < this.clickCallbacks.length; c++) {
-          this.clickCallbacks[c](this.intersection);
+          this.clickCallbacks[c](this.intersection.point, this.intersection.object);
         }
       }
 

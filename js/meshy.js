@@ -1946,7 +1946,7 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.gizmoVisible = true;
   this.handleGizmoVisibility();
 
-  this.pointer.setTarget(this.model);
+  this.pointer.addMesh(this.model.getMesh());
 
   this.infoBox.update();
 }
@@ -1981,6 +1981,8 @@ Meshy.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
+  this.pointer.removeMesh(this.model.getMesh());
+
   if (this.model) {
     this.model.dispose();
     this.model = null;
@@ -1998,8 +2000,6 @@ Meshy.prototype.delete = function() {
   this.editStack.clear();
   this.buildEditFolder();
   this.gizmo.visible = false;
-
-  this.pointer.setTarget(null);
 
   this.infoBox.update();
 
