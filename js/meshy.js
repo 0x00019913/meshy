@@ -1093,6 +1093,7 @@ Meshy.prototype.startMeasurement = function(type, params) {
       list.add("Cross-section", this, ["measurementResult", "crossSection"]);
       list.add("Min", this, ["measurementResult", "min"]);
       list.add("Max", this, ["measurementResult", "max"]);
+      list.add("Contour length", this, ["measurementResult", "length"]);
     }
 
     var _this = this;
@@ -1626,7 +1627,7 @@ Meshy.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 10000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 

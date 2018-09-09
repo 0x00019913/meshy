@@ -74,26 +74,28 @@ var Measurement = (function() {
 
       // set the correct number and types of markers and connectors
       if (type === Measurement.Types.length) {
-        this.mnum = 2;
-        this.cnum = 1;
+        this.mnum = 2; // 2 point markers
+        this.cnum = 1; // 1 line connector
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.line;
       }
       else if (type === Measurement.Types.angle) {
-        this.mnum = 3;
-        this.cnum = 2;
+        this.mnum = 3; // 3 point markers
+        this.cnum = 2; // 2 line connectors
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.line;
       }
       else if (type === Measurement.Types.circle) {
-        this.mnum = 3;
-        this.cnum = 1;
+        this.mnum = 3; // 3 point markers
+        this.cnum = 1; // 1 circle connector
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.circle;
       }
       else if (type === Measurement.Types.crossSection) {
-        this.mnum = 1;
+        this.mnum = 1; // 1 plane marker
+        this.cnum = 1; // 1 contour connector
         this.mtype = Marker.Types.plane;
+        this.ctype = Connector.Types.contour;
         this.params.axis = this.params.axis || "z";
         this.params.normal = this.params.normal || axisToVector3(this.params.axis);
 
@@ -232,10 +234,14 @@ var Measurement = (function() {
         var plane = new THREE.Plane();
         plane.setFromNormalAndCoplanarPoint(this.params.normal, point);
 
-        var crossSectionData = Calculate.crossSection(plane, mesh);
-        this.result.crossSection = crossSectionData.crossSection;
-        this.result.min = crossSectionData.min;
-        this.result.max = crossSectionData.max;
+        var crossSectionResult = Calculate.crossSection(plane, mesh);
+
+        this.connectors[0].setFromSegments(crossSectionResult.segments);
+
+        this.result.crossSection = crossSectionResult.crossSection;
+        this.result.min = crossSectionResult.min;
+        this.result.max = crossSectionResult.max;
+        this.result.length = crossSectionResult.length;
         this.result.ready = true;
       }
     },
@@ -255,7 +261,7 @@ var Measurement = (function() {
       marker.setPosition(center);
 
       // cross-section marker extends by 0.1 size in each direction
-      var size = max.clone().sub(min).multiplyScalar(1.1);
+      var size = max.clone().sub(min).multiplyScalar(1.5);
       if (size.x <= 0) size.x = 1;
       if (size.y <= 0) size.y = 1;
       if (size.z <= 0) size.z = 1;
@@ -291,17 +297,21 @@ var Measurement = (function() {
 
           connector.activate();
         }
-        // turn off the connector if its parameters are not valid
+        // else, turn off the connector because its parameters are invalid
         else {
-          connector.deactivate()
+          connector.deactivate();
         }
+      }
+      else {
+        this.connectors[0].activate();
       }
     },
 
-    setMarkerColors: function() {
+    setMarkerColors: function(color) {
       var markers = this.markers;
+
       // start color and color increment
-      var color = 0x2adeff;
+      color = color !== undefined ? color : 0x2adeff;
       var dcolor = 0x300000;
 
       for (var m = 0; m < this.mnum; m++) {
@@ -311,9 +321,9 @@ var Measurement = (function() {
       }
     },
 
-    setConnectorColors: function() {
+    setConnectorColors: function(color) {
       var connectors = this.connectors;
-      var color = 0x8adeff;
+      color = color !== undefined ? color : 0x8adeff;
 
       for (var c = 0; c < this.cnum; c++) {
         this.connectors[c].setColor(color);
@@ -519,16 +529,21 @@ var Measurement = (function() {
 
     setRadius: function(radius) {
       this.mesh.scale.set(radius, radius, radius);
+
       return this;
     },
 
     scaleFromCenter: function(factor, center) {
       if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
       this.mesh.position.sub(center).multiply(factor).add(center);
+
+      return this;
     },
 
     translate: function(delta) {
       this.mesh.position.add(delta);
+
+      return this;
     }
   });
 
@@ -548,7 +563,7 @@ var Measurement = (function() {
     var mat = params.material ? params.material.clone : new THREE.MeshStandardMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.25,
       side: THREE.DoubleSide
     });
 
@@ -568,10 +583,14 @@ var Measurement = (function() {
     setPosition: function(point) {
       // position display mesh
       this.mesh.position.copy(point);
+
+      return this;
     },
 
     setScale: function(scale) {
       this.mesh.scale.copy(scale);
+
+      return this;
     },
 
     scaleFromCenter: function(factor, center) {
@@ -579,10 +598,14 @@ var Measurement = (function() {
       this.mesh.position.sub(center).multiply(factor).add(center);
 
       this.mesh.scale.multiply(factor);
+
+      return this;
     },
 
     translate: function(delta) {
       this.mesh.position.add(delta);
+
+      return this;
     }
   });
 
@@ -605,7 +628,7 @@ var Measurement = (function() {
 
     this.active = false;
 
-    this.mesh = new THREE.Line();
+    this.mesh = new THREE.LineSegments();
     this.mesh.visible = false;
     this.mesh.name = "measurementConnector";
 
@@ -615,7 +638,8 @@ var Measurement = (function() {
   Connector.Types = {
     none: "none",
     circle: "circle",
-    line: "line"
+    line: "line",
+    contour: "contour"
   };
 
   Object.assign(Connector.prototype, {
@@ -675,6 +699,8 @@ var Measurement = (function() {
       vertices[1].copy(b);
 
       geo.verticesNeedUpdate = true;
+
+      return this;
     },
 
     scaleFromCenter: function(factor, center) {
@@ -687,6 +713,8 @@ var Measurement = (function() {
       vertices[1].sub(center).multiply(factor).add(center);
 
       geo.verticesNeedUpdate = true;
+
+      return this;
     },
 
     translate: function(delta) {
@@ -694,6 +722,8 @@ var Measurement = (function() {
 
       vertices[0].add(delta);
       vertices[1].add(delta);
+
+      return this;
     }
   });
 
@@ -708,11 +738,12 @@ var Measurement = (function() {
 
     var r = params.radius || 1;
     var segments = params.segments || 64;
-    var dtheta = 2 * Math.PI / segments;
+    var dt = 2 * Math.PI / segments;
 
     for (var i = 0; i <= segments; i++) {
-      var theta = i * dtheta;
+      var theta = i * dt;
       vertices.push(new THREE.Vector3(r*Math.cos(theta), r*Math.sin(theta), 0));
+      vertices.push(new THREE.Vector3(r*Math.cos(theta+dt), r*Math.sin(theta+dt), 0));
     }
     var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
       color: 0xffffff
@@ -731,11 +762,13 @@ var Measurement = (function() {
     setFromNormalAndCenter: function(normal, center) {
       this.mesh.position.copy(center);
       this.mesh.lookAt(center.clone().add(normal));
+
       return this;
     },
 
     setScale: function(scale) {
       this.mesh.scale.copy(scale);
+
       return this;
     },
 
@@ -744,10 +777,74 @@ var Measurement = (function() {
 
       this.mesh.position.sub(center).multiply(factor).add(center);
       this.mesh.scale.multiply(factor);
+
+      return this;
     },
 
     translate: function(delta) {
       this.mesh.position.add(delta);
+
+      return this;
+    }
+  });
+
+  function ContourConnector(params) {
+    params = params || {};
+
+    Connector.call(this, params);
+
+    var geo = new THREE.Geometry();
+    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
+      color: 0xffffff
+    });
+
+    this.mesh.geometry = geo;
+    this.mesh.material = mat;
+
+    this.type = Connector.Types.contour;
+  }
+
+  ContourConnector.prototype = Object.create(Connector.prototype);
+  Object.assign(ContourConnector.prototype, {
+    constructor: ContourConnector,
+
+    setFromSegments: function(segments) {
+      if (!segments) return;
+
+      var geo = new THREE.Geometry();
+      var vertices = geo.vertices;
+
+      for (var s = 0, l = segments.length; s < l; s++) {
+        var segment = segments[s];
+
+        vertices.push(segment.start);
+        vertices.push(segment.end);
+      }
+
+      this.mesh.geometry = geo;
+
+      return this;
+    },
+
+    setScale: function(scale) {
+      this.mesh.scale.copy(scale);
+
+      return this;
+    },
+
+    scaleFromCenter: function(factor, center) {
+      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+
+      this.mesh.position.sub(center).multiply(factor).add(center);
+      this.mesh.scale.multiply(factor);
+
+      return this;
+    },
+
+    translate: function(delta) {
+      this.mesh.position.add(delta);
+
+      return this;
     }
   });
 
@@ -759,6 +856,9 @@ var Measurement = (function() {
       }
       else if (type === Connector.Types.circle) {
         return new CircleConnector(params);
+      }
+      else if (type === Connector.Types.contour) {
+        return new ContourConnector(params);
       }
       else return null;
     };

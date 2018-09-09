@@ -171,11 +171,17 @@ var Calculate = (function() {
     var point = new Vector3();
     plane.coplanarPoint(point);
 
+    var normal = new Vector3();
+
     // total cross-section
     var crossSection = 0;
     // min and max on each axis
     var min = new Vector3().setScalar(Infinity);
     var max = new Vector3().setScalar(-Infinity);
+    // segments forming the intersection
+    var segments = [];
+    // length of the intersection contour
+    var length = 0;
 
     _traverseFaces(mesh, function(face, vertices, matrix) {
       var segment = _planeFaceIntersection(plane, face, vertices, matrix);
@@ -191,12 +197,20 @@ var Calculate = (function() {
         var pa = new Vector3().subVectors(segment.start, point);
         var pb = new Vector3().subVectors(segment.end, point);
 
+        // normal in world space
+        normal.copy(face.normal).transformDirection(matrix);
+
         // compute area of the triangle; possibly force it negative depending on
         // the normal
         var area = pa.clone().cross(pb).length() / 2;
-        var sign = Math.sign(pa.dot(face.normal));
+        var sign = Math.sign(pa.dot(normal));
 
         crossSection += area * sign;
+
+        // store segment in segments array and increment contour length
+        segments.push(segment);
+
+        length += segment.start.distanceTo(segment.end);
       }
     });
 
@@ -204,7 +218,9 @@ var Calculate = (function() {
     return {
       crossSection: crossSection,
       min: min,
-      max: max
+      max: max,
+      segments: segments,
+      length: length
     };
   }
 
