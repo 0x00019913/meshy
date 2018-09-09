@@ -173,22 +173,6 @@ var SupportGenerator = (function() {
         }
       }
 
-      // todo: reenable?
-
-      // if the point set is too small to hit any points in rasterization space,
-      // just store the center of its first face
-      if (false && points.length === 0 && supportFaces.length > 0) {
-        var face = supportFaces[0];
-        var center = Calculate.faceCenter(face, vs, matrixWorld);
-
-        var normal = face.normal.clone().transformDirection(matrixWorld);
-
-        points.push({
-          v: center,
-          normal: normal
-        });
-      }
-
       return points;
     }
 

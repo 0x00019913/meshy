@@ -1053,6 +1053,12 @@ Meshy.prototype.measureCrossSectionZ = function() {
   this.startMeasurement(Measurement.Types.crossSection, { axis: "z" });
 }
 Meshy.prototype.startMeasurement = function(type, params) {
+  // slice mode keeps its own copy of the mesh, so don't allow measuring
+  if (this.sliceModeOn) {
+    this.printout.warn("Cannot measure mesh while slice mode is on.");
+    return;
+  }
+
   // turn off previous measurement if one exists
   this.endMeasurement();
   // likewise for set base function
@@ -1466,6 +1472,8 @@ Meshy.prototype.updateSlicerParams = function() {
   this.setSliceLevel();
 }
 Meshy.prototype.startSliceMode = function() {
+  this.endMeasurement();
+
   if (this.model) {
     this.sliceModeOn = true;
     this.model.startSliceMode(this.makeSlicerParams());
@@ -1676,11 +1684,18 @@ Meshy.prototype.initViewport = function() {
     _this.container.appendChild(_this.renderer.domElement);
 
     addEventListeners();
+
+    // focus the canvas so that keyboard shortcuts work right after loading
+    _this.renderer.domElement.focus();
   }
 
   function addEventListeners() {
     window.addEventListener('resize', onWindowResize, false);
-    window.addEventListener('keydown', onKeyDown, false);
+
+    // so the event doesn't propagate to other elements
+    var element = _this.renderer.domElement;
+    element.tabIndex = 0;
+    element.addEventListener('keydown', onKeyDown, false);
   }
 
   function onWindowResize() {
@@ -1695,18 +1710,15 @@ Meshy.prototype.initViewport = function() {
   // keyboard controls
   function onKeyDown(e) {
     var k = e.key.toLowerCase();
-    var caught = true;
 
     if (e.ctrlKey) {
       if (e.shiftKey) {
         if (k=="z") _this.redo();
-        else caught = false;
       }
       else {
         if (k=="i") _this.import();
         else if (k=="z") _this.undo();
         else if (k=="y") _this.redo();
-        else caught = false;
       }
     }
     else {
@@ -1719,10 +1731,7 @@ Meshy.prototype.initViewport = function() {
         _this.endMeasurement();
         _this.endSetBase();
       }
-      else caught = false;
     }
-
-    if (caught) e.preventDefault();
   }
 
   this.animationID = -1;
