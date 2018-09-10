@@ -94,10 +94,11 @@ var Calculate = (function() {
       // if 1, return null
       if (da === 0 && db === 0 && dc === 0) return null;
 
-      // if 2, take the two points (but only if the other point is above the plane)
-      if (da === 0 && db === 0 && dc > 0) return new Line3(a, b);
-      else if (db === 0 && dc === 0 && da > 0) return new Line3(b, c);
-      else if (dc === 0 && da === 0 && db > 0) return new Line3(c, a);
+      // if 2, two of the intersection points will be coincident; return two
+      // non-coincident points (but only if one of them is above the plane)
+      if (vab.equals(vbc) && (da > 0 || dc > 0)) return new Line3(vab, vca);
+      else if (vbc.equals(vca) && (db > 0 || da > 0)) return new Line3(vbc, vab);
+      else if (vca.equals(vab) && (dc > 0 || db > 0)) return new Line3(vca, vbc);
       else return null;
     }
 
@@ -107,7 +108,6 @@ var Calculate = (function() {
 
     // if either intersection doesn't exist, return null
     if (v0 === undefined || v1 === undefined) return null;
-
     // if intersection points are the same, return null
     if (v0.equals(v1)) return null;
 
@@ -224,6 +224,54 @@ var Calculate = (function() {
     };
   }
 
+  // calculate circle normal, center, and radius from three coplanar points:
+  // take two pairs of coplanar points, calculate bisector of both pairs;
+  // the bisectors will intersect at the center
+  function _circleFromThreePoints(p0, p1, p2) {
+    var sa = p0.clone().sub(p1);
+    var sb = p2.clone().sub(p1);
+
+    // normal
+    var normal = sa.clone().cross(sb).normalize();
+
+    // if points are collinear, can't compute the circle, so unready the
+    // result and return
+    if (normal.length() === 0) return null;
+
+    // bisector points
+    var pa = p0.clone().add(p1).multiplyScalar(0.5);
+    var pb = p2.clone().add(p1).multiplyScalar(0.5);
+
+    // bisector directions
+    var da = normal.clone().cross(sa).normalize();
+    var db = normal.clone().cross(sb).normalize();
+
+    // the bisectors won't generally intersect exactly, but we can
+    // calculate a point of closest approach:
+    // if line 0 and 1 are
+    // v0 = p0 + t0d0, v1 = p1 + t1d1, then
+    // t0 = ((d0 - d1 (d0 dot d1)) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
+    // t1 = ((d0 (d0 dot d1) - d1) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
+
+    var dadb = da.dot(db);
+    var denominator = 1 - dadb * dadb;
+
+    // just in case, to avoid division by 0
+    if (denominator === 0) return null;
+
+    // scalar parameter
+    var ta = da.clone().addScaledVector(db, -dadb).dot(pb.clone().sub(pa)) / denominator;
+
+    var center = pa.clone().addScaledVector(da, ta);
+    var radius = center.distanceTo(p2);
+
+    return {
+      normal: normal,
+      center: center,
+      radius: radius
+    };
+  }
+
   return {
     faceVertices: _faceVertices,
     faceArea: _faceArea,
@@ -232,7 +280,8 @@ var Calculate = (function() {
     surfaceArea: _surfaceArea,
     volume: _volume,
     centerOfMass: _centerOfMass,
-    crossSection: _crossSection
+    crossSection: _crossSection,
+    circleFromThreePoints: _circleFromThreePoints
   };
 
 })();

@@ -194,6 +194,8 @@ Meshy.prototype.generateUI = function() {
     .title("Measure cross-section on y axis.");
   measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
+  measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
+    .title("Measure the cross-section of a single part of the mesh.");
   measurementFolder.add(this, "endMeasurement").name("End measurement")
     .title("Turn off the current measurement (ESC).");
 
@@ -1052,6 +1054,9 @@ Meshy.prototype.measureCrossSectionY = function() {
 Meshy.prototype.measureCrossSectionZ = function() {
   this.startMeasurement(Measurement.Types.crossSection, { axis: "z" });
 }
+Meshy.prototype.measureLocalCrossSection = function() {
+  this.startMeasurement(Measurement.Types.localCrossSection);
+}
 Meshy.prototype.startMeasurement = function(type, params) {
   // slice mode keeps its own copy of the mesh, so don't allow measuring
   if (this.sliceModeOn) {
@@ -1101,6 +1106,9 @@ Meshy.prototype.startMeasurement = function(type, params) {
       list.add("Max", this, ["measurementResult", "max"]);
       list.add("Contour length", this, ["measurementResult", "length"]);
     }
+    else if (type === Measurement.Types.localCrossSection) {
+      list.add("Length", this, ["measurementResult", "length"]);
+    }
 
     var _this = this;
     this.measurement.onResultChange = function(result) {
@@ -1149,6 +1157,9 @@ Meshy.prototype.buildScaleToMeasurementFolder = function() {
   }
   else if (type === Measurement.Types.crossSection) {
     if (result.hasOwnProperty("crossSection")) keys.push("crossSection");
+  }
+  else if (type === Measurement.Types.localCrossSection) {
+    if (result.hasOwnProperty("length")) keys.push("length");
   }
   // do nothing if nothing to scale
   else return;

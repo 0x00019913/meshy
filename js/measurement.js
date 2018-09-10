@@ -39,7 +39,8 @@ var Measurement = (function() {
     length: "length",
     angle: "angle",
     circle: "circle",
-    crossSection: "crossSection"
+    crossSection: "crossSection",
+    localCrossSection: "localCrossSection"
   };
 
   Object.assign(Measurement.prototype, {
@@ -102,6 +103,12 @@ var Measurement = (function() {
         // use this normal to create the plane marker
         mparams.axis = this.params.axis;
         mparams.normal = this.params.normal;
+      }
+      else if (type === Measurement.Types.localCrossSection) {
+        this.mnum = 3; // 3 point markers
+        this.cnum = 1; // 1 contour connector
+        this.mtype = Marker.Types.point;
+        this.ctype = Connector.Types.contour;
       }
       else return;
 
@@ -181,46 +188,10 @@ var Measurement = (function() {
         var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
         var p2 = point;
 
-        // calculate circle center and normal from three coplanar points:
-        // take two pairs of coplanar points, calculate bisector of both pairs;
-        // the bisectors will intersect at the center
-
-        var sa = p0.clone().sub(p1);
-        var sb = p2.clone().sub(p1);
-
-        // normal
-        var normal = sa.clone().cross(sb).normalize();
-
-        // if points are collinear, can't compute the circle, so unready the
-        // result and return
-        if (normal.length() === 0) return;
-
-        // bisector points
-        var pa = p0.clone().add(p1).multiplyScalar(0.5);
-        var pb = p2.clone().add(p1).multiplyScalar(0.5);
-
-        // bisector directions
-        var da = normal.clone().cross(sa).normalize();
-        var db = normal.clone().cross(sb).normalize();
-
-        // the bisectors won't necessarily intersect exactly, but we can
-        // calculate a point of closest approach:
-        // if line 0 and 1 are
-        // v0 = p0 + t0d0, v1 = p1 + t1d1, then
-        // t0 = ((d0 - d1 (d0 dot d1)) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
-        // t1 = ((d0 (d0 dot d1) - d1) dot (p1 - p0)) / (1 - (d0 dot d1)^2)
-
-        var dadb = da.dot(db);
-        var denominator = 1 - dadb * dadb;
-
-        // just in case, to avoid division by 0
-        if (denominator === 0) return;
-
-        // scalar parameter
-        var ta = da.clone().addScaledVector(db, -dadb).dot(pb.clone().sub(pa)) / denominator;
-
-        var center = pa.clone().addScaledVector(da, ta);
-        var radius = center.distanceTo(p2);
+        var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+        var normal = circle.normal;
+        var center = circle.center;
+        var radius = circle.radius;
 
         this.result.radius = radius;
         this.result.diameter = radius * 2;
@@ -241,6 +212,23 @@ var Measurement = (function() {
         this.result.crossSection = crossSectionResult.crossSection;
         this.result.min = crossSectionResult.min;
         this.result.max = crossSectionResult.max;
+        this.result.length = crossSectionResult.length;
+        this.result.ready = true;
+      }
+      else if (this.type === Measurement.Types.localCrossSection) {
+        var p0 = this.markers[this.midx].getPosition();
+        var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
+        var p2 = point;
+
+        var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+
+        var plane = new THREE.Plane();
+        plane.setFromNormalAndCoplanarPoint(circle.normal, circle.center);
+
+        var crossSectionResult = Calculate.crossSection(plane, mesh);
+
+        this.connectors[0].setFromSegments(crossSectionResult.segments);
+
         this.result.length = crossSectionResult.length;
         this.result.ready = true;
       }
@@ -435,6 +423,8 @@ var Measurement = (function() {
 
   });
 
+
+
   // utility functions
 
   // clamp a number to two boundary values
@@ -447,6 +437,8 @@ var Measurement = (function() {
   function acos(a) { return Math.acos(clamp(a, -1, 1)); }
   // compute asin, but clamp the input
   function asin(a) { return Math.asin(clamp(a, -1, 1)); }
+
+
 
   // marker/connector types and factories
 
