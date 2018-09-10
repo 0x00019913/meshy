@@ -1706,7 +1706,8 @@ Meshy.prototype.initViewport = function() {
     // so the event doesn't propagate to other elements
     var element = _this.renderer.domElement;
     element.tabIndex = 0;
-    element.addEventListener('keydown', onKeyDown, false);
+    element.addEventListener('keydown', onCanvasKeyDown, false);
+    window.addEventListener('keydown', onWindowKeyDown, false);
   }
 
   function onWindowResize() {
@@ -1718,8 +1719,8 @@ Meshy.prototype.initViewport = function() {
     _this.renderer.setSize(width, height);
   }
 
-  // keyboard controls
-  function onKeyDown(e) {
+  // keyboard controls for the rendering canvas
+  function onCanvasKeyDown(e) {
     var k = e.key.toLowerCase();
 
     if (e.ctrlKey) {
@@ -1738,10 +1739,14 @@ Meshy.prototype.initViewport = function() {
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
       else if (k=="g") _this.toggleGizmo();
-      else if (e.keyCode === 27) {
-        _this.endMeasurement();
-        _this.endSetBase();
-      }
+    }
+  }
+
+  // keyboard controls that should always work even if the canvas isn't focused
+  function onWindowKeyDown(e) {
+    if (e.keyCode === 27) {
+      _this.endMeasurement();
+      _this.endSetBase();
     }
   }
 
