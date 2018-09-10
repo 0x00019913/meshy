@@ -2,6 +2,7 @@ var Calculate = (function() {
 
   var Vector3 = THREE.Vector3;
   var Line3 = THREE.Line3;
+  var Box3 = THREE.Box3;
   var Plane = THREE.Plane;
 
   // get an array of the face's vertices in the original winding order
@@ -57,12 +58,9 @@ var Calculate = (function() {
     var [a, b, c] = _faceVertices(face, vertices, matrix);
     var boundingBox = new THREE.Box3();
 
-    boundingBox.min.min(a);
-    boundingBox.min.min(b);
-    boundingBox.min.min(c);
-    boundingBox.max.max(a);
-    boundingBox.max.max(b);
-    boundingBox.max.max(c);
+    boundingBox.expandByPoint(a);
+    boundingBox.expandByPoint(b);
+    boundingBox.expandByPoint(c);
 
     return boundingBox;
   }
@@ -172,12 +170,13 @@ var Calculate = (function() {
     plane.coplanarPoint(point);
 
     var normal = new Vector3();
+    var pa = new Vector3();
+    var pb = new Vector3();
 
-    // total cross-section
-    var crossSection = 0;
-    // min and max on each axis
-    var min = new Vector3().setScalar(Infinity);
-    var max = new Vector3().setScalar(-Infinity);
+    // total cross-section area
+    var crossSectionArea = 0;
+    // axis-aligned bounding box
+    var boundingBox = new THREE.Box3();
     // segments forming the intersection
     var segments = [];
     // length of the intersection contour
@@ -188,14 +187,12 @@ var Calculate = (function() {
 
       // nonzero contribution if plane intersects face
       if (segment !== null) {
-        min.min(segment.start);
-        min.min(segment.end);
-        max.max(segment.start);
-        max.max(segment.end);
+        boundingBox.expandByPoint(segment.start);
+        boundingBox.expandByPoint(segment.end);
 
         // triangle between coplanar point and the two endpoints of the segment
-        var pa = new Vector3().subVectors(segment.start, point);
-        var pb = new Vector3().subVectors(segment.end, point);
+        pa.subVectors(segment.start, point);
+        pb.subVectors(segment.end, point);
 
         // normal in world space
         normal.copy(face.normal).transformDirection(matrix);
@@ -205,7 +202,7 @@ var Calculate = (function() {
         var area = pa.clone().cross(pb).length() / 2;
         var sign = Math.sign(pa.dot(normal));
 
-        crossSection += area * sign;
+        crossSectionArea += area * sign;
 
         // store segment in segments array and increment contour length
         segments.push(segment);
@@ -216,9 +213,8 @@ var Calculate = (function() {
 
     // return the value of the cross-section and its bounds along the axes
     return {
-      crossSection: crossSection,
-      min: min,
-      max: max,
+      area: crossSectionArea,
+      boundingBox: boundingBox,
       segments: segments,
       length: length
     };
@@ -270,6 +266,28 @@ var Calculate = (function() {
       center: center,
       radius: radius
     };
+  }
+
+  function _numHash(n, p) {
+    return Math.round(n*p);
+  }
+
+  function _vectorHash(v, p) {
+    return _numHash(v.x, p)+'_' + _numHash(v.y, p) + '_' + _numHash(v.z, p);
+  }
+
+  // todo: finish
+  function _polygonsFromSegments(segments, p) {
+    p = p !== undefined ? p : 5;
+
+    // adjacency map
+    var m = {};
+
+    for (var s = 0, l = segments.length; s < l; s++) {
+      var segment = segments[s];
+
+
+    }
   }
 
   return {

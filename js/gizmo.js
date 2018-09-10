@@ -397,35 +397,36 @@ var Gizmo = (function() {
       this.makeHandleAndCollider(Gizmo.HandleTypes.scale, "o", this.materials.o);
     },
 
-    update: function(position, rotation, scale) {
+    update: function(mesh) {
+      if (mesh !== undefined) {
+        // if new position given, set to this position
+        this.position.copy(mesh.position);
+
+        // if new rotation given, set rotation of cardinal scale handles to this
+        // rotation
+        this.handleGroups[Gizmo.HandleTypes.scale].rotation.copy(mesh.rotation);
+      }
+
       // camera position in object space
-      var camPosProjected = this.camera.position.clone().sub(this.position);
+      var camPosLocal = this.camera.position.clone().sub(this.position);
+
       // get the camera's basis vectors
-      var xc = new THREE.Vector3(), yc = xc.clone(), zc = xc.clone();
+      var xc = new THREE.Vector3();
+      var yc = new THREE.Vector3();
+      var zc = new THREE.Vector3();
       this.camera.matrix.extractBasis(xc, yc, zc);
 
       // orthogonal handle group initially points in y direction and lies in xy
-      // plane; orient it so that y now point at the camera and z points up in
+      // plane; orient it so that y now points at the camera and z points up in
       // camera space
-      var xp = camPosProjected.clone().cross(yc).normalize();
-      var yp = camPosProjected.normalize();
+      var xp = camPosLocal.clone().cross(yc).normalize();
+      var yp = camPosLocal.normalize();
       var zp = xp.clone().cross(yp);
       this.handleGroups.orthogonal.matrix.makeBasis(xp, yp, zp);
 
       // scale gizmo proportionally to its distance to the camera
       var distanceToCamera = this.position.distanceTo(this.camera.position);
       this.scale.setScalar(this.params.scaleFactor * distanceToCamera);
-
-      // if new position given, set to this position
-      if (position !== undefined) {
-        this.position.copy(position);
-      }
-      // if new rotation given, set rotation of cardinal scale handles to this
-      // rotation
-      if (rotation !== undefined) {
-        this.handleGroups[Gizmo.HandleTypes.scale].rotation.copy(rotation);
-      }
-      // don't do anything for scale
     },
 
     mousemove: function(pointer) {

@@ -209,9 +209,9 @@ var Measurement = (function() {
 
         this.connectors[0].setFromSegments(crossSectionResult.segments);
 
-        this.result.crossSection = crossSectionResult.crossSection;
-        this.result.min = crossSectionResult.min;
-        this.result.max = crossSectionResult.max;
+        this.result.area = crossSectionResult.area;
+        this.result.min = crossSectionResult.boundingBox.min;
+        this.result.max = crossSectionResult.boundingBox.max;
         this.result.length = crossSectionResult.length;
         this.result.ready = true;
       }
