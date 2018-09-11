@@ -219,7 +219,7 @@ var Pointer = (function() {
       var dist = pointer.pixelCoords.distanceTo(this.clickPixelCoords);
       if (dist < this.clickAllowance) {
         for (var c = 0; c < this.clickCallbacks.length; c++) {
-          this.clickCallbacks[c](this.intersection.point, this.intersection.object);
+          this.clickCallbacks[c](this.intersection.point, this.intersection.face, this.intersection.object);
         }
       }
 

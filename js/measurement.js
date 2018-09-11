@@ -129,7 +129,7 @@ var Measurement = (function() {
       this.pointer.activate();
     },
 
-    placeMarker: function(point, mesh) {
+    placeMarker: function(point, face, mesh) {
       this.mactive = Math.min(this.mnum, this.mactive + 1);
 
       var marker = this.markers[this.midx];
@@ -177,7 +177,9 @@ var Measurement = (function() {
         var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
         var p2 = point;
 
-        var dot = p0.clone().sub(p1).dot(p2.clone().sub(p1));
+        var d10 = new THREE.Vector3().subVectors(p0, p1).normalize();
+        var d12 = new THREE.Vector3().subVectors(p2, p1).normalize();
+        var dot = d10.dot(d12);
 
         this.result.angle = acos(dot);
         this.result.angleDegrees = this.result.angle * 180.0 / Math.PI;

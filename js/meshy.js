@@ -765,12 +765,12 @@ Meshy.prototype.endSetBase = function() {
   if (this.pointer) this.pointer.deactivate();
 }
 
-Meshy.prototype.faceOrientDown = function(intersection) {
-  if (!intersection) return;
+Meshy.prototype.faceOrientDown = function(point, face, mesh) {
+  if (!point || !face || !mesh) return;
 
   // get the normal in world space
-  var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
-  var normal = intersection.face.normal.clone().applyMatrix3(rotation);
+  var rotation = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
+  var normal = face.normal.clone().applyMatrix3(rotation);
 
   var down = new THREE.Vector3(0, 0, -1);
 
