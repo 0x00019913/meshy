@@ -18,7 +18,7 @@ Meshy = function() {
   this.buildVolumeSize = new THREE.Vector3(145, 145, 175);
   this.buildVolumeMin = null;
   this.buildVolumeMax = null;
-  this.centerOriginOnBuildPlate = false; // todo: back to false
+  this.centerOriginOnBuildPlate = false;
   this.buildVolumeMaterials = {
     linePrimary: new THREE.LineBasicMaterial({
       color: 0xdddddd,
@@ -40,7 +40,7 @@ Meshy = function() {
   this.buildVolumeVisible = true;
 
   this.importUnits = Units.mm;
-  this.autocenterOnImport = true; // todo: back to true
+  this.autocenterOnImport = true;
 
   // geometry
   this.model = null;
@@ -136,7 +136,7 @@ Meshy.prototype.generateUI = function() {
   displayFolder.add(this, "cameraToModel").name("Camera to model")
     .title("Snap camera to model (F).");
   this.backgroundColor = "#222222";
-  this.meshColor = "#481a1a"; //"#662828"; // todo: reset to 0xffffff?
+  this.meshColor = "#481a1a";
   this.wireframeColor = "#000000";
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
@@ -212,8 +212,8 @@ Meshy.prototype.generateUI = function() {
   repairFolder.add(this, "repair").name("Repair")
     .title("Repair mesh.");
 
-  this.layerHeight = .05;//todo: back to 0.1
-  this.lineWidth = 0.05;
+  this.layerHeight = .1;
+  this.lineWidth = 0.1;
   this.sliceAxis = "z";
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing",
     "Generate supports, slice the mesh, and export the resulting G-code.");
@@ -230,7 +230,7 @@ Meshy.prototype.generateUI = function() {
   };
   this.supportRadiusFnName = "sqrt";
   this.supportRadiusFnK = 0.01;
-  this.sliceMode = Slicer.Modes.preview; // todo: back to preview
+  this.sliceMode = Slicer.Modes.preview;
   this.sliceModeOn = false;
   this.slicePreviewModeSliceMesh = true;
   this.sliceFullModeUpToLayer = true;
@@ -238,19 +238,18 @@ Meshy.prototype.generateUI = function() {
   this.sliceNumWalls = 2;
   this.sliceNumTopLayers = 10;
   this.sliceOptimizeTopLayers = true;
-  this.sliceInfillType = Slicer.InfillTypes.grid; // todo: back to solid
+  this.sliceInfillType = Slicer.InfillTypes.solid;
   this.sliceInfillDensity = 0.1;
   this.sliceInfillOverlap = 0.5;
   // raft options
-  // todo: all to reasonable values
-  this.sliceMakeRaft = true; // todo: back to true
+  this.sliceMakeRaft = true;
   this.sliceRaftNumTopLayers = 3;
-  this.sliceRaftTopLayerHeight = 0.05;
-  this.sliceRaftTopLineWidth = 0.05;
+  this.sliceRaftTopLayerHeight = 0.1;
+  this.sliceRaftTopLineWidth = 0.1;
   this.sliceRaftTopDensity = 1.0;
   this.sliceRaftNumBaseLayers = 1;
-  this.sliceRaftBaseLayerHeight = 0.1;
-  this.sliceRaftBaseLineWidth = 0.1;
+  this.sliceRaftBaseLayerHeight = 0.2;
+  this.sliceRaftBaseLineWidth = 0.2;
   this.sliceRaftBaseDensity = 0.5;
   this.sliceRaftOffset = 1.0;
   this.sliceRaftGap = 0.05;
@@ -1762,7 +1761,7 @@ Meshy.prototype.initViewport = function() {
     if (!_this.camera || !_this.scene) return;
 
     _this.controls.update();
-    if (_this.gizmo && _this.model) {
+    if (_this.gizmo && _this.gizmoVisible && _this.model) {
       _this.gizmo.update(_this.model.getMesh());
     }
     if (_this.pointer && _this.pointer.active) {
@@ -1775,8 +1774,12 @@ Meshy.prototype.initViewport = function() {
 
     _this.renderer.clear();
     _this.renderer.render(_this.scene, _this.camera);
-    _this.renderer.clearDepth();
-    _this.renderer.render(_this.gizmoScene, _this.camera);
+
+    // also render the gizmo scene if gizmo is supposed to be visible
+    if (_this.gizmoVisible) {
+      _this.renderer.clearDepth();
+      _this.renderer.render(_this.gizmoScene, _this.camera);
+    }
   }
 }
 
@@ -1997,8 +2000,6 @@ Meshy.prototype.export = function(format) {
   catch (e) {
     this.printout.error(e);
   }
-
-  //this.model.export(format, this.filename, factor);
 }
 
 // Interface for the dat.gui button. Completely removes the model and resets
