@@ -1,3 +1,9 @@
+# NB
+
+This documentation is severely outdated at present. I just merged circa 400 commits and didn't have time to document everything. Will update shortly.
+
+# Documentation:
+
 `Meshy` is my browser-based tool for performing measurements and transformations on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
 
 > More features in development at the time of writing: slicing, optimizations, more import/export formats, UI improvements.
