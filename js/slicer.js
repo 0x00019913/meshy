@@ -1,87 +1,453 @@
 /* slicer.js */
 
-var scene; // for debugging, todo: remove
-var debugGeo = new THREE.Geometry();
+// src is either one THREE.Mesh or an array of them
+function Slicer(src, params) {
+  var meshes = isArray(src) ? src : [src];
 
-Slicer = function(sourceVertices, sourceFaces, params) {
-  this.sourceVertices = sourceVertices;
-  this.sourceFaces = sourceFaces;
-  this.sourceVertexCount = sourceVertices.length;
-  this.sourceFaceCount = sourceFaces.length;
+  var sourceGeo = new THREE.Geometry();
 
-  this.previewVertices = null;
-  this.previewFaces = null;
+  // merge the input meshes into the slicer's own copy of the source geometry
+  for (var m = 0; m < meshes.length; m++) {
+    var mesh = meshes[m];
+    if (!mesh) continue;
 
-  this.pathVertices = null;
-
-  this.sliceHeight = 0.5;
-  this.axis = "z";
-  this.mode = "preview";
-  this.previewGeometryReady = false;
-  this.pathGeometryReady = false;
-
-  // set from params
-  if (params) {
-    if (params.hasOwnProperty("sliceHeight")) this.sliceHeight = params.sliceHeight;
-    if (params.hasOwnProperty("axis")) this.axis = params.axis;
-    if (params.hasOwnProperty("mode")) this.mode = params.mode;
-    if (params.hasOwnProperty("scene")) this.scene = params.scene;
+    sourceGeo.merge(mesh.geometry, mesh.matrixWorld);
   }
 
-  // for debugging, todo: remove
-  scene = this.scene;
+  this.sourceGeo = sourceGeo;
+  this.sourceVertexCount = sourceGeo.vertices.length;
+  this.sourceFaceCount = sourceGeo.faces.length;
+
+  // set only the base parameters - need these to calculate mesh bounds and
+  // slice count
+  this.setBaseParams(params);
 
   // 1. assume right-handed coords
   // 2. look along negative this.axis with the other axes pointing up and right
-  // then this.axish points right and this.axisv points up
-  this.axish = cycleAxis(this.axis);
-  this.axisv = cycleAxis(this.axish);
+  // then this.ah points right and this.av points up
+  this.ah = cycleAxis(this.axis);
+  this.av = cycleAxis(this.ah);
 
+  // calculate upper and lower bounds of all faces and the entire mesh
   this.calculateFaceBounds();
+
+  // calculate number of slices
+  this.calculateNumSlices();
+
+  // init layers to null
+  this.sliceLayers = null;
+  this.raftLayers = null;
+
+  // set the rest of the parameters
+  this.updateParams(params);
+
+  this.currentLevel = this.getMaxLevel();
+
+  // contains the geometry objects that are shown on the screen
+  this.geometries = {};
+  this.makeGeometry();
+
+  // construct the layers array, which contains the lazily constructed contours
+  this.makeLayers();
+  // construct the raft layers
+  this.makeRaftLayers();
 
   this.setMode(this.mode);
 }
 
-// necessary function - called from constructor
-// calculates min and max for every face on the axis
+Slicer.Modes = {
+  preview: "preview",
+  full: "full"
+};
+
+Slicer.InfillTypes = {
+  none: 0,
+  solid: 1,
+  lines: 2,
+  grid: 4,
+  triangles: 8,
+  hex: 16,
+  // mask for all infill types that consist of lines that don't need to be
+  // connected to each other
+  disconnectedLineType: 1 | 4 | 8
+};
+
+Slicer.DefaultParams = {
+  // base params
+  axis: "z",
+  layerHeight: 0.1,
+  lineWidth: 0.1,
+  precision: 5,
+  mode: Slicer.Modes.preview,
+
+  numWalls: 2,
+  numTopLayers: 3,
+  optimizeTopLayers: true,
+  infillType: Slicer.InfillTypes.none,
+  infillDensity: 0.1,
+  infillOverlap: 0.5,
+
+  makeRaft: true,
+  raftNumTopLayers: 3,
+  raftTopLayerHeight: 0.05,
+  raftTopLineWidth: 0.05,
+  raftTopDensity: 1.0,
+  raftNumBaseLayers: 1,
+  raftBaseLayerHeight: 0.1,
+  raftBaseLineWidth: 0.1,
+  raftBaseDensity: 0.5,
+  raftOffset: 1.0,
+  raftGap: 0.05,
+  raftWriteWalls: false,
+
+  // display params; these determine how much to compute
+  previewSliceMesh: false,
+  fullUpToLayer: true,
+  fullShowInfill: false
+};
+
+Slicer.prototype.setParams = function(params) {
+  params = params || {};
+
+  for (var p in Slicer.DefaultParams) {
+    if (params.hasOwnProperty(p)) {
+      this[p] = params[p];
+    }
+    else {
+      this[p] = Slicer.DefaultParams[p];
+    }
+  }
+}
+
+// set only the base parameters
+Slicer.prototype.setBaseParams = function(params) {
+  var defaults = Slicer.DefaultParams;
+
+  this.axis = params.axis || defaults.axis;
+  this.layerHeight = params.layerHeight || defaults.layerHeight;
+  this.lineWidth = params.lineWidth || defaults.lineWidth;
+  this.precision = params.precision || defaults.precision;
+
+  this.mode = params.mode || defaults.mode;
+}
+
+// update slicer params, handle the consequences of updating them, and return
+// those that were updated
+Slicer.prototype.updateParams = function(params) {
+  params = params || {};
+  var defaults = Slicer.DefaultParams;
+  var updated = {};
+
+  for (var p in defaults) {
+    var hasParam = params.hasOwnProperty(p);
+    var val = undefined;
+
+    // if no initial value set, get one from params if present, else, from
+    // defaults
+    if (this[p] === undefined) val = hasParam ? params[p] : defaults[p];
+    // else, if initial value set, only update if present in params
+    else if (hasParam) val = params[p];
+
+    if (val !== undefined && this[p] !== val) {
+      this[p] = val;
+      updated[p] = val;
+    }
+  }
+
+  this.handleUpdatedParams(updated);
+
+  return updated;
+}
+
+// if some params changed, they may require invalidating some existing data
+// structures
+Slicer.prototype.handleUpdatedParams = function(params) {
+  var raftUpdated = false;
+
+  if (hasProp("numWalls")) {
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyWalls();
+      layer.params.numWalls = params.numWalls;
+    });
+  }
+  if (hasProp("numTopLayers") || hasProp("optimizeTopLayers")) {
+    var numTopLayers = this.numTopLayers;
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfillContour();
+      layer.params.numTopLayers = numTopLayers;
+    });
+  }
+  if (hasProp("infillType")) {
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfill();
+      layer.params.infillType = params.infillType;
+    });
+  }
+  if (hasProp("infillDensity")) {
+    if (this.infillDensity === 0) this.infillType = Slicer.InfillTypes.none;
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfill();
+      layer.params.infillDensity = params.infillDensity;
+    });
+  }
+  if (hasProp("infillOverlap")) {
+    this.forEachSliceLayer(function(layer) {
+      layer.unreadyInfillContour();
+      layer.params.infillOverlap = params.infillOverlap;
+    });
+  }
+  if (hasProp("makeRaft")
+    || hasProp("raftNumTopLayers")
+    || hasProp("raftNumBaseLayers")) {
+    this.numRaftLayers = this.makeRaft ? this.raftNumBaseLayers + this.raftNumTopLayers : 0;
+    raftUpdated = true;
+  }
+  if (hasProp("raftTopLayerHeight")
+    || hasProp("raftTopDensity")
+    || hasProp("raftBaseLayerHeight")
+    || hasProp("raftBaseDensity")
+    || hasProp("raftGap")
+    || hasProp("raftOffset")) {
+    raftUpdated = true;
+  }
+
+  if (raftUpdated) {
+    this.calculateBaseline();
+    this.floorToBaseline();
+    this.makeRaftLayers();
+  }
+
+  function hasProp(name) { return params.hasOwnProperty(name); }
+}
+
+// map a function to all slice layers
+Slicer.prototype.forEachSliceLayer = function(f) {
+  if (!this.sliceLayers) return;
+
+  for (var i = 0; i < this.sliceLayers.length; i++) {
+    f(this.sliceLayers[i]);
+  }
+}
+
+// map a function to all raft layers
+Slicer.prototype.forEachRaftLayer = function(f) {
+  if (!this.raftLayers) return;
+
+  for (var i = 0; i < this.raftLayers.length; i++) {
+    f(this.raftLayers[i]);
+  }
+}
+
+// map a function to all layers
+Slicer.prototype.forEachLayer = function(f) {
+  this.forEachSliceLayer(f);
+  this.forEachRaftLayer(f);
+}
+
+// called from constructor, calculates min and max for every face on the axis
 Slicer.prototype.calculateFaceBounds = function() {
-  this.faceBounds = [];
-  var faceBounds = this.faceBounds;
-  var min = Infinity, max = -Infinity;
+  var faceBounds = [];
+  var axis = this.axis;
+  var min = new THREE.Vector3().setScalar(Infinity);
+  var max = new THREE.Vector3().setScalar(-Infinity);
 
-  for (var i=0; i<this.sourceFaces.length; i++) {
-    var face = this.sourceFaces[i];
-    var bounds = faceGetBounds(face, this.axis, this.sourceVertices);
+  for (var i = 0; i < this.sourceFaceCount; i++) {
+    var face = this.sourceGeo.faces[i];
+    var bounds = faceGetBounds(face, this.sourceGeo.vertices);
 
-    max = Math.max(max, bounds.max);
-    min = Math.min(min, bounds.min);
+    max.max(bounds.max);
+    min.min(bounds.min);
 
     // store min and max for each face
     faceBounds.push({
       face: face.clone(),
-      max: bounds.max,
-      min: bounds.min
+      max: bounds.max[axis],
+      min: bounds.min[axis]
     });
   }
 
   this.min = min;
   this.max = max;
-  // first slice is half a slice height below mesh min, hence +1
-  this.numSlices = Math.floor(0.5 + (max - min) / this.sliceHeight) + 2;
-  this.currentSlice = this.numSlices;
+
+  this.faceBoundsArray = faceBounds;
+}
+
+Slicer.prototype.calculateNumSlices = function() {
+  // first slice is half a slice height above mesh min and last slice is
+  // strictly above mesh, hence +1
+  var amax = this.max[this.axis], amin = this.min[this.axis];
+  this.numSlices = Math.floor(0.5 + (amax - amin) / this.layerHeight) + 1;
+}
+
+// calculate the lowest boundary of the print, including the raft
+Slicer.prototype.calculateBaseline = function() {
+  this.baseline = this.min[this.axis];
+  if (this.makeRaft) {
+    var raftTopHeight = this.raftTopLayerHeight * this.raftNumTopLayers;
+    var raftBaseHeight = this.raftBaseLayerHeight * this.raftNumBaseLayers;
+    this.baseline -= raftTopHeight + raftBaseHeight + this.raftGap;
+  }
+}
+
+Slicer.prototype.floorToBaseline = function() {
+  if (this.baseline === undefined) this.calculateBaseline();
+
+  var axis = this.axis;
+  var baseline = this.baseline;
+  var sourceVertices = this.sourceGeo.vertices;
+  var faceBounds = this.faceBoundsArray;
+
+  // shift all vertices
+  for (var i = 0; i < this.sourceVertexCount; i++) {
+    sourceVertices[i][axis] -= baseline;
+  }
+
+  // shift all computed face bounds
+  for (var i = 0; i < this.sourceFaceCount; i++) {
+    var bounds = faceBounds[i];
+    bounds.min -= baseline;
+    bounds.max -= baseline;
+  }
+
+  // shift mesh AABB
+  this.min[axis] -= baseline;
+  this.max[axis] -= baseline;
+
+  // shift the context calculated for each layer
+  this.forEachLayer(function(layer) {
+    layer.context.d -= baseline;
+  });
+
+  // b/c we just floored, the baseline is 0
+  this.baseline = 0;
+}
+
+Slicer.prototype.gcodeSave = function(params) {
+  var filamentDiameter = params.filamentDiameter;
+  var filamentCrossSection = filamentDiameter * filamentDiameter * Math.PI / 4;
+  var axis = this.axis;
+  var coincident = MCG.Math.coincident;
+
+  var exporter = new GcodeExporter();
+
+  exporter.setFilename(params.filename);
+  exporter.setExtension(params.extension);
+  exporter.setTravelSpeed(params.travelSpeed);
+  exporter.setCoordPrecision(params.coordPrecision);
+  exporter.setExtruderPrecision(params.extruderPrecision);
+
+  exporter.init();
+
+  exporter.writeHeader();
+  exporter.writeNewline();
+
+  exporter.writeHeatExtruder(params.temperature);
+  exporter.writeAbsolutePositionionMode();
+  exporter.writeNewline();
+  exporter.writeComment("PRIME EXTRUDER");
+  exporter.writePrimingSequence(params.primeExtrusion);
+
+  var extruderPosition = exporter.e;
+
+  var level0 = this.getMinLevel(), levelk = this.getMaxLevel();
+
+  // write geometry for every layer
+  for (var level = level0; level <= levelk; level++) {
+    var layer = this.getLayer(level);
+
+    var isRaft = level < 0;
+    var isRaftBase = level < (level0 + this.raftNumBaseLayers);
+
+    var layerHeight, lineWidth;
+    var wallSpeed, infillSpeed;
+
+    if (isRaft) {
+      if (isRaftBase) {
+        layerHeight = this.raftBaseLayerHeight;
+        lineWidth = this.raftBaseLineWidth;
+        wallSpeed = params.wallSpeed;
+        infillSpeed = params.raftBasePrintSpeed;
+      }
+      else {
+        layerHeight = this.raftTopLayerHeight;
+        lineWidth = this.raftTopLineWidth;
+        wallSpeed = params.wallSpeed;
+        infillSpeed = params.raftTopPrintSpeed;
+      }
+    }
+    else {
+      layerHeight = this.layerHeight;
+      lineWidth = this.lineWidth;
+      wallSpeed = params.wallSpeed;
+      infillSpeed = params.infillSpeed;
+    }
+
+    // ratio of cross-sections of printed line and filament; multiply by length
+    // of segment to get how much to extrude
+    var printCrossSection = layerHeight * lineWidth;
+    var extrusionFactor = params.extrusionMultiplier * printCrossSection / filamentCrossSection;
+
+    // duplicate context and shift its recorded position up by half a layer
+    // height above the center line b/c that's where the extruder will be
+    var context = layer.context.clone();
+    context.d += layerHeight / 2;
+    // constructor for converting intger-space vectors to physical vectors
+    var constr = THREE.Vector3;
+
+    // current position in integer-space coordinates; when encountering a new
+    // segment to print and current position is not the same as its start point,
+    // travel there first
+    var ipos = null;
+
+    exporter.writeNewline();
+    exporter.writeComment("LAYER " + level);
+    if (isRaft) exporter.writeComment("RAFT");
+    exporter.writeNewline();
+
+    var infill = layer.getInfill();
+    var infillInner = infill.inner;
+    var infillSolid = infill.solid;
+
+    // write inner infill
+    writeContour(infillInner, infillSpeed);
+    // write solid infill
+    writeContour(infillSolid, infillSpeed);
+
+    if (!isRaft || this.raftWriteWalls) {
+      var walls = layer.getWalls();
+      // write walls
+      for (var w = walls.length - 1; w >= 0; w--) {
+        writeContour(walls[w], wallSpeed);
+      }
+    }
+  }
+
+  exporter.saveToFile();
+
+  function writeContour(contour, speed) {
+    if (!contour) return;
+
+    contour.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(constr, context);
+      var v2 = p2.toVector3(constr, context);
+      var extrusion = v1.distanceTo(v2) * extrusionFactor;
+      extruderPosition += extrusion;
+
+      if (ipos === null || !coincident(ipos, p1)) {
+        exporter.writeTravel(v1);
+      }
+
+      exporter.writePrint(v2, extruderPosition, speed);
+
+      ipos = p2;
+    });
+  }
 }
 
 Slicer.prototype.setMode = function(mode) {
   this.mode = mode;
 
-  if (mode=="preview") {
-    if (!this.previewGeometryReady) this.makePreviewGeometry();
-  }
-  else if (this.mode=="path") {
-    if (!this.pathGeometryReady) this.makePathGeometry();
-  }
-
-  this.setSlice(this.currentSlice);
+  this.setLevel(this.currentLevel);
 }
 
 Slicer.prototype.getMode = function() {
@@ -89,220 +455,561 @@ Slicer.prototype.getMode = function() {
 }
 
 Slicer.prototype.getGeometry = function() {
-  if (this.mode=="preview") return {
-    vertices: this.previewVertices,
-    faces: this.previewFaces
+  return this.geometries;
+}
+
+Slicer.prototype.getMinLevel = function() {
+  return -this.numRaftLayers;
+}
+
+Slicer.prototype.getMaxLevel = function() {
+  return this.numSlices - 1;
+}
+
+Slicer.prototype.getCurrentLevel = function() {
+  return this.currentLevel;
+}
+
+Slicer.prototype.getLayer = function(level) {
+  if (level >= 0) return this.sliceLayers[level];
+  else return this.raftLayers[this.numRaftLayers + level];
+}
+
+Slicer.prototype.getLevelPos = function(level) {
+  return this.min[this.axis] + (level + 0.5) * this.layerHeight;
+}
+
+Slicer.prototype.setLevel = function(level) {
+  if (level === undefined) level = this.getCurrentLevel();
+  level = clamp(level, this.getMinLevel(), this.getMaxLevel());
+
+  var prevLevel = this.currentLevel;
+  this.currentLevel = level;
+
+  var layers = this.sliceLayers;
+  var layer = this.getLayer(level);
+  var context = layer.context;
+  var axis = context.axis;
+
+  var geos = this.geometries;
+
+  // write the current layer if necessary for the mode and display settings
+  if (this.mode !== Slicer.Modes.full || this.fullUpToLayer) {
+    var currentLayerBaseGeo = geos.currentLayerBase.geo;
+    var currentLayerContourGeo = geos.currentLayerContours.geo;
+    var currentLayerInfillGeo = geos.currentLayerInfill.geo;
+
+    var baseVertices = currentLayerBaseGeo.vertices;
+    baseVertices.length = 0;
+    layer.writeBase(baseVertices);
+
+    var contourVertices = currentLayerContourGeo.vertices;
+    contourVertices.length = 0;
+    // write walls if slice level, or if raft level and writing raft walls
+    if (level >= 0 || (level < 0 && this.raftWriteWalls)) {
+      layer.writeWalls(contourVertices);
+    }
+
+    var infillVertices = currentLayerInfillGeo.vertices;
+    infillVertices.length = 0;
+    layer.writeInfill(infillVertices);
+  }
+
+  if (this.mode === Slicer.Modes.preview) {
+    var slicePos = this.getLevelPos(level);
+    var faceBoundsArray = this.faceBoundsArray;
+
+    // current vertices and faces
+    var vertices = geos.slicedMesh.geo.vertices;
+    var faces = geos.slicedMesh.geo.faces;
+
+    // local vars for ease of access
+    var vertexCount = this.sourceVertexCount;
+    var faceCount = this.sourceFaceCount;
+
+    // erase any sliced verts and faces
+    vertices.length = vertexCount;
+    faces.length = 0;
+
+    if (this.previewSliceMesh) {
+      // current vertex
+      var vidx = vertexCount;
+      var fidx = 0;
+
+      // array of faces that intersect the slicing plane
+      var slicedFaces = [];
+
+      for (var i = this.sourceFaceCount - 1; i >= 0; i--) {
+        var bounds = faceBoundsArray[i];
+        var face = bounds.face;
+
+        if (bounds.max < slicePos) {
+          faces.push(face);
+        }
+        else if (bounds.min < slicePos) {
+          slicedFaces.push(face);
+        }
+      }
+
+      // handle the sliced faces: slice them and insert them (and associated verts)
+      // into sliced mesh
+
+      // slice the faces
+      for (var f = 0; f < slicedFaces.length; f++) {
+        var slicedFace = slicedFaces[f];
+
+        this.sliceFace(slicedFace, vertices, slicePos, axis, function(normal, ccw, A, B, C, D) {
+          if (D === undefined) {
+            var idxA = vidx;
+            var idxB = idxA + 1;
+            var idxC = idxA + 2;
+            vertices.push(A);
+            vertices.push(B);
+            vertices.push(C);
+            vidx += 3;
+
+            var newFace;
+            if (ccw) newFace = new THREE.Face3(idxA, idxB, idxC);
+            else newFace = new THREE.Face3(idxB, idxA, idxC);
+
+            newFace.normal.copy(slicedFace.normal);
+
+            // explicitly visible
+            newFace.materialIndex = 0;
+
+            //faces[fidx++] = newFace;
+            faces.push(newFace);
+          }
+          else {
+            var idxA = vidx;
+            var idxB = idxA + 1;
+            var idxC = idxA + 2;
+            var idxD = idxA + 3;
+            vertices.push(A);
+            vertices.push(B);
+            vertices.push(C);
+            vertices.push(D);
+            vidx += 4;
+
+            // create the new faces and push it into the faces array
+            var newFace1, newFace2;
+            if (ccw) {
+              newFace1 = new THREE.Face3(idxA, idxB, idxC);
+              newFace2 = new THREE.Face3(idxC, idxB, idxD);
+            }
+            else {
+              newFace1 = new THREE.Face3(idxB, idxA, idxC);
+              newFace2 = new THREE.Face3(idxB, idxC, idxD);
+            }
+            newFace1.normal.copy(slicedFace.normal);
+            newFace2.normal.copy(slicedFace.normal);
+
+            // explicitly visible
+            newFace1.materialIndex = 0;
+            newFace2.materialIndex = 0;
+
+            faces.push(newFace1);
+            faces.push(newFace2);
+          }
+        });
+      }
+    }
+  }
+  else if (this.mode === Slicer.Modes.full) {
+    var allContoursGeo = geos.allContours.geo;
+
+    var contourVertices = allContoursGeo.vertices;
+    contourVertices.length = 0;
+
+    var topLevel = this.fullUpToLayer ? level - 1 : this.getMaxLevel();
+
+    for (var i = this.getMinLevel(); i <= topLevel; i++) {
+      var ilayer = this.getLayer(i);
+
+      ilayer.writeWalls(contourVertices);
+
+      if (this.fullShowInfill) ilayer.writeInfill(contourVertices);
+    }
+  }
+
+  /*if (0) {
+    var sd = layer.source.toPolygonSet().fdecimate(this.lineWidth);
+    var u = MCG.Boolean.union(sd,undefined,{idx:level, dbg:false}).union;
+    var adj = u.makeAdjacencyMap();
+    var key = adj.getKeyWithNoPredecessors();
+    if (key) console.log("b", key);
+    var base = u.toPolygonSet();
+
+    u.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.1, axis);
+    });
+    base.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    // contour 1
+
+    var o1 = base.foffset(-0.025, this.lineWidth);
+    o1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.05, axis);
+    });
+    debug.lines();
+    var u1 = MCG.Boolean.union(o1,undefined,{idx:level, dbg:false}).union;
+    var adj = u1.makeAdjacencyMap();
+    var key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(1, key);
+    u1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.1, axis);
+    });
+    var c1 = u1.toPolygonSet();
+    c1.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    // contour 2
+
+    var o2 = c1.foffset(-0.05, this.lineWidth);
+    o2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.05, axis);
+    });
+    var u2 = MCG.Boolean.union(o2,undefined,{idx:level, dbg:false}).union;
+    adj = u2.makeAdjacencyMap();
+    key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(2, key);
+    u2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.1, axis);
+    });
+    var c2 = u2.toPolygonSet();
+    c2.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+    var oi = base.foffset(-0.1, this.lineWidth);
+    oi.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.025, axis);
+    });
+    var ui = MCG.Boolean.union(oi,undefined,{idx:level, dbg:false}).union;
+    ui.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      //debug.line(v1, v2, 1, false, -0.05, axis);
+    });
+    adj = ui.makeAdjacencyMap();
+    key = adj.getKeyWithNoPredecessors();
+    if (key) console.log(2, key);
+    var ci = ui.toPolygonSet();
+    ci.forEachPointPair(function(p1, p2) {
+      var v1 = p1.toVector3(THREE.Vector3, context);
+      var v2 = p2.toVector3(THREE.Vector3, context);
+      debug.line(v1, v2, 1, false, 0.0, axis);
+    });
+
+
+    debug.lines();
+    return;
+  }
+
+  if (level >= this.numRaftLayers) {
+    var walls = layer.getWalls();
+
+    for (var w = 0; w < walls.length; w++) {
+      walls[w].forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.0, axis);
+      });
+    }
+
+    // debugging for basic infill contour
+    if (0) {
+      var contour = layer.getBase().foffset(-0.1, this.lineWidth);
+      contour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.0, axis);
+      });
+      var ucontour = MCG.Boolean.union(contour, undefined, {dbg:true}).union;
+      ucontour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.2, axis);
+      });
+      ucontour.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.3, axis);
+      });
+    }
+
+    // debugging for calculating disjoint infill contours wrt k neighboring layers
+    if (0) {
+      var numTopLayers = layer.params.numTopLayers;
+      var idx = layer.params.idx;
+      var neighborContours = new MCG.SegmentSet(context);
+      var numLayers = 0;
+      var contour = layer.getInfillContour();
+
+      if (idx < numTopLayers || idx > layer.params.layers.length - 1 - numTopLayers) return;
+
+      // if optimizing top layer computation (and there are more than 2 top
+      // layers), only use the adjacent layers and the farthest layers
+      if (layer.params.optimizeTopLayers && numTopLayers > 2) {
+        neighborContours.merge(layers[idx + 1].getInfillContour());
+        neighborContours.merge(layers[idx - 1].getInfillContour());
+        neighborContours.merge(layers[idx + numTopLayers].getInfillContour());
+        neighborContours.merge(layers[idx - numTopLayers].getInfillContour());
+
+        numLayers = 4;
+      }
+      else {
+        for (var i = 1; i <= numTopLayers; i++) {
+          neighborContours.merge(layers[idx + i].getInfillContour());
+          neighborContours.merge(layers[idx - i].getInfillContour());
+        }
+
+        numLayers = numTopLayers * 2;
+      }
+
+      var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
+        minDepthB: numLayers,
+        dbg: true
+      });
+
+      var adj = fullDifference.intersection.makeAdjacencyMap();
+      var key = adj.getKeyWithNoPredecessors();
+      if (key) {
+        console.log(level, adj.map, key, adj.map[key]);
+        var v = adj.map[key].pt.toVector3(THREE.Vector3, context);
+        debug.line(v.clone().setZ(context.d),v.clone().setZ(context.d+3.1));
+        //debug.point(new MCG.Vector(context, 1372216, -278976).toVector3(THREE.Vector3, context), 0.51, context.axis);
+        //debug.point(new MCG.Vector(context, 1364863, -273460).toVector3(THREE.Vector3, context), 0.51, context.axis);
+      }
+
+      function sliverFilterFn(poly) { return !poly.isSliver(); }
+
+      neighborContours.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.5, axis);
+      });
+      contour.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.501, axis);
+      });
+      fullDifference.intersection.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 2.5, axis);
+      });
+      fullDifference.intersection.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 2.7, axis);
+      });
+      fullDifference.AminusB.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.5, axis);
+      });
+      fullDifference.AminusB.toPolygonSet().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 3.7, axis);
+      });
+
+      var ires = MCG.Math.ftoi(this.lineWidth, context);
+      var ic = fullDifference.intersection.toPolygonSet().filter(sliverFilterFn);
+      var sc = fullDifference.AminusB.toPolygonSet().filter(sliverFilterFn);
+
+      var infillInner = MCG.Infill.generate(ic, MCG.Infill.Types.linear, {
+        angle: Math.PI / 4,
+        spacing: ires / this.infillDensity,
+        parity: level%2
+      });
+      var infillSolid = MCG.Infill.generate(sc, MCG.Infill.Types.linear, {
+        angle: Math.PI / 4,
+        spacing: ires,
+        parity: level%2
+      });
+
+      infillInner.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.2, axis);
+      });
+      infillSolid.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 1, false, 0.4, axis);
+      });
+    }
+  }*/
+}
+
+Slicer.prototype.makeGeometry = function() {
+  var geos = this.geometries;
+
+  geos.source = {
+    geo: this.sourceGeo
   };
-  else if (this.mode=="path") return {
-    vertices: this.pathVertices,
-    faces: null
+  geos.currentLayerContours = {
+    geo: new THREE.Geometry()
   };
+  geos.currentLayerBase = {
+    geo: new THREE.Geometry()
+  };
+  geos.currentLayerInfill = {
+    geo: new THREE.Geometry()
+  };
+  geos.allContours = {
+    geo: new THREE.Geometry()
+  };
+  geos.slicedMesh = {
+    geo: new THREE.Geometry()
+  };
+
+  var geoSlicedMesh = geos.slicedMesh.geo;
+  var vertices = this.sourceGeo.vertices;
+  var faces = [];
+  geoSlicedMesh.vertices = vertices;
+  geoSlicedMesh.faces = faces;
 }
 
-Slicer.prototype.getNumSlices = function() {
-  return this.numSlices;
+Slicer.prototype.makeLayers = function() {
+  var numSlices = this.numSlices;
+  var layers = new Array(numSlices);
+
+  // arrays of segments, each array signifying all segments in one layer
+  var segmentSets = this.buildLayerSegmentSets();
+  var layerParamsInit = {
+    lineWidth: this.lineWidth,
+    numWalls: this.numWalls,
+    numTopLayers: this.numTopLayers,
+    optimizeTopLayers: this.optimizeTopLayers,
+    infillType: this.infillType,
+    infillDensity: this.infillDensity,
+    infillOverlap: this.infillOverlap,
+    infillConnectLines: false,
+    layers: layers,
+    idx: -1
+  };
+
+  // make layers containing slices of the mesh
+  for (var i = 0; i < segmentSets.length; i++) {
+    var params = shallowCopy(layerParamsInit);
+    params.idx = i;
+    var layer = new Layer(params);
+    layer.setSource(segmentSets[i]);
+
+    layers[i] = layer;
+  }
+
+  this.sliceLayers = layers;
 }
 
-Slicer.prototype.getCurrentSlice = function() {
-  return this.currentSlice;
-}
+Slicer.prototype.makeRaftLayers = function() {
+  // if not making a raft or there are no layers on which to base it, return
+  if (!this.makeRaft || !this.sliceLayers) {
+    this.raftLayers = null;
+    return;
+  }
 
-Slicer.prototype.setSlice = function(slice) {
-  this.currentSlice = slice;
-  if (this.mode=="preview") this.setPreviewSlice();
-  else if (this.mode=="path") this.setPathSlice();
-}
+  var numRaftLayers = this.numRaftLayers;
+  var raftNumTopLayers = this.raftNumTopLayers;
+  var raftNumBaseLayers = this.raftNumBaseLayers;
+  var raftLayers = new Array(numRaftLayers);
+  var raftBaseLayerHeight = this.raftBaseLayerHeight;
+  var raftTopLayerHeight = this.raftTopLayerHeight;
+  var raftBaseHeight = raftNumBaseLayers * raftBaseLayerHeight;
 
-Slicer.prototype.setPreviewSlice = function() {
-  var slice = this.currentSlice;
+  // get the lowest slice layer and offset it to use as the base for the raft
+  var sourceLayer = this.getLayer(0);
+  var sourceOffset = sourceLayer.getBase().foffset(this.raftOffset, this.lineWidth);
+  var base = MCG.Boolean.union(sourceOffset).union.toPolygonSet();
+  var gap = this.raftGap;
+  var baseline = this.baseline;
 
-  var sliceLevel = this.min + (slice-0.5) * this.sliceHeight;
-  var faceBounds = this.faceBounds;
+  var layerParamsInit = {
+    lineWidth: this.lineWidth,
+    numWalls: this.numWalls,
+    numTopLayers: 0,
+    infillType: Slicer.InfillTypes.lines,
+    infillDensity: 1,
+    infillOverlap: this.infillOverlap,
+    // connect neighboring lines if not writing walls
+    infillConnectLines: !this.raftWriteWalls,
+    layers: raftLayers,
+    idx: -1
+  };
 
-  // array of faces that intersect the slicing plane
-  var slicedFaces = [];
+  for (var i = 0; i < numRaftLayers; i++) {
+    var isBase = i < raftNumBaseLayers;
 
-  for (var i = this.sourceFaceCount-1; i >= 0; i--) {
-    var bounds = faceBounds[i];
-    // if min above slice level, need to hide the face
-    if (bounds.min > sliceLevel) bounds.face.materialIndex = 1;
-    // else min <= slice level
+    var levelPos = baseline;
+    if (isBase) {
+      levelPos += (i + 0.5) * raftBaseLayerHeight;
+    }
     else {
-      // if max below slice level, need to show the face
-      if (bounds.max < sliceLevel) bounds.face.materialIndex = 0;
-      // else, face is cut
-      else {
-        bounds.face.materialIndex = 1;
-        slicedFaces.push(bounds.face);
-      }
+      levelPos += raftBaseHeight + (i - raftNumBaseLayers + 0.5) * raftTopLayerHeight;
+    }
+
+    var context = new MCG.Context(this.axis, levelPos, this.precision);
+
+    // make params object with correct density and idx
+    var params = shallowCopy(layerParamsInit);
+
+    if (isBase) params.infillDensity = this.raftBaseDensity;
+    else params.infillDensity = this.raftTopDensity;
+    params.idx = i;
+
+    var layer = new Layer(params);
+    layer.setBase(base);
+    layer.setContext(context);
+
+    raftLayers[i] = layer;
+
+    if (false && layer.params.idx==0) {
+      layer.getBase().forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 10, true, 0.25, context.axis);
+      });
+      var wall0 = layer.getBase().foffset(-0.025, this.lineWidth);
+      wall0.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 10, true, 0.5, context.axis);
+      });
+      var wall1 = wall0.foffset(-0.05, this.lineWidth);
+      wall1.forEachPointPair(function(p1, p2) {
+        var v1 = p1.toVector3(THREE.Vector3, context);
+        var v2 = p2.toVector3(THREE.Vector3, context);
+        debug.line(v1, v2, 10, true, 0.5, context.axis);
+      });
+      debug.lines();
     }
   }
 
-  // handle the sliced faces: slice them and insert them (and associated verts)
-  // into previewMesh
-
-  // current vertices and faces
-  var vertices = this.previewVertices;
-  var faces = this.previewFaces;
-  // local vars for ease of access
-  var vertexCount = this.sourceVertexCount;
-  var faceCount = this.sourceFaceCount;
-  // erase any sliced verts and faces
-  vertices.length = vertexCount;
-  faces.length = faceCount;
-
-  var axis = this.axis;
-
-  // newly created verts and faces will go here; then append them to the mesh;
-  // max of 2 times that many faces and 4 times that many verts
-  var newVertices = new Array(4 * slicedFaces.length);
-  var newFaces = new Array(2 * slicedFaces.length);
-  // current face/vertex in the new arrays
-  var vidx = 0;
-  var fidx = 0;
-
-  var sliceBuilder = new SliceBuilder(axis);
-
-  // slice the faces
-  for (var f = 0; f < slicedFaces.length; f++) {
-    var slicedFace = slicedFaces[f];
-
-    // in the following, A is the bottom vert, B is the middle vert, and XY
-    // are the points there the triangle intersects the X-Y segment
-
-    // get verts sorted on axis; check if this flipped winding order (default is CCW)
-    var vertsSorted = faceGetVertsSorted(slicedFace, vertices, axis);
-    var [A, B, C] = vertsSorted.verts;
-    var ccw = vertsSorted.ccw;
-
-    // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
-    if (B[axis] > sliceLevel) {
-      // calculate intersection of A-B and A-C
-      var AB = segmentPlaneIntersection(axis, sliceLevel, A, B);
-      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
-
-      // get indices of these verts in the final vert array before pushing them there
-      var idxA = vertexCount + vidx;
-      var idxAB = idxA + 1;
-      var idxAC = idxA + 2;
-      newVertices[vidx++] = A;
-      newVertices[vidx++] = AB;
-      newVertices[vidx++] = AC;
-
-      // create the new face and push it into the faces array
-      var newFace;
-      if (ccw) {
-        newFace = new THREE.Face3(idxA, idxAB, idxAC);
-        newFace.normal.copy(vertsComputeNormal(A, AB, AC));
-      }
-      else {
-        newFace = new THREE.Face3(idxA, idxAC, idxAB);
-        newFace.normal.copy(vertsComputeNormal(A, AC, AB));
-      }
-      // explicitly visible
-      newFace.materialIndex = 0;
-
-      newFaces[fidx++] = newFace;
-
-      sliceBuilder.addSegment(AB, AC, newFace.normal, idxAB, idxAC);
-    }
-    // else, slice into two triangles: A-B-AC and B-BC-AC
-    else {
-      // calculate intersection of A-C and B-C
-      var AC = segmentPlaneIntersection(axis, sliceLevel, A, C);
-      var BC = segmentPlaneIntersection(axis, sliceLevel, B, C);
-      // get indices of these verts in the vert array before pushing them there
-      var idxA = vertexCount + vidx;
-      var idxB = idxA + 1;
-      var idxAC = idxA + 2;
-      var idxBC = idxA + 3;
-      newVertices[vidx++] = A;
-      newVertices[vidx++] = B;
-      newVertices[vidx++] = AC;
-      newVertices[vidx++] = BC;
-
-      // create the new faces and push it into the faces array
-      var newFace1, newFace2;
-      if (ccw) {
-        newFace1 = new THREE.Face3(idxA, idxB, idxAC);
-        newFace2 = new THREE.Face3(idxB, idxBC, idxAC);
-        newFace1.normal.copy(vertsComputeNormal(A, B, AC));
-        newFace2.normal.copy(vertsComputeNormal(B, BC, AC));
-      }
-      else {
-        newFace1 = new THREE.Face3(idxA, idxAC, idxB);
-        newFace2 = new THREE.Face3(idxB, idxAC, idxBC);
-        newFace1.normal.copy(vertsComputeNormal(A, AC, B));
-        newFace2.normal.copy(vertsComputeNormal(B, AC, BC));
-      }
-      // explicitly visible
-      newFace1.materialIndex = 0;
-      newFace2.materialIndex = 0;
-
-      newFaces[fidx++] = newFace1;
-      newFaces[fidx++] = newFace2;
-
-      sliceBuilder.addSegment(AC, BC, newFace2.normal, idxAC, idxBC);
-    }
-  }
-
-  // put the new verts and faces on the end of the existing array
-  this.previewVertices = vertices.concat(newVertices);
-  this.previewFaces = faces.concat(newFaces);
-
-  // erase whatever we allocated and didn't need
-  this.previewVertices.length = vertexCount + vidx;
-  this.previewFaces.length = faceCount + fidx;
-
-  var slice = sliceBuilder.getSlice();
-  var triIndices = slice.triangulate();
-
-  var triFaces = [];
-
-  for (var i=0; i<triIndices.length; i += 3) {
-    var face = new THREE.Face3(triIndices[i], triIndices[i+1], triIndices[i+2]);
-    faceComputeNormal(face, this.previewVertices);
-    face.materialIndex = 2;
-    triFaces.push(face);
-  }
-
-  this.previewFaces = this.previewFaces.concat(triFaces);
-}
-
-Slicer.prototype.setPathSlice = function() {
-  var slice = this.currentSlice;
-  // todo
-}
-
-Slicer.prototype.makePreviewGeometry = function() {
-  this.previewVertices = this.sourceVertices.slice();
-  this.previewFaces = [];
-
-  // set the face array on the mesh
-  for (var i=0; i<this.faceBounds.length; i++) {
-    var face = this.faceBounds[i].face;
-    face.materialIndex = 0; // explicitly set as visible by default
-    this.previewFaces.push(face);
-  }
-
-  this.previewGeometryReady = true;
-}
-
-Slicer.prototype.makePathGeometry = function() {
-  var segmentLists = this.buildLayerSegmentLists();
-
-  this.pathVertices = [];
-
-  for (var i=0; i<segmentLists.length; i++) {
-    var segmentList = segmentLists[i];
-    for (var s=0; s<segmentList.length; s++) {
-      var segment = segmentList[s];
-      this.pathVertices.push(segment[0]);
-      this.pathVertices.push(segment[1]);
-    }
-  }
-
-  this.pathGeometryReady = true;
+  this.raftLayers = raftLayers;
 }
 
 
@@ -312,777 +1019,491 @@ Slicer.prototype.makePathGeometry = function() {
 // uses an implementation of "An Optimal Algorithm for 3D Triangle Mesh Slicing"
 // http://www.dainf.ct.utfpr.edu.br/~murilo/public/CAD-slicing.pdf
 
-Slicer.prototype.buildLayerLists = function() {
-  var sliceHeight = this.sliceHeight;
-  var min = this.min, max = this.max;
-  var faceBounds = this.faceBounds;
+// build arrays of faces crossing each slicing plane
+Slicer.prototype.buildLayerFaceLists = function() {
+  var layerHeight = this.layerHeight;
+  var faceBoundsArray = this.faceBoundsArray;
+  var min = this.min[this.axis];
 
-  var numPathLayers = this.numSlices - 2;
+  var numSlices = this.numSlices;
 
-  // position fo first and last layer
-  var layer0 = min + sliceHeight/2;
-  var layerk = layer0 + sliceHeight * (numPathLayers - 1);
+  // position of first and last layer
+  var layer0 = min + layerHeight / 2;
+  var layerk = layer0 + layerHeight * (numSlices);
 
   // init layer lists
-  var layerLists = new Array(numPathLayers + 1);
-  for (var i=0; i<=numPathLayers; i++) layerLists[i] = [];
+  var layerLists = new Array(numSlices);
+  for (var i = 0; i < numSlices; i++) layerLists[i] = [];
 
   // bucket the faces
-  for (var i=0; i<this.sourceFaceCount; i++) {
-    var bounds = faceBounds[i];
-    var index;
+  for (var i = 0; i < this.sourceFaceCount; i++) {
+    var bounds = faceBoundsArray[i];
+    var idx;
 
-    if (bounds.min < layer0) index = 0;
-    else if (bounds.min > layerk) index = numPathLayers;
-    else index = Math.ceil((bounds.min - layer0) / sliceHeight);
+    /*if (bounds.min < layer0) idx = 0;
+    else if (bounds.min > layerk) idx = numSlices;
+    else idx = Math.ceil((bounds.min - layer0) / layerHeight);*/
 
-    layerLists[index].push(i);
+    idx = Math.ceil((bounds.min - layer0) / layerHeight);
+
+    layerLists[idx].push(i);
   }
 
   return layerLists;
 }
 
-Slicer.prototype.buildLayerSegmentLists = function() {
-  var layerLists = this.buildLayerLists();
+// build segment sets in each slicing plane
+Slicer.prototype.buildLayerSegmentSets = function() {
+  var layerLists = this.buildLayerFaceLists();
 
   // various local vars
-  var numPathLayers = layerLists.length;
-  var faceBounds = this.faceBounds;
-  var min = this.min, axis = this.axis;
-  var sliceHeight = this.sliceHeight;
-  var vertices = this.sourceVertices;
-  var faces = this.sourceFaces;
+  var numSlices = layerLists.length;
+  var faceBoundsArray = this.faceBoundsArray;
+  var axis = this.axis;
+  var min = this.min[axis];
+  var layerHeight = this.layerHeight;
+  var vertices = this.sourceGeo.vertices;
+  var faces = this.sourceGeo.faces;
 
-  var layerSegmentLists = new Array(numPathLayers);
+  var segmentSets = new Array(numSlices);
 
   // running set of active face indices as we sweep up along the layers
   var sweepSet = new Set();
 
-  for (var i=0; i<numPathLayers; i++) {
+  for (var i = 0; i < numSlices; i++) {
+    // height of layer from mesh min
+    var slicePos = this.getLevelPos(i);
+
     // reaching a new layer, insert whatever new active face indices for that layer
     if (layerLists[i].length>0) sweepSet = new Set([...sweepSet, ...layerLists[i]]);
 
-    // accumulate these for this layer
-    var layerSegmentList = [];
-    // height of layer from mesh min
-    var sliceLevel = min + (i + 0.5) * sliceHeight;
+    var context = new MCG.Context(axis, slicePos, this.precision);
+
+    // accumulate segments for this layer
+    var segmentSet = new MCG.SegmentSet(context);
 
     // for each index in the sweep list, see if it intersects the slicing plane:
     //  if it's below the slicing plane, eliminate it
     //  else, store its intersection with the slicing plane
     for (var idx of sweepSet) {
-      var bounds = faceBounds[idx];
+      var bounds = faceBoundsArray[idx];
 
-      if (bounds.max < sliceLevel) sweepSet.delete(idx);
+      if (bounds.max < slicePos) sweepSet.delete(idx);
       else {
-        // get verts sorted in ascending order on axis; call it [A,B,C]
-        var verts = faceGetVertsSorted(bounds.face, vertices, axis).verts;
-        var a0 = verts[0][axis];
-        var a1 = verts[1][axis];
-        var a2 = verts[2][axis];
-
-        // face is flat or intersects slicing plane at a point
-        if (a0 == a2) continue;
-        if (a0 == sliceLevel && a0 < a1) continue;
-        if (a2 == sliceLevel && a1 < a2) continue;
-
-        // if B is above slicing plane, calculate AB and AC intersection
-        if (a1 > sliceLevel) {
-          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[1]);
-        }
-        // else, calculate BC and AC intersection
-        else {
-          var int1 = segmentPlaneIntersection(axis, sliceLevel, verts[1], verts[2]);
-        }
-        var int2 = segmentPlaneIntersection(axis, sliceLevel, verts[0], verts[2]);
-
-        layerSegmentList.push([int1, int2]);
+        this.sliceFace(bounds.face, vertices, slicePos, axis, function(normal, ccw, A, B) {
+          var segment = new MCG.Segment(context);
+          segment.fromVector3Pair(A, B, normal);
+          segmentSet.add(segment);
+        });
       }
     }
 
-    layerSegmentLists[i] = layerSegmentList;
+    segmentSets[i] = segmentSet;
   }
 
-  return layerSegmentLists;
+  return segmentSets;
 }
 
-Slice = function(polys) {
-  this.polys = polys;
-}
+// slice a face at the given level and then call the callback
+// callback arguments:
+//  normal: face normal
+//  ccw: used for winding the resulting verts
+//  A, B, C, D: A and B are the sliced verts, the others are from the original
+//    geometry (if sliced into one triangle, D will be undefined);
+//    if ccw, the triangles are ABC and CBD, else BAC and BCD
+Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
+  // in the following, A is the bottom vert, B is the middle vert, and XY
+  // are the points there the triangle intersects the X-Y segment
 
-Slice.prototype.triangulate = function() {
-  // polys is an array of edgeloops signifying every polygon in the slice
-  var polys = this.polys;
-  var indices = [];
+  var normal = face.normal;
 
-  for (var i=0; i<polys.length; i++) {
-    indices = indices.concat(polys[i].triangulate());
+  // get verts sorted on axis; check if this flipped winding order (default is CCW)
+  var vertsSorted = faceGetVertsSorted(face, vertices, axis);
+  var [A, B, C] = vertsSorted.verts;
+  var ccw = vertsSorted.ccw;
+
+  // if middle vert is greater than slice level, slice into 1 triangle A-AB-AC
+  if (B[axis] > level) {
+    // calculate intersection of A-B and A-C
+    var AB = segmentPlaneIntersection(axis, level, A, B);
+    var AC = segmentPlaneIntersection(axis, level, A, C);
+
+    callback(normal, ccw, AB, AC, A);
   }
-  // todo: remove
-  if (polys.length>0) debug();
+  // else, slice into two triangles: A-B-AC and B-BC-AC
+  else {
+    // calculate intersection of A-C and B-C
+    var AC = segmentPlaneIntersection(axis, level, A, C);
+    var BC = segmentPlaneIntersection(axis, level, B, C);
 
-  return indices;
+    callback(normal, ccw, BC, AC, B, A);
+  }
 }
 
-// circular double-linked list symbolizing an edge loop
-EdgeLoop = function(axis, vertices, indices) {
-  this.axis = axis;
-  this.axish = cycleAxis(axis);
-  this.axisv = cycleAxis(this.axish);
-  this.up = new THREE.Vector3();
-  this.up[axis] = 1;
 
-  this.epsilon = 0.0000001;
 
-  this.count = 0;
-  this.area = 0;
-  this.hole = false;
-  this.vertex = null;
+// contains a single slice of the mesh
+function Layer(params) {
+  // store parameters
+  this.params = params;
+  this.context = null;
 
-  // nodes that are maximal/minimal on axes 1 and 2 - used for bounding-box
-  // tests and for joining holes
-  this.minh = null;
-  this.maxh = null;
-  this.minv = null;
-  this.maxv = null;
+  // source geometry - base and everything else is derived from this
+  this.source = null;
 
-  this.holes = [];
+  // base contour, decimated and unified
+  this.base = null;
 
-  if (!vertices || vertices.length < 1) return;
+  // internal contours for printing
+  this.walls = null;
 
-  var start = null;
+  // main contour containing the infill
+  this.infillContour = null;
 
-  for (var i = 0; i < vertices.length; i++) {
-    var v = vertices[i];
+  // if infill is not solid, some regions may be filled with that infill, but
+  // some might need solid infill b/c they're exposed to air above or below:
+  // inner contour can be filled with the specified infill type; solid infill
+  // is filled with solid infill
+  this.disjointInfillContours = null;
 
-    // create the node for this vertex
-    var node = {
-      v: v,
-      idx: indices[i],
-      prev: null,
-      next: null,
-      ear: false
-    };
+  // set of segments containing the mesh infill
+  this.infill = null;
+}
 
-    this.updateBounds(node);
+// readiness checks for various components
+Layer.prototype.baseReady = function() { return this.base !== null; }
+Layer.prototype.wallsReady = function() { return this.walls !== null; }
+Layer.prototype.infillContourReady = function() { return this.infillContour !== null; }
+Layer.prototype.disjointInfillContoursReady = function() { return this.disjointInfillContours !== null;}
+Layer.prototype.infillReady = function() { return this.infill !== null; }
 
-    // insert into the linked list
-    if (this.vertex) {
-      node.prev = this.vertex;
-      this.vertex.next = node;
-    }
-    else start = node;
+// unready components and the components derived from them
+Layer.prototype.unreadyInfill = function() {
+  this.infill = null;
+}
+Layer.prototype.unreadyDisjointInfillContours = function() {
+  this.disjointInfillContours = null;
+  this.unreadyInfill();
+}
+Layer.prototype.unreadyInfillContour = function() {
+  this.infillContour = null;
+  this.unreadyDisjointInfillContours();
+}
+Layer.prototype.unreadyWalls = function() {
+  this.walls = null;
+  this.unreadyInfillContour();
+}
+Layer.prototype.unreadyBase = function() {
+  this.base = null;
+  this.unreadyWalls();
+}
 
-    this.vertex = node;
+// getters for geometry
 
-    this.count++;
-    if (this.count > 2) {
-      this.area += triangleArea(start.v, this.vertex.prev.v, this.vertex.v, axis);
+Layer.prototype.getSource = function() {
+  return this.source;
+}
 
-      // if the last three vertices are collinear, remove the middle vertex
-      var pp = this.vertex.prev.prev;
-      var p = this.vertex.prev;
+Layer.prototype.getBase = function() {
+  this.computeBase();
+  return this.base;
+}
 
-      var area = triangleArea(pp.v, p.v, this.vertex.v, axis);
-      if (Math.abs(area) < this.epsilon) {
-        pp.next = this.vertex;
-        this.vertex.prev = pp;
+Layer.prototype.getWalls = function() {
+  this.computeWalls();
+  return this.walls;
+}
 
-        this.count--;
-      }
-    }
+Layer.prototype.getInfillContour = function() {
+  this.computeInfillContour();
+  return this.infillContour;
+}
+
+Layer.prototype.getDisjointInfillContours = function() {
+  this.computeDisjointInfillContours();
+  return this.disjointInfillContours;
+}
+
+Layer.prototype.getInfill = function() {
+  this.computeInfill();
+  return this.infill;
+}
+
+// setters for geometry
+
+Layer.prototype.setSource = function(source) {
+  this.source = source;
+  this.context = source.context;
+  return this;
+}
+
+Layer.prototype.setBase = function(base) {
+  this.base = base;
+  this.context = base.context;
+  return this;
+}
+
+Layer.prototype.setInfillContour = function(infillContour) {
+  this.infillContour = infillContour;
+  this.context = base.context;
+  return this;
+}
+
+Layer.prototype.setContext = function(context) {
+  this.context = context;
+  return this;
+}
+
+Layer.prototype.computeBase = function() {
+  if (this.baseReady()) return;
+
+  var lineWidth = this.params.lineWidth;
+
+  var sourceDecimated = this.getSource().toPolygonSet().fdecimate(lineWidth);
+  var base = MCG.Boolean.union(sourceDecimated).union.toPolygonSet();
+
+  this.base = base;
+}
+
+Layer.prototype.computeWalls = function() {
+  if (this.wallsReady()) return;
+
+  var lineWidth = this.params.lineWidth;
+  var lineWidthsq = lineWidth * lineWidth;
+  var numWalls = this.params.numWalls;
+
+  var walls = [];
+  var contour = this.getBase();
+
+  for (var w = 0; w < numWalls; w++) {
+    // inset the first contour by half line width, all others by full width,
+    // from the preceding contour
+    var dist = (w === 0 ? -0.5 : -1) * lineWidth;
+
+    var offset = contour.foffset(dist, lineWidth);
+    var union = MCG.Boolean.union(offset).union.toPolygonSet();//.filter(areaFilterFn);
+    walls.push(union);
+
+    contour = union;
   }
 
-  // close the last connection
-  this.vertex.next = start;
-  start.prev = this.vertex;
+  this.walls = walls;
 
-  if (this.area < 0) this.hole = true;
-
-  // calculate reflex state
-  var current = this.vertex;
-  var up = this.up;
-  do {
-    this.nodeCalculateReflex(current);
-
-    current = current.next;
-  } while (current != this.vertex);
+  function areaFilterFn(poly) { return poly.areaGreaterThanTolerance(lineWidthsq); }
 }
 
-EdgeLoop.prototype.updateBounds = function(n) {
-  var ah = this.axish;
-  var av = this.axisv;
+Layer.prototype.computeInfillContour = function() {
+  if (this.infillContourReady()) return;
 
-  if (this.minh === null) {
-    this.minh = n;
-    this.maxh = n;
-    this.minv = n;
-    this.maxv = n;
+  var lineWidth = this.params.lineWidth
+  var numWalls = this.params.numWalls;
+  var overlapFactor = 1.0 - this.params.infillOverlap;
+
+  var source, dist;
+
+  if (this.wallsReady()) {
+    source = this.walls[this.walls.length-1];
+    dist = lineWidth * overlapFactor;
   }
   else {
-    this.minh =  this.minh.v[ah] < n.v[ah] ? this.minh : n;
-    this.maxh =  this.maxh.v[ah] > n.v[ah] ? this.maxh : n;
-    this.minv =  this.minv.v[av] < n.v[av] ? this.minv : n;
-    this.maxv =  this.maxv.v[av] > n.v[av] ? this.maxv : n;
+    source = this.getBase();
+    dist = lineWidth * (numWalls + overlapFactor - 0.5);
   }
+
+  this.infillContour = MCG.Boolean.union(source.foffset(-dist, lineWidth)).union;
 }
 
-// test if this edge loop contains the other edge loop
-EdgeLoop.prototype.contains = function(other) {
-  // horizontal and vertical axes; the convention is that we're looking along
-  // negative this.axis, ah points right and av points up - we'll call
-  // pt[ah] h and pt[av] v
-  var ah = this.axish;
-  var av = this.axisv;
+Layer.prototype.computeDisjointInfillContours = function() {
+  if (this.disjointInfillContoursReady()) return;
 
-  // bounding box tests first as they are cheaper
-  if (this.maxh.v[ah] < other.minh.v[ah] || this.minh.v[ah] > other.maxh.v[ah]) {
-    return false;
+  var layers = this.params.layers;
+  var idx = this.params.idx;
+  var idxk = layers.length-1;
+  var numTopLayers = this.params.numTopLayers;
+  var context = this.context;
+  var contour = this.getInfillContour();
+
+  // if number of top layers is 0, don't fill any part of any layer with solid
+  // infill - just use inner infill for everything
+  if (numTopLayers === 0) {
+    this.disjointInfillContours = {
+      inner: contour,
+      solid: new MCG.SegmentSet(context)
+    };
   }
-  if (this.maxv.v[av] < other.minv.v[av] || this.minv.v[av] > other.maxv.v[av]) {
-    return false;
+  // else, if the layer is within numTopLayers of the top or bottom, fill the
+  // whole layer with solid infill
+  else if ((idx < numTopLayers) || (idx > idxk - numTopLayers)) {
+    this.disjointInfillContours = {
+      inner: new MCG.SegmentSet(context),
+      solid: contour
+    };
   }
+  // else, it has at least numTopLayers layers above and below, calculate infill
+  // from those
+  else {
+    var neighborContours = new MCG.SegmentSet(context);
+    var numLayers = 0;
 
-  // else, do point-in-polygon testing
+    // if optimizing top layer computation (and there are more than 2 top
+    // layers), only use the adjacent layers and the farthest layers
+    if (this.params.optimizeTopLayers && numTopLayers > 2) {
+      neighborContours.merge(layers[idx + 1].getInfillContour());
+      neighborContours.merge(layers[idx - 1].getInfillContour());
+      neighborContours.merge(layers[idx + numTopLayers].getInfillContour());
+      neighborContours.merge(layers[idx - numTopLayers].getInfillContour());
 
-  // use other's entry vertex
-  var pt = other.vertex.v;
-
-  return this.containsPoint(pt);
-}
-
-// point-in-polygon testing - see if some point of other is inside this loop;
-// see O'Rourke's book, sec. 7.4
-EdgeLoop.prototype.containsPoint = function(pt) {
-  var ah = this.axish;
-  var av = this.axisv;
-  var h = pt[ah];
-  var v = pt[av];
-
-  // number of times a ray crosses
-  var crossCount = 0;
-
-  var current = this.vertex;
-  do {
-    var s1 = current.v;
-    var s2 = current.next.v;
-
-    // segment encloses pt on vertical axis
-    if ((s1[av] >= v && s2[av] < v) || (s2[av] >= v && s1[av] < v)) {
-      // calcualte intersection
-      var intersection = raySegmentIntersectionOnAxis(s1, s2, pt, ah, av);
-
-      // if intersection strictly to the right of pt, it crosses the segment
-      if (intersection > h) crossCount++;
+      numLayers = 4;
     }
-
-    current = current.next;
-  } while (current != this.vertex);
-
-  return crossCount%2 != 0;
-}
-
-// join the polygon with the holes it immediately contains so that it can be
-// triangulated as a single convex polygon
-// see David Eberly's writeup - we cast a ray to the right, see where it
-// intersects the closest segment, then check inside a triangle
-EdgeLoop.prototype.mergeHolesIntoPoly = function() {
-  var axis = this.axis;
-  var ah = this.axish;
-  var av = this.axisv;
-
-  var holes = this.holes;
-
-  // sort holes on maximal vertex on axis 1 in descending order
-  // once sorted, start merging from rightmost hole
-  holes.sort(function(a,b) {
-    var amax = a.maxh.v[ah];
-    var bmax = b.maxh.v[ah];
-
-    if (amax > bmax) return -1;
-    if (amax < bmax) return 1;
-    return 0;
-  });
-
-
-  for (var i=0; i<holes.length; i++) {
-    var hole = holes[i];
-
-    var P = this.findVisiblePointFromHole(hole);
-
-    this.mergeHoleIntoPoly(P, hole, hole.maxh);
-  }
-
-  return;
-}
-
-// join vertex node in polygon to given vertex node in hole
-EdgeLoop.prototype.mergeHoleIntoPoly = function(polyNode, hole, holeNode) {
-  // loop goes CCW around poly, exits the poly, goes around hole, exits hole,
-  // enters poly
-  var polyExit = polyNode;
-  var holeEntry = holeNode;
-  // have to duplicate the vertex nodes
-  var holeExit = Object.assign({}, holeEntry);
-  var polyEntry = Object.assign({}, polyExit);
-
-  // update vert nodes that are next to those that got copied
-  holeEntry.prev.next = holeExit;
-  polyExit.next.prev = polyEntry;
-
-  // make degenerate edges
-  polyExit.next = holeEntry;
-  holeEntry.prev = polyExit;
-  holeExit.next = polyEntry;
-  polyEntry.prev = holeExit;
-
-  // update reflex state
-  this.nodeCalculateReflex(polyExit);
-  this.nodeCalculateReflex(holeEntry);
-  this.nodeCalculateReflex(holeExit);
-  this.nodeCalculateReflex(polyEntry);
-
-  this.count += hole.count + 2;
-  this.area += hole.area;
-}
-
-EdgeLoop.prototype.findVisiblePointFromHole = function(hole) {
-  var axis = this.axis;
-  var ah = this.axish;
-  var av = this.axisv;
-
-  // hole's rightmost point
-  var M = hole.maxh.v;
-  // closest intersection of ray from M and loop edges along axis ah
-  var minIAxis = Infinity;
-  // full vector of intersection, directly to the right of m
-  var I = M.clone();
-  // vertex node at which intersection edge starts
-  var S;
-
-  // check all segments for intersection
-  var current = this.vertex;
-  do {
-    var v = current.v;
-    var vn = current.next.v;
-
-    // polygon winds conterclockwise, so, if m is inside and the right-ward
-    // ray intersects the v-vn segment, v must be less than m and vn must be
-    // greater than m on the vertical axis
-    if (vn[av] > M[av] && v[av] <= M[av]) {
-      var IAxis = raySegmentIntersectionOnAxis(v, vn, M, ah, av);
-
-      if (IAxis > M[ah] && IAxis < minIAxis) {
-        minIAxis = IAxis;
-        I[ah] = IAxis;
-        S = current;
-      }
-    }
-
-    current = current.next;
-  } while (current != this.vertex);
-
-  // candidate for the final node guaranteed to be visible from the hole's
-  // rightmost point
-  var P = S;
-
-  // check all reflex verts; if they're present inside the triangle between m,
-  // the intersection point, and the edge source, then return the one with the
-  // smallest angle with the horizontal
-  current = this.vertex;
-
-  var angle = Math.PI/2;
-  var hEdge = I.clone().sub(M).normalize();
-  do {
-    if (current.reflex) {
-      // if the point is inside the triangle formed by intersection segment
-      // source, intersection point, and ray source, then might need to update
-      // the visible node to the current one
-      if (pointInsideTriangle(current.v, S.v, I, M, axis)) {
-        var newEdge = current.v.clone.sub(M).normalize();
-        var newAngle = hEdge.angleTo(newEdge);
-
-        if (newAngle < angle) {
-          angle = newAngle;
-          P = current;
-        }
-      }
-    }
-
-    current = current.next;
-  } while (current != this.vertex);
-
-  return P;
-}
-
-// triangulation by ear clipping
-// returns an array of 3*n indices for n new triangles
-// see O'Rourke's book for details
-EdgeLoop.prototype.triangulate = function() {
-  this.calculateEars();
-
-  var count = this.count;
-
-  var indices = [];
-
-  while (count > 3) {
-    var current = this.vertex;
-    var added = false;
-    do {
-      if (current.ear) {
-        added = true;
-        var p = current.prev;
-        var n = current.next;
-
-        indices.push(p.idx);
-        indices.push(current.idx);
-        indices.push(n.idx);
-
-        p.next = n;
-        n.prev = p;
-
-        this.vertex = n;
-
-        this.nodeCalculateEar(p);
-        this.nodeCalculateReflex(p);
-        this.nodeCalculateEar(n);
-        this.nodeCalculateReflex(n);
-
-        count--;
-
-        break;
+    else {
+      for (var i = 1; i <= numTopLayers; i++) {
+        neighborContours.merge(layers[idx + i].getInfillContour());
+        neighborContours.merge(layers[idx - i].getInfillContour());
       }
 
-      current = current.next;
-    } while (current != this.vertex);
-
-    // in case we failed to find an ear, break to avoid an infinite loop
-    if (!added) break;
-  }
-
-  indices.push(this.vertex.prev.idx);
-  indices.push(this.vertex.idx);
-  indices.push(this.vertex.next.idx);
-
-  this.count = count;
-
-  return indices;
-}
-
-// calculate ear status of all ears
-EdgeLoop.prototype.calculateEars = function() {
-  var current = this.vertex;
-  do {
-    this.nodeCalculateEar(current);
-
-    current = current.next;
-  } while (current != this.vertex);
-}
-
-EdgeLoop.prototype.nodeCalculateEar = function(node) {
-  node.ear = this.diagonal(node);
-}
-
-EdgeLoop.prototype.diagonal = function(node) {
-  var p = node.prev;
-  var n = node.next;
-
-  return this.inCone(p, n) && this.inCone(n, p) && this.nonintersection(p, n);
-}
-
-EdgeLoop.prototype.inCone = function(a, b) {
-  var axis = this.axis;
-  var apv = a.prev.v;
-  var anv = a.next.v;
-
-  if (a.reflex) return !(leftOn(anv, a.v, b.v, axis) && leftOn(a.v, apv, b.v, axis));
-  else return left(apv, a.v, b.v, axis) && left(a.v, anv, b.v, axis);
-}
-
-EdgeLoop.prototype.nonintersection = function(a, b) {
-  var axis = this.axis;
-  var c = this.vertex;
-
-  do {
-    var d = c.next;
-
-    // only segments not sharing a/b as endpoints can intersect ab segment
-    if (c!=a && c!=b && d!=a && d!=b) {
-      if (segmentSegmentIntersection(a.v, b.v, c.v, d.v, axis)) return false;
+      numLayers = numTopLayers * 2;
     }
 
-    c = c.next;
-  } while (c != this.vertex);
+    var fullDifference = MCG.Boolean.fullDifference(contour, neighborContours, {
+      minDepthB: numLayers
+    });
 
-  return true;
-}
-
-// TODO: remove debugging
-function debugLoop(loop, fn) {
-  if (fn === undefined) fn = function() { return true; };
-  var curr = loop.vertex;
-  do {
-    if (fn(curr)) addDebugVertex(curr.v);
-    curr = curr.next;
-  } while (curr != loop.vertex);
-}
-function addDebugVertex(v) {
-  debugGeo.vertices.push(v);
-  debugGeo.verticesNeedUpdate = true;
-}
-function debug() {
-  var debugMaterial = new THREE.PointsMaterial( { color: 0xff0000, size: 5, sizeAttenuation: false });
-  var debugMesh = new THREE.Points(debugGeo, debugMaterial);
-  debugMesh.name = "debug";
-  scene.add(debugMesh);
-
-  var debugLineGeo = new THREE.Geometry();
-  for (var i=0; i<debugGeo.vertices.length; i++) {
-    debugLineGeo.vertices.push(debugGeo.vertices[i]);
-    debugLineGeo.vertices.push(debugGeo.vertices[(i+1)%debugGeo.vertices.length]);
+    this.disjointInfillContours = {
+      inner: fullDifference.intersection.toPolygonSet().filter(sliverFilterFn),
+      solid: fullDifference.AminusB.toPolygonSet().filter(sliverFilterFn)
+    };
   }
-  var debugLineMaterial = new THREE.LineBasicMaterial({color: 0xff6666, linewidth: 1 });
-  var debugLineMesh = new THREE.LineSegments(debugLineGeo, debugLineMaterial);
-  debugLineMesh.name = "debugLine";
-  scene.add(debugLineMesh);
-  debugGeo = new THREE.Geometry();
+
+  function sliverFilterFn(poly) { return !poly.isSliver(); }
 }
 
-EdgeLoop.prototype.nodeCalculateReflex = function(node) {
-  var area = triangleArea(node.prev.v, node.v, node.next.v, this.axis);
+Layer.prototype.computeInfill = function() {
+  if (this.infillReady()) return;
 
-  if (area < 0) {
-    // area calculation contains a subtraction, so when the result should be
-    // exactly 0, it might go to something like -1e-17; if the area is less
-    // than some reeeeeally small epsilon, it doesn't matter if it's reflex
-    // anyway, so might as well call those vertices convex
-    if (Math.abs(area) > this.epsilon) node.reflex = true;
+  var lineWidth = this.params.lineWidth;
+  var type = this.params.infillType;
+  var density = this.params.infillDensity;
+  var connectLines = this.params.infillConnectLines;
+
+  // if grid infill and density is too high, use solid infill instead
+  if (type === Slicer.InfillTypes.grid && density > 0.5) {
+    type = Slicer.InfillTypes.solid;
   }
-  else node.reflex = false;
-}
 
-SliceBuilder = function(axis) {
-  this.p = Math.pow(10, 9);
-  this.axis = axis;
-  this.up = new THREE.Vector3();
-  this.up[axis] = 1;
+  var iLineWidth = MCG.Math.ftoi(lineWidth, this.context);
+  var iLineWidthsq = iLineWidth*iLineWidth;
+  var infillInner = null, infillSolid = null;
 
-  this.adjacencyMap = {};
-}
+  // if solid infill, just fill the entire contour
+  if (type === Slicer.InfillTypes.solid) {
+    var infillContour = this.getInfillContour();
 
-SliceBuilder.prototype.clear = function() {
-  this.adjacencyMap = {};
-}
+    infillSolid = MCG.Infill.generate(infillContour, MCG.Infill.Types.linear, {
+      angle: Math.PI / 4,
+      spacing: iLineWidth,
+      parity: this.params.idx%2,
+      connectLines: connectLines
+    });
+  }
+  // if other infill, need to determine where to fill with that and where to
+  // fill with solid infill
+  else {
+    var disjointInfillContours = this.getDisjointInfillContours();
 
-SliceBuilder.prototype.addSegment = function(v1, v2, normal, idx1, idx2) {
-  this.insertNeighbor(v1, v2, normal, idx1);
-  this.insertNeighbor(v2, v1, normal, idx2);
-}
+    var innerContour = disjointInfillContours.inner;
+    var solidContour = disjointInfillContours.solid;
 
-SliceBuilder.prototype.insertNeighbor = function(v1, v2, n, idx1) {
-  var v1hash = vertexHash(v1, this.p);
+    if (type === Slicer.InfillTypes.lines) {
+      infillInner = MCG.Infill.generate(innerContour, MCG.Infill.Types.linear, {
+        angle: Math.PI / 4,
+        spacing: iLineWidth / density,
+        parity: this.params.idx%2,
+        connectLines: connectLines
+      });
+    }
+    else if (type === Slicer.InfillTypes.grid) {
+      infillInner = MCG.Infill.generate(innerContour, MCG.Infill.Types.grid, {
+        angle: Math.PI / 4,
+        spacing: iLineWidth / density,
+        connectLines: connectLines
+      });
+    }
 
-  var a = this.adjacencyMap;
+    infillSolid = MCG.Infill.generate(solidContour, MCG.Infill.Types.linear, {
+      angle: Math.PI / 4,
+      spacing: iLineWidth,
+      parity: this.params.idx%2,
+      connectLines: connectLines
+    });
+  }
 
-  if (!a.hasOwnProperty(v1hash)) a[v1hash] = {
-    v : v1,
-    idx: idx1,
-    neighbors: [],
-    normals: [],
-    visited: false
+  if (infillInner !== null) infillInner.filter(lengthFilterFn);
+  if (infillSolid !== null) infillSolid.filter(lengthFilterFn);
+
+  this.infill = {
+    inner: infillInner,
+    solid: infillSolid
   };
 
-  var v2hash = vertexHash(v2, this.p);
-  if (v1hash == v2hash) return;
-
-  a[v1hash].neighbors.push(v2);
-  a[v1hash].normals.push(n);
+  function lengthFilterFn(segment) { return segment.lengthSq() >= iLineWidthsq / 4; }
 }
 
-SliceBuilder.prototype.makePolys = function() {
-  var a = this.adjacencyMap;
-  var up = this.up;
-  var axis = this.axis;
-  var p = this.p;
+Layer.prototype.writeBase = function(vertices) {
+  var context = this.context;
+  var base = this.getBase();
+  var count = 0;
 
-  var loops = {
-    polys: [],
-    holes: []
-  };
-
-  // repeats until adjacency map is empty
-  while (!objectIsEmpty(a)) {
-    // vertex hashes for start, current, and prev
-    var start = null;
-    var current = null;
-    var prev = null;
-
-    // pick a random vertex
-    for (key in a) {
-      start = key;
-      break;
-    }
-
-    // should never happen, but just in case
-    if (start == null) break;
-
-    var vertices = [];
-    var indices = [];
-
-    var neighbors, normals;
-
-    current = start;
-
-    // go along the loop till it closes
-    do {
-      if (!a.hasOwnProperty(current)) break;
-
-      vertices.push(a[current].v);
-      indices.push(a[current].idx);
-
-      v = a[current].v;
-      neighbors = a[current].neighbors;
-      normals = a[current].normals;
-
-      delete a[current];
-
-      next = vertexHash(neighbors[0], p);
-
-      // if current is the first vertex
-      if (!prev) {
-        var nextData = a[next];
-        // initialize:
-        // pick the neighbor that's CCW from current for normal edge loops and
-        // CW for holes: vector along axis normal to the plane crossed with an
-        // edge's normal should have a positive component along the CCW edge
-        var dot = up.clone().cross(normals[0]).dot(nextData.v.clone().sub(v));
-        if (dot < 0) next = vertexHash(neighbors[1], p);
-
-        prev = current;
-        current = next;
-      }
-      // else, continuing the loop
-      else {
-        if (next == prev) next = vertexHash(neighbors[1], p);
-
-        prev = current;
-        current = next;
-      }
-
-    } while (current != start);
-
-    var edgeLoop = new EdgeLoop(axis, vertices, indices);
-
-    if (edgeLoop.hole) loops.holes.push(edgeLoop);
-    else loops.polys.push(edgeLoop);
+  if (base) {
+    base.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, context));
+      vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
+    });
   }
 
-  // assign holes to the polys containing them
-  this.calculateHierarchy(loops);
-
-  // merge each poly's holes into the poly
-  for (var i=0; i<loops.polys.length; i++) {
-    loops.polys[i].mergeHolesIntoPoly();
-  }
-
-  return loops.polys;
+  return count;
 }
 
-SliceBuilder.prototype.calculateHierarchy = function(loops) {
-  var polys = loops.polys;
-  var holes = loops.holes;
-  var np = polys.length;
-  var nh = holes.length;
+Layer.prototype.writeWalls = function(vertices) {
+  var context = this.context;
+  var walls = this.getWalls();
+  var count = 0;
 
-  // for every polygon, make sets of polys/holes inside/outside
-  // e.g., if polysInside[i] contains entry j, then poly i contains poly j;
-  // if holesOutside[i] contains entry j; then poly i does not contain hole j
-  var polysInside = new Array(np);
-  var polysOutside = new Array(np);
-  var holesInside = new Array(np);
-  var holesOutside = new Array(np);
-  for (var i=0; i<np; i++) {
-    polysInside[i] = new Set();
-    polysOutside[i] = new Set();
-    holesInside[i] = new Set();
-    holesOutside[i] = new Set();
-  }
-
-  // tests whether poly i contains poly j
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<np; j++) {
-      if (i==j) continue;
-
-      // if j contains i, then i does not contain j
-      if (polysInside[j].has(i)) {
-        polysOutside[i].add(j);
-        // if j contains i, then i does not contain polys j does not contain
-        polysOutside[i] = new Set([...polysOutside[i], ...polysOutside[j]]);
-        continue;
-      }
-
-      var ipoly = polys[i];
-      var jpoly = polys[j];
-
-      if (ipoly.contains(jpoly)) {
-        polysInside[i].add(j);
-        // if i contains j, i also contains polys j contains
-        polysInside[i] = new Set([...polysInside[i], ...polysInside[j]]);
-      }
-      else {
-        polysOutside[i].add(j);
-        // if i does not contain j, i does not contain anything j contains
-        polysOutside[i] = new Set([...polysOutside[i], ...polysInside[j]]);
-      }
+  if (walls) {
+    for (var w = 0; w < walls.length; w++) {
+      walls[w].forEachPointPair(function(p1, p2) {
+        vertices.push(p1.toVector3(THREE.Vector3, context));
+        vertices.push(p2.toVector3(THREE.Vector3, context));
+        count += 2;
+      });
     }
   }
 
-  // test whether poly i contains hole j
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<nh; j++) {
-      var ipoly = polys[i];
-      var jhole = holes[j];
-
-      if (ipoly.contains(jhole)) holesInside[i].add(j);
-      else holesOutside[i].add(j);
-    }
-  }
-
-  // back up the initial hole containment data so we can reference it while we
-  // mutate the actual data
-  var sourceHolesInside = new Array(np);
-  for (var i=0; i<np; i++) {
-    sourceHolesInside[i] = new Set(holesInside[i]);
-  }
-
-  // if poly i contains poly j, eliminate holes contained by j from i's list
-  for (var i=0; i<np; i++) {
-    for (var j=0; j<np; j++) {
-      if (i==j) continue;
-
-      var ipoly = polys[i];
-      var jpoly = polys[j];
-
-      if (polysInside[i].has(j)) {
-        var iholes = holesInside[i];
-        var sjholes = sourceHolesInside[j];
-
-        // for every hole in j, if i contains it, delete it from i's holes so
-        // that every poly only has the holes which it immediately contains
-        for (var jh of sjholes) iholes.delete(jh);
-      }
-    }
-  }
-  // build the hole array for every edge loop
-  for (var i=0; i<np; i++) {
-    var ipoly = polys[i];
-
-    for (var h of holesInside[i]) ipoly.holes.push(holes[h]);
-  }
+  return count;
 }
 
-SliceBuilder.prototype.getSlice = function() {
-  var polys = this.makePolys();
+Layer.prototype.writeInfill = function(vertices) {
+  var context = this.context;
+  var infill = this.getInfill();
+  var infillInner = infill.inner;
+  var infillSolid = infill.solid;
+  var count = 0;
 
-  return new Slice(polys);
+  if (infillInner) {
+    infillInner.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, context));
+      vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
+    });
+  }
+
+  if (infillSolid) {
+    infillSolid.forEachPointPair(function(p1, p2) {
+      vertices.push(p1.toVector3(THREE.Vector3, context));
+      vertices.push(p2.toVector3(THREE.Vector3, context));
+      count += 2;
+    });
+  }
+
+  return count;
 }

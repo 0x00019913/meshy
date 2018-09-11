@@ -1,148 +1,244 @@
-/* pointer.js
-   classes:
-    Pointer
-   description:
-    Handles detecting the intersection of the mouse cursor with the model,
-    displaying the circle cursor on top of the model, calls any callbacks upon
-    clicking the mouse.
-    Turn on with .activate(), turn off with .deactivate();
-*/
+var Pointer = (function() {
 
-/* Constructor - initialize with a THREE.Scene, THREE.Camera, and the HTML
-   element containing the WebGL viewport with the geometry.
-*/
-Pointer = function(scene, camera, domElement) {
-  this.scene = scene;
-  this.camera = camera;
-  this.domElement = domElement;
-  this.active = false;
+  function Pointer(camera, domElement, scene) {
+    // these are required for raycasting
+    this.camera = camera;
+    this.domElement = domElement;
+    // for displaying the cursor
+    this.scene = scene;
 
-  this.raycaster = new THREE.Raycaster();
+    this.meshes = [];
+    this.active = false;
 
-  this.mouse = new THREE.Vector2();
-  this.clickCallbacks = new KeyStack();
-  // pixel difference between mousedown and mouseup for a mouse press
-  // to count as a click
-  this.clickAllowance = 5;
-  this.cursorColor = 0xff0000;
-  this.cursorColorDown = 0xffff00;
+    this.raycaster = new THREE.Raycaster();
 
-  this.scale = 1;
-  var r = 0.05;
-  this.cursorRadius = r;
-  this.cursorSegments = 32;
-  var cursorGeo = new THREE.Geometry();
-  var cursorMat = new THREE.LineBasicMaterial({color: this.cursorColor});
-  var thetaIncrement = 2 * Math.PI / this.cursorSegments;
-  for (var i=0; i<=this.cursorSegments; i++) {
-    var theta = i * thetaIncrement;
-    cursorGeo.vertices.push(new THREE.Vector3(r*Math.cos(theta), r*Math.sin(theta), 0));
-  }
-  this.cursor = new THREE.Line(cursorGeo, cursorMat);
-  this.cursor.name = "cursor";
-  this.cursor.visible = false;
-  scene.add(this.cursor);
+    // contains functions invoked on mouse up
+    this.clickCallbacks = [];
 
-  domElement.addEventListener('mousemove', onMouseMove, false);
-  domElement.addEventListener('mousedown', onMouseDown, false);
-  domElement.addEventListener('mouseup', onMouseUp, false);
+    // create the cursors
+    this.cursors = [];
+    this.cursorIdx = 0;
 
-  var _this = this;
-  var clickLocation = new THREE.Vector2();
-  function onMouseMove(e) {
-    if (!_this.active) return;
-    _this.mouse.x = (e.clientX/_this.domElement.offsetWidth)*2 - 1;
-    _this.mouse.y = 1 - (e.clientY/_this.domElement.offsetHeight)*2;
+    this.cursorColor = 0xcccccc;
+    this.cursorColorDown = 0x2adeff;
+    var cursorSegments = 32;
 
-    _this.update();
-  }
+    // circle cursor
+    var cursor0Geo = new THREE.Geometry();
+    var cursor0Mat = new THREE.LineBasicMaterial({ color: this.cursorColor });
+    var dtheta = 2 * Math.PI / cursorSegments;
 
-  function onMouseDown(e) {
-    if (!_this.active) return;
-
-    if (_this.intersection) _this.cursor.material.color.set(_this.cursorColorDown);
-    clickLocation.x = e.clientX;
-    clickLocation.y = e.clientY;
-  }
-
-  function onMouseUp(e) {
-    if (!_this.active) return;
-    _this.cursor.material.color.set(_this.cursorColor);
-    if (_this.clickCallbacks.empty() || !_this.intersection) return;
-
-    clickLocation.x -= e.clientX;
-    clickLocation.y -= e.clientY;
-    if (clickLocation.length()<_this.clickAllowance && _this.intersection) {
-      _this.clickCallbacks.callEachWithArg(_this.intersection);
-      _this.intersection = null;
+    for (var i = 0; i <= cursorSegments; i++) {
+      var theta = i * dtheta;
+      cursor0Geo.vertices.push(new THREE.Vector3(Math.cos(theta), Math.sin(theta), 0));
     }
-  }
-}
 
-// Obvious.
-Pointer.prototype.activate = function() {
-  this.active = true;
-}
+    this.cursors.push(new THREE.Line(cursor0Geo, cursor0Mat));
 
-// Deactivate and hide the cursor.
-Pointer.prototype.deactivate = function() {
-  this.active = false;
-  this.cursor.visible = false;
-}
+    // normal-pointing arrow cursor
+    var cursor1ConeBufferGeo = new THREE.ConeBufferGeometry(0.75, 3.0, cursorSegments);
+    cursor1ConeBufferGeo.rotateX(Math.PI / 2);
+    cursor1ConeBufferGeo.translate(0, 0, 3.0);
+    var cursor1SphereBufferGeo = new THREE.SphereBufferGeometry(0.75, cursorSegments, cursorSegments / 2);
 
-// Rescale cursor.
-Pointer.prototype.rescale = function() {
-  if (!this.active) return;
+    var cursor1Geo = new THREE.Geometry();
+    cursor1Geo.merge(new THREE.Geometry().fromBufferGeometry(cursor1ConeBufferGeo));
+    cursor1Geo.merge(new THREE.Geometry().fromBufferGeometry(cursor1SphereBufferGeo));
 
-  var scale = this.camera.position.distanceTo(this.cursor.position) * 0.1;
-  this.scale = scale;
-  this.cursor.scale.set(scale, scale, scale);
-}
+    var cursor1Mat = new THREE.MeshStandardMaterial({
+      color: this.cursorColor,
+      roughness: 0.0,
+      metalness: 0.5
+    });
+    this.cursors.push(new THREE.Mesh(cursor1Geo, cursor1Mat))
 
-// Adds a callback function to the callback stack; these are called by
-// clicking the mouse.
-Pointer.prototype.addClickCallback = function(callback) {
-  return this.clickCallbacks.add(callback);
-}
+    for (var c = 0; c < this.cursors.length; c++) {
+      var cursor = this.cursors[c];
 
-// Remove a click callback.
-Pointer.prototype.removeClickCallback = function(idx) {
-  this.clickCallbacks.remove(idx);
-}
-
-// Check for intersections and reposition cursor if intersecting the model.
-Pointer.prototype.update = function() {
-  this.raycaster.setFromCamera(this.mouse, this.camera);
-  var intersects = this.raycaster.intersectObjects(this.scene.children, true);
-  var intersectsMesh = false;
-
-  // position cursor at surface plus (surface normal times this factor);
-  // will offset the cursor from the surface by 0.125*cursorRadius
-  var offsetFactor = this.scale * this.cursorRadius * 0.125;
-
-  for (var i=0; i<intersects.length; i++) {
-    if (intersects[i].object.name=="model") {
-      this.intersection = intersects[i];
-      var normal = intersects[i].face.normal;
-      var point = intersects[i].point.clone();
-      // intersection point offset slightly from the surface
-      // to be visible on flat surfaces
-      point.add(normal.clone().multiplyScalar(offsetFactor));
-      this.cursor.position.copy(point);
-      this.cursor.lookAt(point.add(normal));
-
-      this.cursor.visible = true;
-      intersectsMesh = true;
-
-      break;
+      cursor.name = "cursor";
+      cursor.visible = false;
+      this.scene.add(cursor);
     }
-  }
-  if (!intersectsMesh) {
-    this.cursor.visible = false;
+
+    // mouse interaction
+
+    var _this = this;
+
+    // pixel coords of the mousedown event, if the button is currently down
+    this.clickPixelCoords = null;
+
+    // allowance in pixels between the mousedown and mouseup events - determines
+    // whether a click counts or not
+    this.clickAllowance = 5;
+
+    // intersection object returned by raycasting if the cursor currently
+    // intersects mesh, else null
     this.intersection = null;
-  }
-}
 
-Pointer.prototype.dispose = function() {
-  removeMeshByName(this.scene, "cursor");
-}
+    domElement.addEventListener('mousemove', mousemove, false);
+    domElement.addEventListener('mousedown', mousedown, false);
+    domElement.addEventListener('mouseup', mouseup, false);
+
+    // collect normalized screen coordinates and keys/button pressed
+    function getPointer(event) {
+      var r = domElement.getBoundingClientRect();
+
+      var cx = event.clientX - r.left;
+      var cy = event.clientY - r.top;
+      var x = (cx / r.width) * 2 - 1;
+      var y = -((cy / r.height) * 2 - 1);
+
+      return {
+        pixelCoords: new THREE.Vector2(cx, cy),
+        coords: new THREE.Vector2(x, y),
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        button: event.button
+      };
+    }
+
+    function mousemove(event) {
+      _this.mousemove(getPointer(event));
+    }
+
+    function mousedown(event) {
+      _this.mousedown(getPointer(event));
+    }
+
+    function mouseup(event) {
+      _this.mouseup(getPointer(event));
+    }
+  }
+
+  Object.assign(Pointer.prototype, {
+
+    addMesh: function(mesh) {
+      this.meshes.push(mesh);
+      return this;
+    },
+
+    removeMesh: function(mesh) {
+      var idx = this.meshes.indexOf(mesh);
+
+      if (idx > -1) this.meshes.splice(idx);
+
+      return this;
+    },
+
+    removeMeshes: function() {
+      this.meshes.length = 0;
+      return this;
+    },
+
+    activate: function() {
+      this.active = true;
+
+      return this;
+    },
+
+    deactivate: function() {
+      // clear callbacks
+      this.clickCallbacks.length = 0;
+
+      // make inactive and invisible
+      this.active = false;
+      this.getCursor().visible = false;
+
+      return this;
+    },
+
+    setCursor: function(idx) {
+      this.cursorIdx = clamp(idx, 0, this.cursors.length - 1);
+
+      return this;
+    },
+
+    getCursor: function() {
+      return this.cursors[this.cursorIdx];
+    },
+
+    addClickCallback: function(callback) {
+      var callbacks = this.clickCallbacks;
+      var idx = callbacks.length;
+
+      callbacks.push(callback);
+
+      return idx;
+    },
+
+    removeClickCallback: function(idx) {
+      this.clickCallbacks.splice(idx);
+    },
+
+    mousemove: function(pointer) {
+      if (!this.active) return;
+
+      this.raycaster.setFromCamera(pointer.coords, this.camera);
+
+      var intersects = this.raycaster.intersectObjects(this.meshes, false);
+
+      // if intersecting mesh, get the first intersection
+      if (intersects.length > 0) {
+        var intersection = intersects[0];
+
+        // get the normal in world space
+        var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
+        var normal = intersection.face.normal.clone().applyMatrix3(rotation);
+
+        var point = intersection.point;
+
+        var cursor = this.getCursor();
+
+        cursor.position.copy(point);
+        cursor.lookAt(point.clone().add(normal));
+        cursor.visible = true;
+        this.updateCursor();
+
+        this.intersection = intersection;
+      }
+      else {
+        this.getCursor().visible = false;
+
+        this.intersection = null;
+      }
+    },
+
+    mousedown: function(pointer) {
+      if (!this.active) return;
+      if (!this.intersection) return;
+      if (pointer.button !== 0) return;
+
+      this.clickPixelCoords = pointer.pixelCoords;
+      this.getCursor().material.color.set(this.cursorColorDown);
+    },
+
+    mouseup: function(pointer) {
+      if (!this.active) return;
+      if (!this.clickPixelCoords) return;
+
+      var dist = pointer.pixelCoords.distanceTo(this.clickPixelCoords);
+      if (dist < this.clickAllowance) {
+        for (var c = 0; c < this.clickCallbacks.length; c++) {
+          this.clickCallbacks[c](this.intersection.point, this.intersection.object);
+        }
+      }
+
+      this.clickPixelCoords = null;
+      this.getCursor().material.color.set(this.cursorColor);
+    },
+
+    updateCursor: function() {
+      var cursor = this.getCursor();
+
+      if (!this.active || !cursor.visible) return;
+
+      var dist = cursor.position.distanceTo(this.camera.position);
+
+      cursor.scale.setScalar(dist * 0.005);
+    }
+
+  });
+
+  return Pointer;
+
+})();
