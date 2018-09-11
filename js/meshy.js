@@ -1696,17 +1696,18 @@ Meshy.prototype.initViewport = function() {
 
     addEventListeners();
 
+    // make canvas focusable
+    _this.renderer.domElement.tabIndex = 0;
     // focus the canvas so that keyboard shortcuts work right after loading
     _this.renderer.domElement.focus();
   }
 
   function addEventListeners() {
-    window.addEventListener('resize', onWindowResize, false);
-
     // so the event doesn't propagate to other elements
     var element = _this.renderer.domElement;
-    element.tabIndex = 0;
     element.addEventListener('keydown', onCanvasKeyDown, false);
+
+    window.addEventListener('resize', onWindowResize, false);
     window.addEventListener('keydown', onWindowKeyDown, false);
   }
 
