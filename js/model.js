@@ -51,6 +51,8 @@ function Model(geometry, scene, camera, container, printout) {
   // base mesh
   this.baseMesh = null;
   geometry.mergeVertices();
+  // fixes merge issue
+  geometry.faceVertexUvs = [new Array(0)];
   this.makeBaseMesh(geometry);
 
   // setup: clear colors, make bounding box, shift geometry to the mesh's
