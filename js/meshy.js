@@ -10,8 +10,6 @@
 
 // Constructor.
 Meshy = function() {
-  this.dbg = false;
-
   this.units = Units.mm;
 
   // params
@@ -461,7 +459,6 @@ Meshy.prototype.redo = function() {
 // functions for handling model transformations
 
 Meshy.prototype.makeTranslateTransform = function(invertible) {
-  if (this.dbg) console.log("make translate transform");
   var transform = new Transform("translate", this.model.getPosition());
   var _this = this;
 
@@ -489,7 +486,6 @@ Meshy.prototype.makeTranslateTransform = function(invertible) {
 }
 
 Meshy.prototype.makeRotateTransform = function(invertible) {
-  if (this.dbg) console.log("make rotate transform");
   var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
   transform.onApply = function(euler) {
@@ -510,7 +506,6 @@ Meshy.prototype.makeRotateTransform = function(invertible) {
 }
 
 Meshy.prototype.makeScaleTransform = function(invertible) {
-  if (this.dbg) console.log("make scale transform");
   var transform = new Transform("scale", this.model.getScale()), _this = this;
 
   transform.onApply = function(scale) {
@@ -540,7 +535,6 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
 }
 
 Meshy.prototype.makeMirrorTransform = function(invertible) {
-  if (this.dbg) console.log("make mirror transform");
   var transform = new Transform("mirror"), _this = this;
 
   transform.onApply = function(axis) { _this.model.mirror(axis); };
@@ -566,7 +560,6 @@ Meshy.prototype.pushEdit = function(transform, onTransform) {
 
 // called when a translation is in progress
 Meshy.prototype.onTranslate = function() {
-  if (this.dbg) console.log("translate");
   if (!this.currentTransform) this.currentTransform = this.makeTranslateTransform();
 
   this.currentTransform.apply(this.position);
@@ -574,7 +567,6 @@ Meshy.prototype.onTranslate = function() {
 }
 // called on translation end
 Meshy.prototype.onFinishTranslate = function() {
-  if (this.dbg) console.log("finish translate");
   if (this.currentTransform) this.currentTransform.end();
 
   this.pushEdit(this.currentTransform, this.updatePosition.bind(this));
@@ -593,14 +585,12 @@ Meshy.prototype.onChangeRotationDegrees = function() {
 
 // called when a rotation is in progress
 Meshy.prototype.onRotate = function() {
-  if (this.dbg) console.log("rotate");
   if (!this.currentTransform) this.currentTransform = this.makeRotateTransform();
 
   this.currentTransform.apply(this.rotation.clone());
 }
 // called on rotation end
 Meshy.prototype.onFinishRotate = function() {
-  if (this.dbg) console.log("finish rotate");
   if (this.currentTransform) this.currentTransform.end();
 
   this.pushEdit(this.currentTransform, this.updateRotation.bind(this));
@@ -614,7 +604,6 @@ Meshy.prototype.onFinishRotate = function() {
 
 // called when scale change is in progress
 Meshy.prototype.onScaleByFactor = function() {
-  if (this.dbg) console.log("scale");
   if (!this.currentTransform) this.currentTransform = this.makeScaleTransform();
 
   this.currentTransform.apply(this.scale);
@@ -660,7 +649,6 @@ Meshy.prototype.onScaleToMeasurement = function() {
 }
 // called on scale change end
 Meshy.prototype.onFinishScale = function() {
-  if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
 
   this.pushEdit(this.currentTransform, this.updateScale.bind(this));
