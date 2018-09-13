@@ -1011,7 +1011,7 @@ Meshy.prototype.buildEditFolder = function() {
   ringSizeFolder.add(this, "endMeasurement").name("4. End measurement")
     .title("Turn off the measurement tool (ESC).");
 
-  var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis.");
+  var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis in object space.");
   mirrorFolder.add(this, "mirrorX").name("Mirror on x")
     .title("Mirror mesh on x axis.");
   mirrorFolder.add(this, "mirrorY").name("Mirror on y")
