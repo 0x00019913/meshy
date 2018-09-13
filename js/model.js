@@ -852,12 +852,12 @@ Model.prototype.endSliceMode = function() {
   this.sliceFullMesh = null;
 }
 
-Model.prototype.getMaxLevel = function() {
+Model.prototype.getMaxSliceLevel = function() {
   if (this.slicer) return this.slicer.getMaxLevel();
   else return 0;
 }
 
-Model.prototype.getMinLevel = function() {
+Model.prototype.getMinSliceLevel = function() {
   if (this.slicer) return this.slicer.getMinLevel();
   else return 0;
 }

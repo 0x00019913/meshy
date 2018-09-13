@@ -1360,12 +1360,14 @@ Meshy.prototype.buildSliceFolder = function(folder) {
   this.clearFolder(folder);
 
   if (this.sliceModeOn) {
-    var maxLevel = this.model.getMaxLevel();
-    var minLevel = this.model.getMinLevel();
+    var maxLevel = this.model.getMaxSliceLevel();
+    var minLevel = this.model.getMinSliceLevel();
 
     this.currentSliceLevel = this.model.getCurrentSliceLevel();
-    var sliceController = folder.add(this, "currentSliceLevel", minLevel, maxLevel)
-      .name("Slice").step(1).onChange(this.setSliceLevel.bind(this))
+    this.sliceLevelController = folder.add(this, "currentSliceLevel")
+      .min(minLevel).max(maxLevel).step(1)
+      .onChange(this.setSliceLevel.bind(this))
+      .name("Slice")
       .title("Set the current slicing plane.");
     this.sliceMode = this.model.getSliceMode();
     folder.add(
@@ -1503,6 +1505,10 @@ Meshy.prototype.updateSlicerDisplayParams = function() {
 Meshy.prototype.updateSlicerParams = function() {
   if (this.model) {
     this.model.updateSlicerParams(this.makeSlicerParams());
+    if (this.sliceLevelController) {
+      this.sliceLevelController.min(this.model.getMinSliceLevel());
+      this.sliceLevelController.max(this.model.getMaxSliceLevel());
+    }
   }
   this.setSliceLevel();
 }
@@ -1566,6 +1572,7 @@ Meshy.prototype.makeGcodeParams = function() {
 }
 Meshy.prototype.endSliceMode = function() {
   this.sliceModeOn = false;
+  this.sliceLevelController = null;
   this.buildSupportSliceFolder();
   if (this.model) {
     this.model.endSliceMode();

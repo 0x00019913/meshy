@@ -302,6 +302,8 @@ Slicer.prototype.floorToBaseline = function() {
     sourceVertices[i][axis] -= baseline;
   }
 
+  this.sourceGeo.verticesNeedUpdate = true;
+
   // shift all computed face bounds
   for (var i = 0; i < this.sourceFaceCount; i++) {
     var bounds = faceBounds[i];
@@ -986,27 +988,6 @@ Slicer.prototype.makeRaftLayers = function() {
     layer.setContext(context);
 
     raftLayers[i] = layer;
-
-    if (false && layer.params.idx==0) {
-      layer.getBase().forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 10, true, 0.25, context.axis);
-      });
-      var wall0 = layer.getBase().foffset(-0.025, this.lineWidth);
-      wall0.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 10, true, 0.5, context.axis);
-      });
-      var wall1 = wall0.foffset(-0.05, this.lineWidth);
-      wall1.forEachPointPair(function(p1, p2) {
-        var v1 = p1.toVector3(THREE.Vector3, context);
-        var v2 = p2.toVector3(THREE.Vector3, context);
-        debug.line(v1, v2, 10, true, 0.5, context.axis);
-      });
-      debug.lines();
-    }
   }
 
   this.raftLayers = raftLayers;
