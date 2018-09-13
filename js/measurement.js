@@ -129,7 +129,10 @@ var Measurement = (function() {
       this.pointer.activate();
     },
 
-    placeMarker: function(point, face, mesh) {
+    placeMarker: function(intersection) {
+      var point = intersection.point;
+      var mesh = intersection.object;
+
       this.mactive = Math.min(this.mnum, this.mactive + 1);
 
       var marker = this.markers[this.midx];
@@ -191,6 +194,13 @@ var Measurement = (function() {
         var p2 = point;
 
         var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+
+        if (!circle) {
+          this.result = this.makeResult(false);
+
+          return;
+        }
+
         var normal = circle.normal;
         var center = circle.center;
         var radius = circle.radius;
@@ -383,10 +393,13 @@ var Measurement = (function() {
         result.diameter *= f;
         result.circumference *= f;
         result.area *= f * f;
-        result.center = result.center.clone().sub(center).multiplyScalar(f).add(center);
+        result.center.sub(center).multiplyScalar(f).add(center);
       }
       else if (this.type === Measurement.Types.crossSection) {
-        result.crossSection *= f * f;
+        result.area *= f * f;
+        result.min.sub(center).multiplyScalar(f).add(center);
+        result.max.sub(center).multiplyScalar(f).add(center);
+        result.length *= f;
       }
 
       // update result
@@ -716,6 +729,8 @@ var Measurement = (function() {
 
       vertices[0].add(delta);
       vertices[1].add(delta);
+
+      this.mesh.geometry.verticesNeedUpdate = true;
 
       return this;
     }

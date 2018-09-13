@@ -396,13 +396,13 @@ Meshy.prototype.generateUI = function() {
     getScale: function() { return _this.scale.clone(); },
     setScale: function(scale) { _this.scale.copy(scale); },
     onScale: this.onScaleByFactor.bind(this),
-    onFinishScale: this.onFinishScaleByFactor.bind(this)
+    onFinishScale: this.onFinishScale.bind(this)
   });
 
   this.gizmo.visible = false;
   //this.gizmo.position.copy(this.calculateBuildPlateCenter());
 
-  this.gizmoScene.add(this.gizmo);
+  this.overlayScene.add(this.gizmo);
 
   // handle the state of the transformation snap checkbox
   this.handleSnapTransformationToFloorState();
@@ -549,6 +549,15 @@ Meshy.prototype.makeMirrorTransform = function(invertible) {
   return transform;
 }
 
+Meshy.prototype.makeFlipNormalsTransform = function(invertible) {
+  var transform = new Transform("flipNormals"), _this = this;
+
+  transform.onApply = function() { _this.model.flipNormals(); };
+  transform.invertible = invertible;
+
+  return transform;
+}
+
 Meshy.prototype.pushEdit = function(transform, onTransform) {
   if (transform && transform.invertible && !transform.noop()) {
     this.editStack.push(transform, onTransform);
@@ -614,15 +623,15 @@ Meshy.prototype.onScaleByFactor = function() {
 Meshy.prototype.onScaleToSize = function() {
   // current size - changed dynamically via gui
   var size = this.size;
-  // starting model size - only changes at the end of the transform
+  // initial model size - only changes at the end of the transform
   var modelSize = this.model.getSize();
 
   // axis that's being scaled
   var axis = size.x !== modelSize.x ? "x" : size.y !== modelSize.y ? "y" : "z";
-  // factor by which to scale (on one axis or all) - note zero-size failsafe
+  // factor by which to scale - note zero-size failsafe
   var factor = size[axis] !== 0 ? size[axis] / modelSize[axis] : 1;
 
-  // starting scale of model corresponding to the starting size
+  // initial scale of model corresponding to the initial size
   var startScale = this.currentTransform ? this.currentTransform.startVal : this.scale;
 
   // set scale to a value that will result in the new size
@@ -630,8 +639,27 @@ Meshy.prototype.onScaleToSize = function() {
 
   this.onScaleByFactor();
 }
+Meshy.prototype.onScaleToMeasurement = function() {
+  if (!this.measurementResult || !this.measurementResult.ready) return;
+
+  var key = this.measurementToScale;
+  var currentValue = this.measurementResult[key];
+
+  if (currentValue !== undefined) {
+    var factor = this.measurementToScaleValue / currentValue;
+    if (key === "area") factor = Math.sqrt(factor);
+
+    // initial scale of the model
+    var startScale = this.currentTransform ? this.currentTransform.startVal : this.scale;
+
+    // set scale
+    this.scale.multiplyScalar(factor);
+
+    this.onScaleByFactor();
+  }
+}
 // called on scale change end
-Meshy.prototype.onFinishScaleByFactor = function() {
+Meshy.prototype.onFinishScale = function() {
   if (this.dbg) console.log("finish scale");
   if (this.currentTransform) this.currentTransform.end();
 
@@ -765,12 +793,15 @@ Meshy.prototype.endSetBase = function() {
   if (this.pointer) this.pointer.deactivate();
 }
 
-Meshy.prototype.faceOrientDown = function(point, face, mesh) {
-  if (!point || !face || !mesh) return;
+Meshy.prototype.faceOrientDown = function(intersection) {
+  if (!intersection) return;
+
+  var point = intersection.point;
+  var face = intersection.face;
+  var mesh = intersection.object;
 
   // get the normal in world space
-  var rotation = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld);
-  var normal = face.normal.clone().applyMatrix3(rotation);
+  var normal = face.normal.clone().transformDirection(mesh.matrixWorld);
 
   var down = new THREE.Vector3(0, 0, -1);
 
@@ -813,7 +844,13 @@ Meshy.prototype.faceOrientDown = function(point, face, mesh) {
 }
 
 Meshy.prototype.flipNormals = function() {
-  if (this.model) this.model.flipNormals();
+  if (!this.model) return;
+
+  var transform = this.makeFlipNormalsTransform();
+
+  transform.apply();
+
+  this.pushEdit(transform);
 }
 
 // invoked when toggling the checkbox for snapping transformations to floor
@@ -939,25 +976,25 @@ Meshy.prototype.buildEditFolder = function() {
   var scaleByFactorFolder = scaleFolder.addFolder("Scale by Factor", "Scale the mesh by a given factor ");
   this.scaleXController = scaleByFactorFolder.add(this.scale, "x", 0)
     .onChange(this.onScaleByFactor.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
   this.scaleYController = scaleByFactorFolder.add(this.scale, "y", 0)
     .onChange(this.onScaleByFactor.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
   this.scaleZController = scaleByFactorFolder.add(this.scale, "z", 0)
     .onChange(this.onScaleByFactor.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
 
   var scaleToSizeFolder = scaleFolder.addFolder("Scale to Size", "Scale the mesh uniformly to a given size.");
 
   this.scaleToSizeXController = scaleToSizeFolder.add(this.size, "x", 0).name("x size")
     .onChange(this.onScaleToSize.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
   this.scaleToSizeYController = scaleToSizeFolder.add(this.size, "y", 0).name("y size")
     .onChange(this.onScaleToSize.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
   this.scaleToSizeZController = scaleToSizeFolder.add(this.size, "z", 0).name("z size")
     .onChange(this.onScaleToSize.bind(this))
-    .onFinishChange(this.onFinishScaleByFactor.bind(this));
+    .onFinishChange(this.onFinishScale.bind(this));
 
   this.scaleToMeasurementFolder = scaleFolder.addFolder("Scale to Measurement",
     "Set up a measurement and then scale the mesh such that the measurement will now equal the given value.");
@@ -966,8 +1003,8 @@ Meshy.prototype.buildEditFolder = function() {
     "Set up a circle measurement around the inner circumference of a ring mesh, then scale so that the mesh will have the correct measurement in mm.");
   ringSizeFolder.add(this, "measureCircle").name("1. Mark circle")
     .title("Turn on the circle measurement tool and mark the inner circumference of the ring.");
-  this.newRingSize = 0;
-  ringSizeFolder.add(this, "newRingSize", ringSizes).name("2. New ring size")
+  this.ringSize = 0;
+  ringSizeFolder.add(this, "ringSize", ringSizes).name("2. Ring size")
     .title("Select ring size.");
   ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
     .title("Scale the ring.");
@@ -1001,19 +1038,6 @@ Meshy.prototype.buildEditFolder = function() {
   this.editFolder.add(this, "flipNormals").name("Flip normals")
     .title("Flip mesh normals.");
 }
-Meshy.prototype.scaleToMeasurement = function() {
-  if (!this.measurement || !this.measurement.active || !this.measurementResult) return;
-
-  var key = this.measurementToScale;
-  var currentValue = this.measurementResult[key];
-
-  if (currentValue !== undefined) {
-    var factor = this.newMeasurementValue / currentValue;
-    if (key === "area") factor = Math.sqrt(factor);
-
-    this.scaleByFactor(factor);
-  }
-}
 Meshy.prototype.scaleToRingSize = function() {
   // must have an active circle measurement
   if (!this.measurement
@@ -1027,15 +1051,24 @@ Meshy.prototype.scaleToRingSize = function() {
     return;
   }
 
-  var tmpVal = this.newMeasurementValue;
+  if (!this.ringSize) {
+    this.printout.warn("Select a ring size.");
+    return;
+  }
+
+  var tmpVal = this.measurementToScaleValue;
   var tmpType = this.measurementToScale;
 
-  this.newMeasurementValue = this.newRingSize;
   this.measurementToScale = "diameter";
-  this.scaleToMeasurement();
+  this.measurementToScaleValue = this.ringSize;
 
-  this.newMeasurementValue = tmpVal;
+  console.log(this.ringSize);
+
+  this.onScaleToMeasurement();
+  this.onFinishScale();
+
   this.measurementToScale = tmpType;
+  this.measurementToScaleValue = tmpVal;
 
   // update the scale to measurement folder b/c the values changed
   this.onChangeMeasurementToScale();
@@ -1115,14 +1148,20 @@ Meshy.prototype.startMeasurement = function(type, params) {
       var folderNeedsUpdate =
         _this.measurementResult === null || _this.measurementResult.ready !== result.ready;
 
+      // update internal result
       _this.measurementResult = result;
 
-
+      // if necessary, rebuild the folder
       if (folderNeedsUpdate) {
         _this.buildScaleToMeasurementFolder();
-        _this.onChangeMeasurementToScale();
       }
 
+      // update measurement-to-scale field
+      if (!this.currentTransform) _this.onChangeMeasurementToScale();
+
+      //if (this.measurementToScaleValueController) this.measurementToScaleValueController.updateDisplay();
+
+      // update infobox list
       list.update();
     }
 
@@ -1142,69 +1181,56 @@ Meshy.prototype.buildScaleToMeasurementFolder = function() {
   // measurement result
   var result = this.measurementResult;
   // measurements to scale
-  var keys = [];
-  this.scalableMeasurements = keys;
+  var scalableMeasurements = [];
+  this.scalableMeasurements = scalableMeasurements;
 
   if (type === Measurement.Types.length) {
-    if (result.hasOwnProperty("length")) keys.push("length");
+    addScalableMeasurement("length");
   }
   else if (type === Measurement.Types.circle) {
-    if (result.hasOwnProperty("radius")) keys.push("radius");
-    if (result.hasOwnProperty("diameter")) keys.push("diameter");
-    if (result.hasOwnProperty("circumference")) keys.push("circumference");
-    if (result.hasOwnProperty("area")) keys.push("area");
+    addScalableMeasurement("radius");
+    addScalableMeasurement("diameter");
+    addScalableMeasurement("circumference");
+    addScalableMeasurement("area");
   }
   else if (type === Measurement.Types.crossSection) {
-    if (result.hasOwnProperty("area")) keys.push("area");
+    addScalableMeasurement("area");
+    addScalableMeasurement("length");
   }
   //else if (type === Measurement.Types.localCrossSection) {
-  //  if (result.hasOwnProperty("length")) keys.push("length");
+  //  if (result.hasOwnProperty("length")) scalableMeasurements.push("length");
   //}
   // do nothing if nothing to scale
   else return;
 
-  this.measurementToScale = keys[0];
-  this.newMeasurementValue = 1;
+  this.measurementToScale = scalableMeasurements[0];
+  this.measurementToScaleValue = 1;
 
   this.scaleToMeasurementFolder.add(this, "measurementToScale", this.scalableMeasurements)
     .name("Measurement to scale")
     .title("Select an available measurement to which to scale.")
     .onChange(this.onChangeMeasurementToScale.bind(this));
-  this.currentMeasurementValueController =
-    this.scaleToMeasurementFolder.add(this.measurementResult, this.measurementToScale)
-    .name("Current value")
-    .title("Current value of the measurement.");
-  this.disableController(this.currentMeasurementValueController);
-  this.newMeasurementValueController = this.scaleToMeasurementFolder.add(this, "newMeasurementValue")
-    .name("New value")
-    .title("New value: scale the mesh so that the measurement equals this value.");
-  this.scaleToMeasurementFolder.add(this, "scaleToMeasurement")
-    .name("Scale to measurement")
-    .title("Scale the mesh.");
+  this.measurementToScaleValueController = this.scaleToMeasurementFolder.add(this, "measurementToScaleValue")
+    .name("Value")
+    .title("Updating this field scales the mesh so that the measurement equals this value.")
+    .onChange(this.onScaleToMeasurement.bind(this))
+    .onFinishChange(this.onFinishScale.bind(this));
 
   this.setFolderDisplayPrecision(this.scaleToMeasurementFolder);
+
+  // adds a key to the scalableMeasurements array if
+  function addScalableMeasurement(name) {
+    if (result.hasOwnProperty(name)) scalableMeasurements.push(name);
+  }
 }
 Meshy.prototype.onChangeMeasurementToScale = function() {
-  var currentController = this.currentMeasurementValueController;
-
-  if (currentController) {
-    // now the controller gets the current measurement to scale from the
-    // measurement result
-    currentController.object = this.measurementResult;
-    currentController.property = this.measurementToScale;
-    // update controller
-    currentController.updateDisplay();
-  }
-
   // the new value defaults to the current value
-  this.newMeasurementValue = this.measurementResult[this.measurementToScale];
+  this.measurementToScaleValue = this.measurementResult[this.measurementToScale];
 
   // update controller
-  var newController = this.newMeasurementValueController;
+  var controller = this.measurementToScaleValueController;
 
-  if (newController) {
-    newController.updateDisplay();
-  }
+  if (controller) controller.updateDisplay();
 }
 Meshy.prototype.endMeasurement = function() {
   if (!this.measurement || !this.measurement.active) return;
@@ -1219,8 +1245,7 @@ Meshy.prototype.endMeasurement = function() {
   if (this.scaleToMeasurementFolder) {
     this.clearFolder(this.scaleToMeasurementFolder);
     this.measurementToScale = "";
-    this.currentMeasurementValueController = null;
-    this.newMeasurementValueController = null;
+    this.measurementToScaleValueController = null;
   }
   // if infobox measurement list exists, remove it
   if (this.infoBox && this.measurementInfoList) this.infoBox.removeList(this.measurementInfoList);
@@ -1645,7 +1670,7 @@ Meshy.prototype.initViewport = function() {
     height = container.offsetHeight;
     width = container.offsetWidth;
 
-    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 1000);
+    _this.camera = new THREE.PerspectiveCamera(30, width/height, .1, 10000);
     // z axis is up as is customary for 3D printers
     _this.camera.up.set(0, 0, 1);
 
@@ -1653,7 +1678,7 @@ Meshy.prototype.initViewport = function() {
     _this.scene.background = new THREE.Color(_this.backgroundColor);
     debug = new Debug(_this.scene); // todo: remove
 
-    _this.gizmoScene = new THREE.Scene();
+    _this.overlayScene = new THREE.Scene();
 
     _this.controls = new Controls(
       _this.camera,
@@ -1672,12 +1697,12 @@ Meshy.prototype.initViewport = function() {
     _this.controls.addObject(pointLight);
     // for lighting the gizmo
     var gizmoPointLight = pointLight.clone();
-    _this.gizmoScene.add(gizmoPointLight);
+    _this.overlayScene.add(gizmoPointLight);
     _this.controls.addObject(gizmoPointLight);
 
     var ambientLight = new THREE.AmbientLight(0xffffff, 0.1);
     _this.scene.add(ambientLight);
-    _this.gizmoScene.add(ambientLight);
+    _this.overlayScene.add(ambientLight);
 
     _this.axisWidget = new AxisWidget(_this.camera);
 
@@ -1760,26 +1785,30 @@ Meshy.prototype.initViewport = function() {
   function render() {
     if (!_this.camera || !_this.scene) return;
 
+    // update controls
     _this.controls.update();
+    // update gizmo size and position
     if (_this.gizmo && _this.gizmoVisible && _this.model) {
       _this.gizmo.update(_this.model.getMesh());
     }
+    // update pointer cursor
     if (_this.pointer && _this.pointer.active) {
       _this.pointer.updateCursor();
     }
+    // update measurement markers
     if (_this.measurement && _this.measurement.active) {
       _this.measurement.updateFromCamera(_this.camera);
     }
+    // update axis widget
     _this.axisWidget.update();
 
+    // render the main scene
     _this.renderer.clear();
     _this.renderer.render(_this.scene, _this.camera);
 
-    // also render the gizmo scene if gizmo is supposed to be visible
-    if (_this.gizmoVisible) {
-      _this.renderer.clearDepth();
-      _this.renderer.render(_this.gizmoScene, _this.camera);
-    }
+    // render the overlay scene
+    _this.renderer.clearDepth();
+    _this.renderer.render(_this.overlayScene, _this.camera);
   }
 }
 
