@@ -20,9 +20,9 @@ Object.assign(MCG.Infill, (function() {
     if (type === Types.triangle) {
       return generateTriangle(contour, params.spacing);
     }
-    if (type === Types.hex) {
+    /*if (type === Types.hex) {
       return generateHex(contour, params.spacing, params.linewidth, params.parity);
-    }
+    }*/
 
     return null;
   }
