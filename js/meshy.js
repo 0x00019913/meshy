@@ -1943,25 +1943,6 @@ Meshy.prototype.handleFile = function(file) {
 
   var loader = new FileLoader();
   loader.load(file, this.createModel.bind(this));
-
-  return;
-
-  var model = new Model(
-    this.scene,
-    this.camera,
-    this.container,
-    this.printout,
-    this.infoBox
-  );
-
-  var importParams = {
-    unitsFrom: this.importUnits,
-    unitsTo: this.units
-  };
-
-  model.isLittleEndian = this.isLittleEndian;
-  model.vertexPrecision = this.vertexPrecision;
-  model.import(file, importParams, this.displayMesh.bind(this));
 };
 
 Meshy.prototype.createModel = function(geometry, filename) {
@@ -1983,6 +1964,8 @@ Meshy.prototype.createModel = function(geometry, filename) {
     this.printout,
     this.infoBox
   );
+
+  this.printout.log("Imported file " + this.importingMeshName);
 
   this.importEnabled = true;
   this.fileInput.value = "";

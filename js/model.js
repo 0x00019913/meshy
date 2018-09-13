@@ -21,12 +21,6 @@ function Model(geometry, scene, camera, container, printout) {
   this.container = container;
   this.printout = printout ? printout : console;
 
-  //store header to export back out identically
-  this.header = null;
-  this.isLittleEndian = true;
-  //this.filename = "";
-  this.setVertexPrecision(5);
-
   // calculated stuff
   this.boundingBox = new THREE.Box3();
   this.surfaceArea = null;
@@ -152,8 +146,13 @@ Model.prototype.generateMaterials = function() {
     centerOfMassPlane: new THREE.MeshStandardMaterial({
       color: 0xffffff,
       side: THREE.DoubleSide,
+      roughness: 1.0,
+      metalness: 0.0,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.25
+    }),
+    centerOfMassLine: new THREE.LineBasicMaterial({
+      color: 0xffffff
     })
   };
 }
@@ -231,7 +230,6 @@ Model.prototype.getMesh = function() {
   return this.baseMesh;
 }
 
-// todo: possibly deprecate?
 // set the precision factor used to merge geometries
 Model.prototype.setVertexPrecision = function(precision) {
   this.vertexPrecision = precision;
@@ -295,6 +293,7 @@ Model.prototype.rotate = function(euler) {
 }
 Model.prototype.rotateEnd = function() {
   this.computeBoundingBox();
+  this.calculateCenterOfMass();
   this.positionCenterOfMassIndicator();
 }
 
@@ -309,6 +308,7 @@ Model.prototype.scaleEnd = function() {
   this.computeBoundingBox();
   this.calculateVolume();
   this.calculateSurfaceArea();
+  this.calculateCenterOfMass();
   this.positionCenterOfMassIndicator();
 }
 
@@ -467,16 +467,31 @@ Model.prototype.generateCenterOfMassIndicator = function() {
   centerOfMassIndicator.name = "centerOfMassIndicator";
   centerOfMassIndicator.visible = false;
 
-  var xgeo = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2); // normal x
-  var ygeo = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2); // normal y
-  var zgeo = new THREE.PlaneGeometry(1, 1); // normal z
+  var xplanegeo = new THREE.PlaneGeometry(1, 1).rotateY(Math.PI / 2); // normal x
+  var yplanegeo = new THREE.PlaneGeometry(1, 1).rotateX(Math.PI / 2); // normal y
+  var zplanegeo = new THREE.PlaneGeometry(1, 1); // normal z
 
-  var planeMat = this.materials.centerOfMassPlane;
+  // lines at the intersection of each pair of lines
+  var xlinegeo = new THREE.Geometry();
+  xlinegeo.vertices.push(new THREE.Vector3(-0.5, 0, 0));
+  xlinegeo.vertices.push(new THREE.Vector3(0.5, 0, 0));
+  var ylinegeo = new THREE.Geometry();
+  ylinegeo.vertices.push(new THREE.Vector3(0, -0.5, 0));
+  ylinegeo.vertices.push(new THREE.Vector3(0, 0.5, 0));
+  var zlinegeo = new THREE.Geometry();
+  zlinegeo.vertices.push(new THREE.Vector3(0, 0, -0.5));
+  zlinegeo.vertices.push(new THREE.Vector3(0, 0, 0.5));
+
+  var planemat = this.materials.centerOfMassPlane;
+  var linemat = this.materials.centerOfMassLine;
 
   centerOfMassIndicator.add(
-    new THREE.Mesh(xgeo, planeMat),
-    new THREE.Mesh(ygeo, planeMat),
-    new THREE.Mesh(zgeo, planeMat)
+    new THREE.Mesh(xplanegeo, planemat),
+    new THREE.Mesh(yplanegeo, planemat),
+    new THREE.Mesh(zplanegeo, planemat),
+    new THREE.LineSegments(xlinegeo, linemat),
+    new THREE.LineSegments(ylinegeo, linemat),
+    new THREE.LineSegments(zlinegeo, linemat)
   );
 
   this.centerOfMassIndicator = centerOfMassIndicator;
@@ -490,18 +505,27 @@ Model.prototype.positionCenterOfMassIndicator = function() {
 
   var size = this.getSize();
 
-  // position the planes within the indicator object
+  // position the meshes within the indicator object
   var indicator = this.centerOfMassIndicator;
-  var planes = indicator.children;
+  var children = indicator.children;
   var pos = this.centerOfMass.clone().sub(this.boundingBox.min).divide(size).subScalar(0.5);
 
-  planes[0].position.x = pos.x;
-  planes[1].position.y = pos.y;
-  planes[2].position.z = pos.z;
+  // position planes
+  children[0].position.x = pos.x;
+  children[1].position.y = pos.y;
+  children[2].position.z = pos.z;
+
+  // position lines
+  children[3].position.y = pos.y;
+  children[3].position.z = pos.z;
+  children[4].position.x = pos.x;
+  children[4].position.z = pos.z;
+  children[5].position.x = pos.x;
+  children[5].position.y = pos.y;
 
   // position and scale the indicator
-  var extendFactor = 0.1;
-  var scale = size.clone().multiplyScalar(1.0 + extendFactor);
+  var extendFactor = 1.1;
+  var scale = size.clone().multiplyScalar(extendFactor);
 
   this.centerOfMassIndicator.scale.copy(scale);
   this.centerOfMassIndicator.position.copy(this.getCenter());
@@ -533,10 +557,8 @@ Model.prototype.setMode = function(mode, params) {
 }
 
 // Create the base mesh (as opposed to another display mode).
-// todo: remove
 Model.prototype.makeBaseMesh = function(geo) {
   if (!this.baseMesh) {
-    //var geo = new THREE.Geometry();
     this.baseMesh = new THREE.Mesh(geo, this.materials.base);
     this.baseMesh.name = "base";
   }
@@ -853,8 +875,6 @@ Model.prototype.getSliceMode = function() {
 Model.prototype.setSliceMode = function(sliceMode) {
   if (this.slicer.mode == sliceMode || !this.slicer) return;
 
-  //removeMeshByName(this.scene, "model");
-
   this.slicer.setMode(sliceMode);
 
   this.addSliceMeshesToScene();
@@ -883,482 +903,6 @@ Model.prototype.gcodeSave = function(params) {
 
   this.slicer.gcodeSave(params);
 }
-
-
-/* IMPORT AND EXPORT */
-
-// Generate file output representing the model and save it.
-/*Model.prototype.export = function(format, name) {
-  var isLittleEndian = this.isLittleEndian;
-  var blob;
-  var fname;
-  var geo = this.baseMesh.geometry;
-
-  var count = geo.faces.length;
-  var vertices = geo.vertices;
-  var faces = geo.faces;
-
-  if (format=="stl") {
-    var stlSize = 84 + 50 * count;
-    var array = new ArrayBuffer(stlSize);
-    var offset = 0;
-    var dv = new DataView(array);
-    // I can't figure out a better way of transferring the header bytes to the
-    // new array than by using the DataView API and copying them one by one
-    if (!this.header) this.header = new ArrayBuffer(80);
-    var dvHeader = new DataView(this.header);
-    for (offset=0; offset<80; offset++) {
-      var ch = dvHeader.getUint8(offset);
-      dv.setUint8(offset, ch);
-    }
-
-    dv.setUint32(offset, count, isLittleEndian);
-    offset += 4;
-    for (var tri=0; tri<count; tri++) {
-      var face = faces[tri];
-
-      setVector3(dv, offset, face.normal, isLittleEndian);
-      offset += 12;
-
-      for (var vert=0; vert<3; vert++) {
-        setVector3(dv, offset, vertices[face[faceGetSubscript(vert)]], isLittleEndian);
-        offset += 12;
-      }
-
-      // the "attribute byte count" should be set to 0 according to
-      // https://en.wikipedia.org/wiki/STL_(file_format)
-      dv.setUint8(offset, 0);
-      dv.setUint8(offset+1, 0);
-
-      offset += 2;
-    }
-
-    function setVector3(dv, offset, vector, isLittleEndian) {
-      dv.setFloat32(offset, vector.x, isLittleEndian);
-      dv.setFloat32(offset+4, vector.y, isLittleEndian);
-      dv.setFloat32(offset+8, vector.z, isLittleEndian);
-    }
-
-    blob = new Blob([dv]);
-    fname = name+".stl";
-  }
-  else if (format=="stlascii") {
-    var indent2 = "  ", indent4 = "    ", indent6 = "      ";
-    var out = "";
-
-    out =  "solid " + name + '\n';
-    for (var tri=0; tri<count; tri++) {
-      var faceOut = "";
-      var face = faces[tri];
-      faceOut += indent2 + "facet normal" + writeVector3(face.normal) + '\n';
-      faceOut += indent4 + "outer loop" + '\n';
-      for (var vert=0; vert<3; vert++) {
-        var v = vertices[face[faceGetSubscript(vert)]];
-        faceOut += indent6 + "vertex" + writeVector3(v) + '\n';
-      }
-      faceOut += indent4 + "endloop" + '\n';
-      faceOut += indent2 + "endfacet" + '\n';
-
-      out += faceOut;
-    }
-    out += "endsolid";
-
-    function writeVector3(v) {
-      line = "";
-      for (var i=0; i<3; i++) line += " " + v.getComponent(i).toFixed(6);
-      return line;
-    }
-
-    blob = new Blob([out], { type: 'text/plain' });
-    fname = name+".stl";
-  }
-  else if (format=="obj") {
-    var out = "";
-
-    out =  "# OBJ exported from Meshy, 0x00019913.github.io/meshy \n";
-    out += "# NB: this file only stores faces and vertex positions. \n";
-    out += "# number vertices: " + vertices.length + "\n";
-    out += "# number triangles: " + faces.length + "\n";
-    out += "#\n";
-    out += "# vertices: \n";
-
-    // write the list of vertices
-    for (var vert=0; vert<vertices.length; vert++) {
-      var line = "v";
-      var vertex = vertices[vert];
-      for (var comp=0; comp<3; comp++) line += " " + vertex.getComponent(comp).toFixed(6);
-      line += "\n";
-      out += line;
-    }
-
-    out += "# faces: \n";
-    for (var tri=0; tri<count; tri++) {
-      var line = "f";
-      var face = faces[tri];
-      for (var vert=0; vert<3; vert++) {
-        line += " " + (face[faceGetSubscript(vert)]+1);
-      }
-      line += "\n";
-      out += line;
-    }
-
-    blob = new Blob([out], { type: 'text/plain' });
-    fname = name+".obj";
-  }
-  else {
-    this.printout.error("Exporting format '"+format+"' is not supported.");
-    return;
-  }
-
-  var a = document.createElement("a");
-  if (window.navigator.msSaveOrOpenBlob) { // IE :(
-    window.navigator.msSaveOrOpenBlob(blob, fname);
-  }
-  else {
-    var url = URL.createObjectURL(blob);
-    a.href = url;
-    a.download = fname;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function() {
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-    });
-  }
-  this.printout.log("Saved file '" + fname + "' as " + format.toUpperCase());
-}*/
-
-// TODO: either split importers into separate files and replace THREE loaders
-// with these, or just deprecate
-
-// Import a model from an STL or OBJ file (any capitalization).
-/*Model.prototype.import = function(file, params, callback) {
-  params = params || {};
-  var unitsFrom = params.hasOwnProperty("unitsFrom") ? params.unitsFrom : Units.mm;
-  var unitsTo = params.hasOwnProperty("unitsTo") ? params.unitsTo : Units.mm;
-  var convertUnits = Units.getConverterV3(unitsFrom, unitsTo);
-
-  var fSplit = splitFilename(file.name);
-  this.filename = fSplit.name;
-  this.format = fSplit.extension;
-
-  var _this = this;
-
-  fr = new FileReader();
-  fr.onload = function() {
-    var success = false;
-    try {
-      parseResult(fr.result);
-      success = true;
-
-      // set mode to base mesh, which creates the mesh and puts it in the scene
-      _this.setMode("base");
-      _this.printout.log("Imported file: " + file.name);
-    } catch(e) {
-      _this.printout.error("Error importing: " + e);
-    }
-    callback(success, _this);
-  };
-
-  if (this.format=="stl") {
-    // check STL type (read it once and run the necessary checks) - if binary
-    // (not ascii), read as array; if ascii, read as text
-
-    // make a secondary FileReader
-    var fr1 = new FileReader();
-    // the .onload will either load geometry as text or as array
-    fr1.onload = function() {
-      if (isBinary(fr1.result)) fr.readAsArrayBuffer(file);
-      else {
-        _this.format = "stlascii";
-        fr.readAsText(file);
-      }
-    }
-    // start up the secondary FileReader
-    fr1.readAsArrayBuffer(file);
-
-    // returns true if binary; else, return false
-    function isBinary(result) {
-      var dv = new DataView(result, 0);
-      // an ascii STL file will begin with these characters
-      var solid = "solid ";
-      var isBinary = false;
-
-      // number of triangles if binary
-      var n = dv.getUint32(80, _this.isLittleEndian);
-
-      // file must be 84 + n*50 bytes long if binary
-      if (dv.byteLength === 84 + n*50) return true;
-
-      // check that the file begins with the string "solid "
-      for (var i=0; i<solid.length; i++) {
-        if (String.fromCharCode(dv.getUint8(i)) != solid[i]) {
-          isBinary = true;
-          break;
-        }
-      }
-
-      return isBinary;
-    }
-  }
-  // if OBJ, read as ascii characters
-  else if (this.format=="obj") {
-    fr.readAsText(file);
-  }
-  // else, we don't support this format
-  else {
-    var error = "Format '"+this.format+"' is not supported.";
-    this.printout.error(error);
-    callback(false, this);
-    return;
-  }
-
-  function parseResult(result) {
-    var geo = new THREE.Geometry();
-    var vertices = geo.vertices;
-    var faces = geo.faces;
-
-    // if binary STL
-    if (_this.format=="stl") {
-      // mimicking
-      // http://tonylukasavage.com/blog/2013/04/10/web-based-stl-viewing-three-dot-js/
-      _this.header = result.slice(0, 80); // store STL header
-
-      var dv = new DataView(result, 80);
-      var isLittleEndian = _this.isLittleEndian;
-
-      var n = dv.getUint32(0, isLittleEndian);
-
-      offset = 4;
-      // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
-      // mimics the code found in the THREE.Geometry class
-      var vertexMap = {};
-      var p = Math.pow(10, _this.vertexPrecision);
-
-      for (var tri=0; tri<n; tri++) {
-        var face = new THREE.Face3();
-
-        offset += 12;
-
-        for (var vert=0; vert<3; vert++) {
-          var vertex = convertUnits(getVector3(dv, offset, isLittleEndian));
-          var key = vertexHash(vertex, p);
-          var idx = -1;
-          if (vertexMap[key]===undefined) {
-            idx = vertices.length;
-            vertexMap[key] = idx;
-            vertices.push(vertex);
-          }
-          else {
-            idx = vertexMap[key];
-          }
-          face[faceGetSubscript(vert)] = idx;
-          offset += 12;
-        }
-
-        faceComputeNormal(face, vertices);
-
-        // ignore "attribute byte count" (2 bytes)
-        offset += 2;
-        faces.push(face);
-      }
-
-      function getVector3(dv, offset, isLittleEndian) {
-        return new THREE.Vector3(
-          dv.getFloat32(offset, isLittleEndian),
-          dv.getFloat32(offset+4, isLittleEndian),
-          dv.getFloat32(offset+8, isLittleEndian)
-        );
-      }
-    }
-    // if ascii STL
-    else if (_this.format=="stlascii") {
-      var len = result.length;
-      // position in the file
-      var i = 0;
-      var lineNum = 0;
-
-      // for building a unique set of vertices; contains a set of (vertex, idx) pairs;
-      // mimics the code found in the THREE.Geometry class
-      var vertexMap = {};
-      var p = Math.pow(10, _this.vertexPrecision);
-
-      // read the characters of the file
-      while (i<len) {
-        var line = getLine();
-        if (line.startsWith("facet normal ")) {
-          var face = new THREE.Face3();
-          // get the face normal from the line
-          face.normal = getVector3(line.substring(13)).normalize();
-
-          getLine(); // clear the "outer loop" line
-
-          var numVerts = 0;
-          // read off the three vertices
-          for (var vert=0; vert<3; vert++) {
-            var vline = getLine();
-            // if the line doesn't begin with "vertex ", break
-            if (!vline.startsWith("vertex ")) break;
-
-            var vertex = convertUnits(getVector3(vline.substring(7)));
-            var idx = vertexMapIdx(vertexMap, vertex, vertices, p);
-
-            face[faceGetSubscript(vert)] = idx;
-            numVerts++;
-          }
-
-          if (numVerts!=3) {
-            throw "incorrect number of vertices at line "+lineNum+" of '"+file.name+"'";
-          }
-
-          getLine(); // clear the "endloop" line
-          getLine(); // clear the "endfacet" line
-          faces.push(face);
-        }
-      }
-
-      function getLine() {
-        var i0 = i, ri;
-        do {
-          ri = result[i];
-          i++;
-        } while (ri!='\n' && i<len);
-        lineNum++;
-        return result.substring(i0, i).trim();
-      }
-      function getVector3(s) {
-        var vector = new THREE.Vector3();
-        //split on whitespace
-        var split = s.split(/\s+/);
-        // read off three numbers
-        var j = 0;
-        for (var k=0; k<split.length; k++) {
-          var sk = split[k];
-          if (sk.length > 0) vector.setComponent(j++, parseFloat(sk));
-        }
-        return vector;
-      }
-    }
-    // if OBJ
-    else if (_this.format=="obj") {
-      var len = result.length;
-      var hasVertNormals = false;
-      var vertexNormals = [];
-      var i = 0;
-      var lineNum = 0;
-
-      while (i<len) {
-        // get a line from the file string
-        var line = getLine();
-        if (line.length==0) continue;
-        // if vertex, get vertex; relevant flags are 'v' and 'vn'
-        if (line[0]=='v') {
-          if (line[1]==' ') {
-            var vertex = convertUnits(getVector3(line.substring(2)));
-            vertices.push(vertex);
-          }
-          else if (line[1]=='n') {
-            var normal = getVector3(line.substring(3)).normalize();
-            vertexNormals.push(normal);
-          }
-        }
-        // if face, get face
-        else if (line[0]=='f') {
-          hasVertNormals = (vertices.length==vertexNormals.length);
-          var triangles = getTriangles(line.substring(2));
-          for (var tri=0; tri<triangles.length; tri++) faces.push(triangles[tri]);
-        }
-      }
-
-      function getLine() {
-        var i0 = i, ri;
-        do {
-          ri = result[i];
-          i++;
-        } while (ri!='\n' && i<len);
-        lineNum++;
-        return result.substring(i0, i).trim();
-      }
-      function getVector3(s) {
-        var vector = new THREE.Vector3();
-        var split = s.split(' ');
-        // read off three numbers
-        for (var j=0; j<3; j++) vector.setComponent(j, parseFloat(split[j]));
-        return vector;
-      }
-      function getTriangles(s) {
-        var triangles = [];
-        // array of 3-element arrays indicating the vertex indices for each tri
-        var triIndices = [];
-
-        // split line of vertex indices, trim off any '/'-delimited UVs/normals
-        var polyIndices = s.split(' ');
-        polyIndices = polyIndices.map(function(st) {
-          var slashIdx = st.indexOf('/');
-          return slashIdx==-1 ? (st-1) : (st.substr(0, slashIdx))-1;
-        });
-
-        // if the face is a tri, just one set of 3 indices
-        if (polyIndices.length==3) {
-          triIndices.push(polyIndices);
-        }
-        // if a quad, need to triangulate - pick closest corners to make new edge
-        else if (polyIndices.length==4) {
-          var v = new THREE.Vector3();
-          var d02 = v.subVectors(
-            vertices[polyIndices[0]],
-            vertices[polyIndices[2]]
-          ).length();
-          var d13 = v.subVectors(
-            vertices[polyIndices[1]],
-            vertices[polyIndices[3]]
-          ).length();
-          if (d02<d13) {
-            triIndices.push([polyIndices[0],polyIndices[1],polyIndices[2]]);
-            triIndices.push([polyIndices[0],polyIndices[2],polyIndices[3]]);
-          }
-          else {
-            triIndices.push([polyIndices[0],polyIndices[1],polyIndices[3]]);
-            triIndices.push([polyIndices[3],polyIndices[1],polyIndices[2]]);
-          }
-        }
-        else if (polyIndices.length<3) {
-          throw "not enough face indices at line "+lineNum+" of '"+file.name+"'";
-        }
-        for (var tri=0; tri<triIndices.length; tri++) {
-          var triangle = new THREE.Face3();
-          triangles.push(triangle);
-          for (var j=0; j<3; j++) {
-            triangle[faceGetSubscript(j)] = triIndices[tri][j];
-          }
-
-          // average vertex normals (if available) or calculate via x-product
-          var normal = new THREE.Vector3();
-          if (hasVertNormals) {
-            for (var j=0; j<3; j++) normal.add(vertexNormals[triIndices[tri][j]]);
-          }
-          else {
-            var d01 = new THREE.Vector3().subVectors(
-              vertices[triangle.a],
-              vertices[triangle.b]
-            );
-            var d02 = new THREE.Vector3().subVectors(
-              vertices[triangle.a],
-              vertices[triangle.c]
-            );
-            normal.crossVectors(d01, d02);
-          }
-          normal.normalize();
-          triangle.normal = normal;
-        }
-        return triangles;
-      }
-    }
-
-    _this.baseMesh.geometry = geo;
-    _this.computeBoundingBox();
-  }
-}*/
 
 // Delete the THREE.Mesh because these wouldn't be automatically disposed of
 // when the Model instance disappears.
