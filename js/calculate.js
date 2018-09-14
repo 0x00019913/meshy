@@ -1,125 +1,243 @@
 var Calculate = (function() {
 
+  // shorthands for Three.js constructors
+
   var Vector3 = THREE.Vector3;
   var Line3 = THREE.Line3;
   var Box3 = THREE.Box3;
   var Plane = THREE.Plane;
 
-  // get an array of the face's vertices in the original winding order
-  function _faceVertices(face, vertices, matrix) {
-    var va = new Vector3().copy(vertices[face.a]);
-    var vb = new Vector3().copy(vertices[face.b]);
-    var vc = new Vector3().copy(vertices[face.c]);
 
-    if (matrix !== undefined) {
-      va.applyMatrix4(matrix);
-      vb.applyMatrix4(matrix);
-      vc.applyMatrix4(matrix);
-    }
 
-    return [va, vb, vc];
+  // internal functions - computations are performed on 3 vertices instead of
+  // Face3 objects
+
+  function _triangleArea(va, vb, vc) {
+    var vab = va.clone().sub(vb);
+    var vac = va.clone().sub(vc);
+
+    // |(b - a) cross (c - a)| / 2
+    return vab.cross(vac).length() / 2.0;
   }
 
-  // calculate face area
-  function _faceArea(face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
-
-    // (b - a) cross (c - a) / 2
-    return b.clone().sub(a).cross(c.clone().sub(a)).length() / 2;
-  }
-
-  // calculate the volume of an irregular tetrahedron with one vertex at the
-  // origin and the given face forming the remaining three vertices
-  function _faceVolume(face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
-
+  function _triangleVolume(va, vb, vc) {
     var volume = 0;
-    volume += (-c.x*b.y*a.z + b.x*c.y*a.z + c.x*a.y*b.z);
-    volume += (-a.x*c.y*b.z - b.x*a.y*c.z + a.x*b.y*c.z);
+    volume += (-vc.x*vb.y*va.z + vb.x*vc.y*va.z + vc.x*va.y*vb.z);
+    volume += (-va.x*vc.y*vb.z - vb.x*va.y*vc.z + va.x*vb.y*vc.z);
 
-    return volume / 6;
+    return volume / 6.0;
   }
 
-  function _faceCenter(face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
+  function _triangleCenter(va, vb, vc) {
+    var v = new Vector3();
 
-    return a.clone().add(b).add(c).divideScalar(3);
+    return v.add(va).add(vb).add(vc).divideScalar(3);
   }
 
-  // center of mass of an irregular tetrahedron with one vertex at the origin
-  // and the given face forming the remaining three vertices
-  function _faceCenterOfMass(face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
+  function _triangleCenterOfMass(va, vb, vc) {
+    var v = new Vector3();
 
-    return a.add(b).add(c).divideScalar(4);
+    return v.add(va).add(vb).add(vc).divideScalar(4);
   }
 
-  function _faceBoundingBox(face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
-    var boundingBox = new THREE.Box3();
+  function _triangleBoundingBox(va, vb, vc) {
+    var box = new Box3();
 
-    boundingBox.expandByPoint(a);
-    boundingBox.expandByPoint(b);
-    boundingBox.expandByPoint(c);
+    box.expandByPoint(va);
+    box.expandByPoint(vb);
+    box.expandByPoint(vc);
 
-    return boundingBox;
+    return box;
   }
 
-  // calculate the intersection of a face with an arbitrary plane
-  function _planeFaceIntersection(plane, face, vertices, matrix) {
-    var [a, b, c] = _faceVertices(face, vertices, matrix);
-
+  function _planeTriangleIntersection(plane, va, vb, vc, normal) {
     // intersection points of the plane with all three face segments; each is
     // undefined if no intersection
-    var vab = plane.intersectLine(new Line3(a, b));
-    var vbc = plane.intersectLine(new Line3(b, c));
-    var vca = plane.intersectLine(new Line3(c, a));
+    var iab = new Vector3();
+    var ibc = new Vector3();
+    var ica = new Vector3();
+
+    iab = plane.intersectLine(new Line3(va, vb), iab);
+    ibc = plane.intersectLine(new Line3(vb, vc), ibc);
+    ica = plane.intersectLine(new Line3(vc, va), ica);
+
+    var result = null;
 
     // if no intersections, return null
-    if (vab === undefined && vbc === undefined && vca === undefined) {
+    if (iab === undefined && ibc === undefined && ica === undefined) {
       return null;
     }
     // in the anomalous situation that the plane intersects all three segments,
     // do special handling
-    else if (vab !== undefined && vbc !== undefined && vca !== undefined) {
+    else if (iab !== undefined && ibc !== undefined && ica !== undefined) {
       // two possible degenerate cases:
       // 1. all three points lie on the plane, so there's no segment intersection
       // 2. two points lie on the plane - they form the segment
-      var da = plane.distanceToPoint(a);
-      var db = plane.distanceToPoint(b);
-      var dc = plane.distanceToPoint(c);
+      var da = plane.distanceToPoint(va);
+      var db = plane.distanceToPoint(vb);
+      var dc = plane.distanceToPoint(vc);
 
       // if 1, return null
       if (da === 0 && db === 0 && dc === 0) return null;
 
       // if 2, two of the intersection points will be coincident; return two
       // non-coincident points (but only if one of them is above the plane)
-      if (vab.equals(vbc) && (da > 0 || dc > 0)) return new Line3(vab, vca);
-      else if (vbc.equals(vca) && (db > 0 || da > 0)) return new Line3(vbc, vab);
-      else if (vca.equals(vab) && (dc > 0 || db > 0)) return new Line3(vca, vbc);
+      if (iab.equals(ibc) && (da > 0 || dc > 0)) result = new Line3(iab, ica);
+      else if (ibc.equals(ica) && (db > 0 || da > 0)) result = new Line3(ibc, iab);
+      else if (ica.equals(iab) && (dc > 0 || db > 0)) result = new Line3(ica, ibc);
       else return null;
     }
+    // else two intersections, so get them and set the result
+    else {
+      // get the first and second intersections
+      var v0 = iab !== undefined ? iab : ibc !== undefined ? ibc : ica;
+      var v1 = v0 === iab ? (ibc !== undefined ? ibc : ica) : (v0 === ibc ? ica : undefined);
 
-    // get the first and second intersections
-    var v0 = vab !== undefined ? vab : vbc !== undefined ? vbc : vca;
-    var v1 = v0 === vab ? (vbc !== undefined ? vbc : vca) : (v0 === vbc ? vca : undefined);
+      // if either intersection doesn't exist, return null
+      if (v0 === undefined || v1 === undefined) return null;
+      // if intersection points are the same, return null
+      if (v0.equals(v1)) return null;
 
-    // if either intersection doesn't exist, return null
-    if (v0 === undefined || v1 === undefined) return null;
-    // if intersection points are the same, return null
-    if (v0.equals(v1)) return null;
+      result = new Line3(v0, v1);
+    }
 
-    return new Line3(v0, v1);
+    if (result === null) return null;
+
+    // correct the order of points based on the normal
+    var delta = new THREE.Vector3();
+    result.delta(delta);
+
+    if (normal.dot(delta) < 0) {
+      var tmp = result.start;
+      result.start = result.end;
+      result.end = tmp;
+    }
+
+    return result;
+  }
+
+
+
+  // external functions
+
+  // get an array of the face's vertices in the original winding order
+  function _faceVertices(face, vertices, matrix, va, vb, vc) {
+    va = va || new Vector3();
+    vb = vb || new Vector3();
+    vc = vc || new Vector3();
+
+    va.copy(vertices[face.a]).applyMatrix4(matrix);
+    vb.copy(vertices[face.b]).applyMatrix4(matrix);
+    vc.copy(vertices[face.c]).applyMatrix4(matrix);
+
+    return [va, vb, vc];
+  }
+
+  // calculate face area
+  function _faceArea(face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    return _triangleArea(va, vb, vc);
+  }
+
+  // calculate the volume of an irregular tetrahedron with one vertex at the
+  // origin and the given face forming the remaining three vertices
+  function _faceVolume(face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    return _triangleVolume(va, vb, vc);
+  }
+
+  // center of a face
+  function _faceCenter(face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    return _triangleCenter(va, vb, vc);
+  }
+
+  // center of mass of an irregular tetrahedron with one vertex at the origin
+  // and the given face forming the remaining three vertices
+  function _faceCenterOfMass(face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    return _triangleCenterOfMass(va, vb, vc);
+  }
+
+  // calculate a bounding box for a face
+  function _faceBoundingBox(face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    return _triangleBoundingBox(va, vb, vc);
+  }
+
+  // calculate the intersection of a face with an arbitrary plane
+  function _planeFaceIntersection(plane, face, vertices, matrix) {
+    var [va, vb, vc] = _faceVertices(face, vertices, matrix);
+
+    var normal = face.normal.clone().transformDirection(matrix);
+
+    return _planeTriangleIntersection(plane, va, vb, vc, normal);
   }
 
   // apply a function to each face
+  // - the callback takes three vertices and a normal, all in world space; these
+  //   vectors are local variables in this function and should be copied, never
+  //   stored directly
+  // - both THREE.Geometry and THREE.BufferGeometry are supported
   function _traverseFaces(mesh, callback) {
     var geo = mesh.geometry;
-    var faces = geo.faces, vertices = geo.vertices;
-    var matrix = mesh.matrixWorld;
+    var matrixWorld = mesh.matrixWorld;
 
-    for (var f = 0; f < faces.length; f++) {
-      callback(faces[f], vertices, matrix);
+    var va = new Vector3();
+    var vb = new Vector3();
+    var vc = new Vector3();
+    var normal = new Vector3();
+
+    if (geo.isBufferGeometry) {
+      var index = geo.index;
+      var position = geo.attributes.position;
+
+      // indexed faces - each triple of indices represents a face
+      if (index !== null) {
+        for (var i = 0, l = index.count; i < l; i += 3) {
+          var a = index.getX(i);
+          var b = index.getX(i + 1);
+          var c = index.getX(i + 2);
+
+          va.fromBufferAttribute(position, a).applyMatrix4(matrixWorld);
+          vb.fromBufferAttribute(position, b).applyMatrix4(matrixWorld);
+          vc.fromBufferAttribute(position, c).applyMatrix4(matrixWorld);
+
+          THREE.Triangle.getNormal(va, vb, vc, normal);
+
+          callback(va, vb, vc, normal);
+        }
+      }
+      // else, each three contiguous verts in position attribute constitute a
+      // face
+      else {
+        for (var i = 0, l = position.count; i < l; i += 3) {
+          va.fromBufferAttribute(position, i).applyMatrix4(matrixWorld);
+          vb.fromBufferAttribute(position, i + 1).applyMatrix4(matrixWorld);
+          vc.fromBufferAttribute(position, i + 2).applyMatrix4(matrixWorld);
+
+          THREE.Triangle.getNormal(va, vb, vc, normal);
+
+          callback(va, vb, vc, normal);
+        }
+      }
+    }
+    else {
+      var faces = geo.faces, vertices = geo.vertices;
+
+      for (var f = 0; f < faces.length; f++) {
+        var face = faces[f];
+
+        _faceVertices(face, vertices, matrixWorld, va, vb, vc);
+        normal.copy(face.normal).transformDirection(matrixWorld);
+
+        callback(va, vb, vc, normal);
+      }
     }
   }
 
@@ -127,8 +245,8 @@ var Calculate = (function() {
   function _surfaceArea(mesh) {
     var area = 0;
 
-    _traverseFaces(mesh, function(face, vertices, matrix) {
-      area += _faceArea(face, vertices, matrix);
+    _traverseFaces(mesh, function(va, vb, vc) {
+      area += _triangleArea(va, vb, vc);
     });
 
     return area;
@@ -138,8 +256,8 @@ var Calculate = (function() {
   function _volume(mesh) {
     var volume = 0;
 
-    _traverseFaces(mesh, function(face, vertices, matrix) {
-      volume += _faceVolume(face, vertices, matrix);
+    _traverseFaces(mesh, function(va, vb, vc) {
+      volume += _triangleVolume(va, vb, vc);
     });
 
     return volume;
@@ -150,9 +268,9 @@ var Calculate = (function() {
     var center = new Vector3();
     var volume = 0;
 
-    _traverseFaces(mesh, function(face, vertices, matrix) {
-      var faceVolume = _faceVolume(face, vertices, matrix);
-      var faceCenterOfMass = _faceCenterOfMass(face, vertices, matrix);
+    _traverseFaces(mesh, function(va, vb, vc) {
+      var faceVolume = _triangleVolume(va, vb, vc);
+      var faceCenterOfMass = _triangleCenterOfMass(va, vb, vc);
 
       // add current face's center of mass, weighted by its volume
       center.add(faceCenterOfMass.multiplyScalar(faceVolume));
@@ -169,7 +287,6 @@ var Calculate = (function() {
     var point = new Vector3();
     plane.coplanarPoint(point);
 
-    var normal = new Vector3();
     var pa = new Vector3();
     var pb = new Vector3();
 
@@ -182,8 +299,8 @@ var Calculate = (function() {
     // length of the intersection contour
     var length = 0;
 
-    _traverseFaces(mesh, function(face, vertices, matrix) {
-      var segment = _planeFaceIntersection(plane, face, vertices, matrix);
+    _traverseFaces(mesh, function(va, vb, vc, normal) {
+      var segment = _planeTriangleIntersection(plane, va, vb, vc, normal);
 
       // nonzero contribution if plane intersects face
       if (segment !== null) {
@@ -194,13 +311,10 @@ var Calculate = (function() {
         pa.subVectors(segment.start, point);
         pb.subVectors(segment.end, point);
 
-        // normal in world space
-        normal.copy(face.normal).transformDirection(matrix);
-
-        // compute area of the triangle; possibly force it negative depending on
-        // the normal
-        var area = pa.clone().cross(pb).length() / 2;
+        // compute area of the triangle; possibly change sign depending on the
+        // normal
         var sign = Math.sign(pa.dot(normal));
+        var area = pa.cross(pb).length() / 2;
 
         crossSectionArea += area * sign;
 

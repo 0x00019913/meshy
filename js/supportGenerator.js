@@ -110,15 +110,21 @@ var SupportGenerator = (function() {
 
     function getSupportFaces() {
       var normal = new THREE.Vector3();
+      var a = new THREE.Vector3();
+      var b = new THREE.Vector3();
+      var c = new THREE.Vector3();
+
       var minFaceMax = minHeight + layerHeight / 2;
       var supportFaces = [];
 
+
       for (var f = 0, l = fs.length; f < l; f++) {
         var face = fs[f];
-        var [a, b, c] = Calculate.faceVertices(face, vs, matrixWorld);
+
+        Calculate.faceVertices(face, vs, matrixWorld, a, b, c);
         var faceMax = Math.max(a[axis], b[axis], c[axis]);
 
-        normal.copy(face.normal).transformDirection(matrixWorld).normalize();
+        normal.copy(face.normal).transformDirection(matrixWorld);
 
         if (down.dot(normal) > dotProductCutoff && faceMax > minFaceMax) {
           supportFaces.push(face);
@@ -134,13 +140,17 @@ var SupportGenerator = (function() {
       var rvmin = boundingBox.min[av];
 
       var pt = new THREE.Vector3();
+      var a = new THREE.Vector3();
+      var b = new THREE.Vector3();
+      var c = new THREE.Vector3();
 
       var points = [];
 
       // iterate over all faces in the face set
       for (var f = 0, l = supportFaces.length; f < l; f++) {
         var face = supportFaces[f];
-        var [a, b, c] = Calculate.faceVertices(face, vs, matrixWorld);
+
+        Calculate.faceVertices(face, vs, matrixWorld, a, b, c);
 
         // bounding box for the face
         var facebb = Calculate.faceBoundingBox(face, vs, matrixWorld);
