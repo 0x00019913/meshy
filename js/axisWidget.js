@@ -83,7 +83,8 @@ AxisWidget.prototype.toggleVisibility = function() {
 }
 
 AxisWidget.prototype.update = function() {
-  var camPos = this.sourceCamera.getWorldDirection();
+  var camPos = new THREE.Vector3();
+  this.sourceCamera.getWorldDirection(camPos);
   var up = this.camera.up.clone();
   // reflect camera position along camera up axis
   camPos.sub(up.multiplyScalar(2 * camPos.dot(up)));
