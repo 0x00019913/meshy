@@ -435,17 +435,25 @@ Model.prototype.makeWireframeMesh = function() {
 Model.prototype.getMeshColor = function() {
   if (this.baseMesh) return this.baseMesh.material.color.getHex();
 }
-Model.prototype.setMeshMaterial = function(color, roughness, metalness) {
+Model.prototype.setMeshMaterialParams = function(params) {
+  params = params || {};
+
   var mat = this.materials.base;
 
-  mat.color.set(color);
-  mat.roughness = roughness;
-  mat.metalness = metalness;
+  for (var param in params) {
+    if (param === "color") mat.color.set(params.color);
+    else mat[param] = params[param];
+  }
 }
-Model.prototype.setWireframeMaterial = function(color) {
+Model.prototype.setWireframeMaterialParams = function(params) {
+  params = params || {};
+
   var mat = this.materials.wireframe;
 
-  mat.color.set(color);
+  for (var param in params) {
+    if (param === "color") mat.color.set(params.color);
+    else mat[param] = params[param];
+  }
 }
 
 // Toggle the COM indicator. If the COM hasn't been calculated, then

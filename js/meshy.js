@@ -1084,6 +1084,8 @@ Meshy.prototype.startMeasurement = function(type, params) {
     return;
   }
 
+  if (!this.model) return;
+
   // turn off previous measurement if one exists
   this.endMeasurement();
   // likewise for set base function
@@ -1101,62 +1103,67 @@ Meshy.prototype.startMeasurement = function(type, params) {
     this.gizmo.disableHandle(Gizmo.HandleTypes.scale, "z");
   }
 
-  if (this.model) {
-    this.measurementResult = null;
+  // make the mesh partially transparent so that it doesn't fully block the
+  // visual elements used to display measurements
+  this.model.setMeshMaterialParams({
+    transparent: true,
+    opacity: 0.75
+  });
 
-    // add a list to the
-    var list = this.infoBox.addList("measurement", InfoBox.Colors.color1);
-    this.measurementInfoList = list;
+  this.measurementResult = null;
 
-    if (type === Measurement.Types.length) {
-      list.add("Length", this, ["measurementResult", "length"]);
-    }
-    else if (type === Measurement.Types.angle) {
-      list.add("Angle", this, ["measurementResult", "angleDegrees"]);
-    }
-    else if (type === Measurement.Types.circle) {
-      list.add("Radius", this, ["measurementResult", "radius"]);
-      list.add("Diameter", this, ["measurementResult", "diameter"]);
-      list.add("Circumference", this, ["measurementResult", "circumference"]);
-      list.add("Area", this, ["measurementResult", "area"]);
-    }
-    else if (type === Measurement.Types.crossSection) {
-      list.add("Area", this, ["measurementResult", "area"]);
-      list.add("Min", this, ["measurementResult", "min"]);
-      list.add("Max", this, ["measurementResult", "max"]);
-      list.add("Contour length", this, ["measurementResult", "length"]);
-    }
-    //else if (type === Measurement.Types.localCrossSection) {
-    //  list.add("Length", this, ["measurementResult", "length"]);
-    //}
+  // add a list to the
+  var list = this.infoBox.addList("measurement", InfoBox.Colors.color1);
+  this.measurementInfoList = list;
 
-    var _this = this;
-    this.measurement.onResultChange = function(result) {
-      // need to update the folder if no result or result ready status changed
-      var folderNeedsUpdate =
-        _this.measurementResult === null || _this.measurementResult.ready !== result.ready;
-
-      // update internal result
-      _this.measurementResult = result;
-
-      // if necessary, rebuild the folder
-      if (folderNeedsUpdate) {
-        _this.buildScaleToMeasurementFolder();
-      }
-
-      // update measurement-to-scale field
-      if (!this.currentTransform) _this.onChangeMeasurementToScale();
-
-      //if (this.measurementToScaleValueController) this.measurementToScaleValueController.updateDisplay();
-
-      // update infobox list
-      list.update();
-    }
-
-    this.measurement.activate(type, params);
-
-    this.buildScaleToMeasurementFolder();
+  if (type === Measurement.Types.length) {
+    list.add("Length", this, ["measurementResult", "length"]);
   }
+  else if (type === Measurement.Types.angle) {
+    list.add("Angle", this, ["measurementResult", "angleDegrees"]);
+  }
+  else if (type === Measurement.Types.circle) {
+    list.add("Radius", this, ["measurementResult", "radius"]);
+    list.add("Diameter", this, ["measurementResult", "diameter"]);
+    list.add("Circumference", this, ["measurementResult", "circumference"]);
+    list.add("Area", this, ["measurementResult", "area"]);
+  }
+  else if (type === Measurement.Types.crossSection) {
+    list.add("Area", this, ["measurementResult", "area"]);
+    list.add("Min", this, ["measurementResult", "min"]);
+    list.add("Max", this, ["measurementResult", "max"]);
+    list.add("Contour length", this, ["measurementResult", "length"]);
+  }
+  //else if (type === Measurement.Types.localCrossSection) {
+  //  list.add("Length", this, ["measurementResult", "length"]);
+  //}
+
+  var _this = this;
+  this.measurement.onResultChange = function(result) {
+    // need to update the folder if no result or result ready status changed
+    var folderNeedsUpdate =
+      _this.measurementResult === null || _this.measurementResult.ready !== result.ready;
+
+    // update internal result
+    _this.measurementResult = result;
+
+    // if necessary, rebuild the folder
+    if (folderNeedsUpdate) {
+      _this.buildScaleToMeasurementFolder();
+    }
+
+    // update measurement-to-scale field
+    if (!this.currentTransform) _this.onChangeMeasurementToScale();
+
+    //if (this.measurementToScaleValueController) this.measurementToScaleValueController.updateDisplay();
+
+    // update infobox list
+    list.update();
+  }
+
+  this.measurement.activate(type, params);
+
+  this.buildScaleToMeasurementFolder();
 }
 Meshy.prototype.buildScaleToMeasurementFolder = function() {
   this.clearFolder(this.scaleToMeasurementFolder);
@@ -1248,6 +1255,15 @@ Meshy.prototype.endMeasurement = function() {
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "x");
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "y");
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "z");
+  }
+
+  // model was made partially transparent at measurement activation - make it
+  // opaque again
+  if (this.model) {
+    this.model.setMeshMaterialParams({
+      transparent: false,
+      opacity: 1.0
+    });
   }
 }
 Meshy.prototype.viewThickness = function() {
@@ -1646,10 +1662,16 @@ Meshy.prototype.setBackgroundColor = function() {
   if (this.scene) this.scene.background.set(this.backgroundColor);
 }
 Meshy.prototype.setMeshMaterial = function() {
-  if (this.model) this.model.setMeshMaterial(this.meshColor, this.meshRoughness, this.meshMetalness);
+  if (this.model) this.model.setMeshMaterialParams({
+    color: this.meshColor,
+    roughness: this.meshRoughness,
+    metalness: this.meshMetalness
+  });
 }
 Meshy.prototype.setWireframeMaterial = function() {
-  if (this.model) this.model.setWireframeMaterial(this.wireframeColor);
+  if (this.model) this.model.setWireframeMaterialParams({
+    color: this.wireframeColor
+  });
 }
 
 // Initialize the viewport, set up everything with WebGL including the
@@ -1978,6 +2000,7 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.cameraToModel();
 
   this.setMeshMaterial();
+  this.setWireframeMaterial();
   this.updateUI();
 
   this.gizmoVisible = true;
