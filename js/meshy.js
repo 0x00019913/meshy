@@ -1744,12 +1744,8 @@ Meshy.prototype.initViewport = function() {
   }
 
   function addEventListeners() {
-    // so the event doesn't propagate to other elements
-    var element = _this.renderer.domElement;
-    element.addEventListener('keydown', onCanvasKeyDown, false);
-
+    window.addEventListener('keydown', onKeyDown, false);
     window.addEventListener('resize', onWindowResize, false);
-    window.addEventListener('keydown', onWindowKeyDown, false);
   }
 
   function onWindowResize() {
@@ -1762,17 +1758,22 @@ Meshy.prototype.initViewport = function() {
   }
 
   // keyboard controls for the rendering canvas
-  function onCanvasKeyDown(e) {
+  function onKeyDown(e) {
+    if (document.activeElement.nodeName.toLowerCase() === "input") return;
+
     var k = e.key.toLowerCase();
+    var caught = true;
 
     if (e.ctrlKey) {
       if (e.shiftKey) {
         if (k=="z") _this.redo();
+        else caught = false;
       }
       else {
         if (k=="i") _this.import();
         else if (k=="z") _this.undo();
         else if (k=="y") _this.redo();
+        else caught = false;
       }
     }
     else {
@@ -1781,15 +1782,18 @@ Meshy.prototype.initViewport = function() {
       else if (k=="w") _this.toggleWireframe();
       else if (k=="b") _this.toggleBuildVolume();
       else if (k=="g") _this.toggleGizmo();
+      else caught = false;
     }
-  }
 
-  // keyboard controls that should always work even if the canvas isn't focused
-  function onWindowKeyDown(e) {
     if (e.keyCode === 27) {
       _this.endMeasurement();
       _this.endSetBase();
+      caught = true;
     }
+
+    // if some app-specific action was taken, prevent default action (e.g.,
+    // propagating an undo to input elements)
+    if (caught) e.preventDefault();
   }
 
   this.animationID = -1;
