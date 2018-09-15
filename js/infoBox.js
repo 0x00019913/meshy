@@ -239,9 +239,9 @@ var InfoBox = (function() {
     styleLI: function(listItem) {
       listItem.style.width = "100%";
       listItem.style.minHeight = "27px";
-      listItem.style.lineHeight = "27px";
+      //listItem.style.lineHeight = "27px";
       listItem.style.overflow = "hidden";
-      listItem.style.padding = "0 4px 0 5px";
+      listItem.style.padding = "0 4px 0 4px";
       //listItem.style.borderBottom = "1px solid #2c2c2c";
     },
 
@@ -263,58 +263,6 @@ var InfoBox = (function() {
     }
 
   });
-
-
-  // todo: remove
-
-  // Not for readily available values (e.g., mesh parameters such as bounds) but
-  // for mouse-driven measurements. Generates a separate box at the end of the
-  // InfoBox that becomes invisible if a measurement is not active.
-  // Can be more monolithic than the general format because the measurement
-  // is displayed at once and completely replaced on update.
-  /*InfoBox.prototype.showMeasurement = function(measurement) {
-    this.showMeasurementOutput();
-    var li = document.createElement("li");
-    this.styleLI(li);
-    var liTitle = document.createElement("span");
-    this.styleLITitle(liTitle);
-    liTitle.textContent = "Measurement:";
-    li.appendChild(liTitle);
-    this.measurementList.appendChild(li);
-
-    for (var key in measurement) {
-      var value = measurement[key];
-      if (value===undefined || value=== null) break;
-
-      li = document.createElement("li");
-      this.styleLI(li);
-
-      liTitle = document.createElement("span");
-      this.styleLITitle(liTitle);
-      liTitle.textContent = key;
-
-      li.appendChild(liTitle);
-
-      var liValue = document.createElement("span");
-      this.styleLIValue(liValue);
-
-      liValue.textContent = this.formatNumber(value);
-      li.appendChild(liValue);
-      this.measurementList.appendChild(li);
-    }
-  }
-  // Hide the measurement box.
-  InfoBox.prototype.hideMeasurementOutput = function() {
-    this.measurementList.style.display = "none";
-    // clear the measurement box
-    this.measurementList.textContent = "";
-  }
-  // Show the measurement box.
-  InfoBox.prototype.showMeasurementOutput = function() {
-    this.measurementList.style.display = "block";
-    // clear the measurement box
-    this.measurementList.textContent = "";
-  }*/
 
   return InfoBox;
 
