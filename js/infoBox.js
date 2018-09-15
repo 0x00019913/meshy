@@ -238,10 +238,10 @@ var InfoBox = (function() {
     // Style list item.
     styleLI: function(listItem) {
       listItem.style.width = "100%";
-      listItem.style.minHeight = "27px";
+      listItem.style.minHeight = "21px";
       //listItem.style.lineHeight = "27px";
       listItem.style.overflow = "hidden";
-      listItem.style.padding = "0 4px 0 4px";
+      listItem.style.padding = "5px 4px 0 4px";
       //listItem.style.borderBottom = "1px solid #2c2c2c";
     },
 
