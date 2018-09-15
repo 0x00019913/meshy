@@ -544,7 +544,8 @@ var Gizmo = (function() {
         else normal.copy(this.transformDirection());
 
         var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, this.activePoint);
-        var cursor = this.raycaster.ray.intersectPlane(plane);
+        var cursor = new THREE.Vector3();
+        this.raycaster.ray.intersectPlane(plane, cursor);
 
         if (cursor) {
           var d = cursor.clone().sub(this.position);
