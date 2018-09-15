@@ -1,5 +1,14 @@
 var Measurement = (function() {
 
+  var Vector3 = THREE.Vector3;
+  var Plane = THREE.Plane;
+
+  function axisToVector3(axis) {
+    var v = new Vector3();
+    v[axis] = 1;
+    return v;
+  }
+
   function Measurement(pointer, scene) {
     this.pointer = pointer;
     this.scene = scene;
@@ -40,7 +49,7 @@ var Measurement = (function() {
     angle: "angle",
     circle: "circle",
     crossSection: "crossSection",
-    localCrossSection: "localCrossSection"
+    orientedCrossSection: "orientedCrossSection"
   };
 
   Object.assign(Measurement.prototype, {
@@ -73,24 +82,37 @@ var Measurement = (function() {
       var cfactory = this.connectorFactory;
       var scene = this.scene;
 
+      this.params.mesh = null;
+
       // set the correct number and types of markers and connectors
       if (type === Measurement.Types.length) {
         this.mnum = 2; // 2 point markers
         this.cnum = 1; // 1 line connector
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.line;
+
+        this.params.p0 = null;
+        this.params.p1 = null;
       }
       else if (type === Measurement.Types.angle) {
         this.mnum = 3; // 3 point markers
         this.cnum = 2; // 2 line connectors
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.line;
+
+        this.params.p0 = null;
+        this.params.p1 = null;
+        this.params.p2 = null;
       }
       else if (type === Measurement.Types.circle) {
         this.mnum = 3; // 3 point markers
         this.cnum = 1; // 1 circle connector
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.circle;
+
+        this.params.center = null;
+        this.params.normal = null;
+        this.params.radius = null;
       }
       else if (type === Measurement.Types.crossSection) {
         this.mnum = 1; // 1 plane marker
@@ -98,17 +120,25 @@ var Measurement = (function() {
         this.mtype = Marker.Types.plane;
         this.ctype = Connector.Types.contour;
         this.params.axis = this.params.axis || "z";
+
+        // params of the axis-oriented plane denoting the cross-section
         this.params.normal = this.params.normal || axisToVector3(this.params.axis);
+        this.params.point = null;
 
         // use this normal to create the plane marker
         mparams.axis = this.params.axis;
         mparams.normal = this.params.normal;
       }
-      else if (type === Measurement.Types.localCrossSection) {
+      else if (type === Measurement.Types.orientedCrossSection) {
         this.mnum = 3; // 3 point markers
         this.cnum = 1; // 1 contour connector
         this.mtype = Marker.Types.point;
         this.ctype = Connector.Types.contour;
+
+        // params of the circle denoting the cross-section
+        this.params.normal = null;
+        this.params.center = null;
+        this.params.radius = null;
       }
       else return;
 
@@ -133,6 +163,8 @@ var Measurement = (function() {
       var point = intersection.point;
       var mesh = intersection.object;
 
+      this.params.mesh = mesh;
+
       this.mactive = Math.min(this.mnum, this.mactive + 1);
 
       var marker = this.markers[this.midx];
@@ -147,7 +179,9 @@ var Measurement = (function() {
       // index this.midx - 1
       this.midx = (this.midx + 1) % this.mnum;
 
-      this.calculateMeasurement(point, mesh);
+      this.calculateParams();
+
+      this.calculateResult();
 
       if (this.onResultChange) {
         this.onResultChange(this.result);
@@ -162,26 +196,74 @@ var Measurement = (function() {
       this.positionConnectors();
     },
 
-    calculateMeasurement: function(point, mesh) {
+    calculateParams: function() {
+      var idx0 = (this.midx) % this.mnum;
+      var idx1 = (this.midx + 1) % this.mnum;
+      var idx2 = (this.midx + 2) % this.mnum;
+
+      if (this.type === Measurement.Types.length) {
+        this.params.p0 = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
+        this.params.p1 = (this.mactive > 1) ? this.markers[idx1].getPosition() : null;
+      }
+      else if (this.type === Measurement.Types.angle) {
+        this.params.p0 = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
+        this.params.p1 = (this.mactive > 1) ? this.markers[idx1].getPosition() : null;
+        this.params.p2 = (this.mactive > 2) ? this.markers[idx2].getPosition() : null;
+      }
+      else if (this.type === Measurement.Types.circle || this.type === Measurement.Types.orientedCrossSection) {
+        var valid = false;
+
+        if (this.mactive === this.mnum) {
+          var p0 = this.markers[idx0].getPosition();
+          var p1 = this.markers[idx1].getPosition();
+          var p2 = this.markers[idx2].getPosition();
+
+          var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
+
+          if (circle) {
+            this.params.center = circle.center;
+            this.params.normal = circle.normal;
+            this.params.radius = circle.radius;
+
+            valid = true;
+          }
+        }
+
+        if (!valid) {
+          this.params.center = null;
+          this.params.normal = null;
+          this.params.radius = null;
+        }
+      }
+      else if (this.type === Measurement.Types.crossSection) {
+        this.params.point = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
+      }
+    },
+
+    calculateResult: function() {
       // if not enough markers, do nothing
       if (this.mactive < this.mnum) return;
 
       this.result = this.makeResult(false);
 
       if (this.type === Measurement.Types.length) {
-        var p0 = this.markers[(this.midx - 2 + this.mnum) % this.mnum].getPosition();
-        var p1 = point;
+        var p0 = this.params.p0;
+        var p1 = this.params.p1;
+
+        if (p0 === null || p1 === null) return;
 
         this.result.length = p0.distanceTo(p1);
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.angle) {
-        var p0 = this.markers[this.midx].getPosition();
-        var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
-        var p2 = point;
+        var p0 = this.params.p0;
+        var p1 = this.params.p1;
+        var p2 = this.params.p2;
 
-        var d10 = new THREE.Vector3().subVectors(p0, p1).normalize();
-        var d12 = new THREE.Vector3().subVectors(p2, p1).normalize();
+        if (p0 === null || p1 === null || p2 === null) return;
+
+        var d10 = new Vector3().subVectors(p0, p1).normalize();
+        var d12 = new Vector3().subVectors(p2, p1).normalize();
         var dot = d10.dot(d12);
 
         this.result.angle = acos(dot);
@@ -189,21 +271,11 @@ var Measurement = (function() {
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.circle) {
-        var p0 = this.markers[this.midx].getPosition();
-        var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
-        var p2 = point;
+        var normal = this.params.normal;
+        var center = this.params.center;
+        var radius = this.params.radius;
 
-        var circle = Calculate.circleFromThreePoints(p0, p1, p2);
-
-        if (!circle) {
-          this.result = this.makeResult(false);
-
-          return;
-        }
-
-        var normal = circle.normal;
-        var center = circle.center;
-        var radius = circle.radius;
+        if (normal === null || center === null || radius === null) return;
 
         this.result.radius = radius;
         this.result.diameter = radius * 2;
@@ -214,8 +286,14 @@ var Measurement = (function() {
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.crossSection) {
-        var plane = new THREE.Plane();
-        plane.setFromNormalAndCoplanarPoint(this.params.normal, point);
+        var normal = this.params.normal;
+        var point = this.params.point;
+
+        if (normal === null || point === null) return;
+
+        var mesh = this.params.mesh;
+        var plane = new Plane();
+        plane.setFromNormalAndCoplanarPoint(normal, point);
 
         var crossSectionResult = Calculate.crossSection(plane, mesh);
 
@@ -227,15 +305,16 @@ var Measurement = (function() {
         this.result.length = crossSectionResult.length;
         this.result.ready = true;
       }
-      else if (this.type === Measurement.Types.localCrossSection) {
-        var p0 = this.markers[this.midx].getPosition();
-        var p1 = this.markers[(this.midx + 1) % this.mnum].getPosition();
-        var p2 = point;
+      else if (this.type === Measurement.Types.orientedCrossSection) {
+        var normal = this.params.normal;
+        var center = this.params.center;
+        var radius = this.params.radius;
 
-        var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+        if (normal === null || center === null || radius === null) return;
 
-        var plane = new THREE.Plane();
-        plane.setFromNormalAndCoplanarPoint(circle.normal, circle.center);
+        var mesh = this.params.mesh;
+        var plane = new Plane();
+        plane.setFromNormalAndCoplanarPoint(normal, center);
 
         var crossSectionResult = Calculate.crossSection(plane, mesh);
 
@@ -293,7 +372,7 @@ var Measurement = (function() {
           var radius = this.result.radius;
 
           connector.setFromNormalAndCenter(normal, center);
-          connector.setScale(new THREE.Vector3().setScalar(radius));
+          connector.setScale(new Vector3().setScalar(radius));
 
           connector.activate();
         }
@@ -337,7 +416,7 @@ var Measurement = (function() {
     },
 
     isPlanar: function() {
-      return this.type === Measurement.Types.crossSection;
+      return this.type === Measurement.Types.crossSection || this.type === Measurement.Types.orientedCrossSection;
     },
 
     isLinear: function() {
@@ -541,7 +620,7 @@ var Measurement = (function() {
     },
 
     scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
       this.mesh.position.sub(center).multiply(factor).add(center);
 
       return this;
@@ -594,6 +673,10 @@ var Measurement = (function() {
       return this;
     },
 
+    getPosition: function() {
+      return this.mesh.position;
+    },
+
     setScale: function(scale) {
       this.mesh.scale.copy(scale);
 
@@ -601,7 +684,7 @@ var Measurement = (function() {
     },
 
     scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
       this.mesh.position.sub(center).multiply(factor).add(center);
 
       this.mesh.scale.multiply(factor);
@@ -682,8 +765,8 @@ var Measurement = (function() {
 
     var geo = new THREE.Geometry();
     var vertices = geo.vertices;
-    vertices.push(new THREE.Vector3());
-    vertices.push(new THREE.Vector3());
+    vertices.push(new Vector3());
+    vertices.push(new Vector3());
     var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
       color: 0xffffff
     });
@@ -711,7 +794,7 @@ var Measurement = (function() {
     },
 
     scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
 
       var geo = this.mesh.geometry;
       var vertices = geo.vertices;
@@ -751,8 +834,8 @@ var Measurement = (function() {
 
     for (var i = 0; i <= segments; i++) {
       var theta = i * dt;
-      vertices.push(new THREE.Vector3(r*Math.cos(theta), r*Math.sin(theta), 0));
-      vertices.push(new THREE.Vector3(r*Math.cos(theta+dt), r*Math.sin(theta+dt), 0));
+      vertices.push(new Vector3(r*Math.cos(theta), r*Math.sin(theta), 0));
+      vertices.push(new Vector3(r*Math.cos(theta+dt), r*Math.sin(theta+dt), 0));
     }
     var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
       color: 0xffffff
@@ -782,7 +865,7 @@ var Measurement = (function() {
     },
 
     scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
 
       this.mesh.position.sub(center).multiply(factor).add(center);
       this.mesh.scale.multiply(factor);
@@ -820,6 +903,11 @@ var Measurement = (function() {
     setFromSegments: function(segments) {
       if (!segments) return;
 
+      // when this connector is set from a set of segments (in world space),
+      // reset the mesh position to 0 and rebuild geometry
+      this.mesh.position.setScalar(0);
+      this.mesh.scale.setScalar(1);
+
       var geo = new THREE.Geometry();
       var vertices = geo.vertices;
 
@@ -842,7 +930,7 @@ var Measurement = (function() {
     },
 
     scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new THREE.Vector3().setScalar(factor);
+      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
 
       this.mesh.position.sub(center).multiply(factor).add(center);
       this.mesh.scale.multiply(factor);
