@@ -104,10 +104,10 @@ var Calculate = (function() {
     if (result === null) return null;
 
     // correct the order of points based on the normal
-    var delta = new THREE.Vector3();
+    var delta = new Vector3();
     result.delta(delta);
 
-    if (normal.dot(delta) < 0) {
+    if (normal.dot(delta.cross(plane.normal)) < 0) {
       var tmp = result.start;
       result.start = result.end;
       result.end = tmp;
@@ -283,27 +283,45 @@ var Calculate = (function() {
     return center.divideScalar(volume);
   }
 
-  function _crossSection(plane, mesh) {
+  function _crossSection(plane, mesh, splitPolygons) {
+    // don't split by default
+    splitPolygons = splitPolygons || false;
+
     var point = new Vector3();
     plane.coplanarPoint(point);
 
     var pa = new Vector3();
     var pb = new Vector3();
+    var delta = new Vector3();
+    var cross = new Vector3();
 
-    // total cross-section area
-    var crossSectionArea = 0;
-    // axis-aligned bounding box
-    var boundingBox = new THREE.Box3();
-    // segments forming the intersection
+    // store the segments forming the intersection
     var segments = [];
-    // length of the intersection contour
-    var length = 0;
 
     _traverseFaces(mesh, function(va, vb, vc, normal) {
       var segment = _planeTriangleIntersection(plane, va, vb, vc, normal);
 
       // nonzero contribution if plane intersects face
-      if (segment !== null) {
+      if (segment !== null) segments.push(segment);
+    });
+
+    // make an array of polygons - if not splitting, the only element will be
+    // an aggregate of the all the segments of the cross-section
+    var segmentSets = splitPolygons ? _polygonsFromSegments(segments) : [segments];
+
+    // calculate a { segments, boundingBox, area, length } object for each poly
+    var result = [];
+
+    for (var ss = 0, lss = segmentSets.length; ss < lss; ss++) {
+      var segmentSet = segmentSets[ss];
+
+      var area = 0;
+      var length = 0;
+      var boundingBox = new Box3();
+
+      for (var s = 0, ls = segmentSet.length; s < ls; s++) {
+        var segment = segmentSet[s];
+
         boundingBox.expandByPoint(segment.start);
         boundingBox.expandByPoint(segment.end);
 
@@ -313,25 +331,28 @@ var Calculate = (function() {
 
         // compute area of the triangle; possibly change sign depending on the
         // normal
-        var sign = Math.sign(pa.dot(normal));
-        var area = pa.cross(pb).length() / 2;
+        segment.delta(delta);
+        cross.crossVectors(delta, plane.normal);
+        var sign = Math.sign(pa.dot(cross));
+        var segmentArea = pa.cross(pb).length() / 2;
 
-        crossSectionArea += area * sign;
+        // increment area
+        area += segmentArea * sign;
 
-        // store segment in segments array and increment contour length
-        segments.push(segment);
-
-        length += segment.start.distanceTo(segment.end);
+        // increment length
+        length += segment.distance();
       }
-    });
 
-    // return the value of the cross-section and its bounds along the axes
-    return {
-      area: crossSectionArea,
-      boundingBox: boundingBox,
-      segments: segments,
-      length: length
-    };
+      // result for the current polygon
+      result.push({
+        segments: segmentSet,
+        boundingBox: boundingBox,
+        area: area,
+        length: length
+      });
+    }
+
+    return result;
   }
 
   // calculate circle normal, center, and radius from three coplanar points:
@@ -382,6 +403,8 @@ var Calculate = (function() {
     };
   }
 
+  // hash map utilities for extracting polygons from segment lists
+
   function _numHash(n, p) {
     return Math.round(n*p);
   }
@@ -390,18 +413,59 @@ var Calculate = (function() {
     return _numHash(v.x, p)+'_' + _numHash(v.y, p) + '_' + _numHash(v.z, p);
   }
 
-  // todo: finish
+  function _objectGetKey(object) {
+    for (var key in object) return key;
+    return null;
+  }
+
   function _polygonsFromSegments(segments, p) {
-    p = p !== undefined ? p : 5;
+    p = p !== undefined ? p : 1e5;
 
     // adjacency map
     var m = {};
 
+    // build the map
     for (var s = 0, l = segments.length; s < l; s++) {
       var segment = segments[s];
+      var startHash = _vectorHash(segment.start, p);
+      var endHash = _vectorHash(segment.end, p);
 
-
+      // if segment is sufficiently long that its start and end don't hash to
+      // the same value, add it to the map
+      if (startHash !== endHash) m[startHash] = segment;
     }
+
+    for (var s = 0, l = segments.length; s < l; s++) {
+      var segment = segments[s];
+      var startHash = _vectorHash(segment.start, p);
+      var endHash = _vectorHash(segment.end, p);
+    }
+
+    // extract the polygons
+    var polygons = [];
+    var polygon;
+
+    var start;
+    var current = null;
+
+    while ((start = _objectGetKey(m)) !== null) {
+      current = start;
+      polygon = [];
+
+      do {
+        segment = m[current];
+        polygon.push(segment);
+        delete m[current];
+
+        current = _vectorHash(segment.end, p);
+      } while (current !== start);
+
+      if (current === start) polygons.push(polygon);
+    }
+
+    //console.log(polygons);
+
+    return polygons;
   }
 
   return {

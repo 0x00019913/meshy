@@ -9,6 +9,15 @@ var Measurement = (function() {
     return v;
   }
 
+  // push b's terms onto a without using concat
+  function arrayAppend(target, source) {
+    var sourceLength = source.length;
+
+    for (var i = 0; i < sourceLength; i++) target.push(source[i]);
+  }
+
+  // Measurement constructor
+
   function Measurement(pointer, scene) {
     this.pointer = pointer;
     this.scene = scene;
@@ -179,7 +188,7 @@ var Measurement = (function() {
       // index this.midx - 1
       this.midx = (this.midx + 1) % this.mnum;
 
-      this.calculateParams();
+      this.setParams();
 
       this.calculateResult();
 
@@ -196,7 +205,7 @@ var Measurement = (function() {
       this.positionConnectors();
     },
 
-    calculateParams: function() {
+    setParams: function() {
       var idx0 = (this.midx) % this.mnum;
       var idx1 = (this.midx + 1) % this.mnum;
       var idx2 = (this.midx + 2) % this.mnum;
@@ -205,35 +214,13 @@ var Measurement = (function() {
         this.params.p0 = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
         this.params.p1 = (this.mactive > 1) ? this.markers[idx1].getPosition() : null;
       }
-      else if (this.type === Measurement.Types.angle) {
+      else if (
+        this.type === Measurement.Types.angle
+        || this.type === Measurement.Types.circle
+        || this.type === Measurement.Types.orientedCrossSection) {
         this.params.p0 = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
         this.params.p1 = (this.mactive > 1) ? this.markers[idx1].getPosition() : null;
         this.params.p2 = (this.mactive > 2) ? this.markers[idx2].getPosition() : null;
-      }
-      else if (this.type === Measurement.Types.circle || this.type === Measurement.Types.orientedCrossSection) {
-        var valid = false;
-
-        if (this.mactive === this.mnum) {
-          var p0 = this.markers[idx0].getPosition();
-          var p1 = this.markers[idx1].getPosition();
-          var p2 = this.markers[idx2].getPosition();
-
-          var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
-
-          if (circle) {
-            this.params.center = circle.center;
-            this.params.normal = circle.normal;
-            this.params.radius = circle.radius;
-
-            valid = true;
-          }
-        }
-
-        if (!valid) {
-          this.params.center = null;
-          this.params.normal = null;
-          this.params.radius = null;
-        }
       }
       else if (this.type === Measurement.Types.crossSection) {
         this.params.point = (this.mactive > 0) ? this.markers[idx0].getPosition() : null;
@@ -271,11 +258,17 @@ var Measurement = (function() {
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.circle) {
-        var normal = this.params.normal;
-        var center = this.params.center;
-        var radius = this.params.radius;
+        var p0 = this.params.p0;
+        var p1 = this.params.p1;
+        var p2 = this.params.p2;
 
-        if (normal === null || center === null || radius === null) return;
+        var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
+
+        if (!circle) return;
+
+        var center = circle.center;
+        var normal = circle.normal;
+        var radius = circle.radius;
 
         this.result.radius = radius;
         this.result.diameter = radius * 2;
@@ -297,20 +290,41 @@ var Measurement = (function() {
 
         var crossSectionResult = Calculate.crossSection(plane, mesh);
 
-        this.connectors[0].setFromSegments(crossSectionResult.segments);
+        var segments = [];
+        var area = 0;
+        var length = 0;
+        var boundingBox = new THREE.Box3();
 
-        this.result.area = crossSectionResult.area;
-        this.result.min = crossSectionResult.boundingBox.min;
-        this.result.max = crossSectionResult.boundingBox.max;
-        this.result.length = crossSectionResult.length;
+        // accumulate the result
+        for (var s = 0, ls = crossSectionResult.length; s < ls; s++) {
+          var polygonResult = crossSectionResult[s];
+
+          arrayAppend(segments, polygonResult.segments);
+          area += polygonResult.area;
+          length += polygonResult.length;
+          boundingBox.expandByPoint(polygonResult.boundingBox.min);
+          boundingBox.expandByPoint(polygonResult.boundingBox.max);
+        }
+
+        this.connectors[0].setFromSegments(segments);
+
+        this.result.area = area;
+        this.result.min = boundingBox.min;
+        this.result.max = boundingBox.max;
+        this.result.length = length;
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.orientedCrossSection) {
-        var normal = this.params.normal;
-        var center = this.params.center;
-        var radius = this.params.radius;
+        var p0 = this.params.p0;
+        var p1 = this.params.p1;
+        var p2 = this.params.p2;
 
-        if (normal === null || center === null || radius === null) return;
+        var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
+
+        if (!circle) return;
+
+        var center = circle.center;
+        var normal = circle.normal;
 
         var mesh = this.params.mesh;
         var plane = new Plane();
