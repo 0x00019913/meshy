@@ -1030,7 +1030,7 @@ Meshy.prototype.scaleToRingSize = function() {
   // must have an active circle measurement
   if (!this.measurement
     || !this.measurement.active
-    || this.measurement.type !== Measurement.Types.circle
+    || this.measurement.getType() !== Measurement.Types.circle
     // must have a measurement result and a diameter field in that result
     || !this.measurementResult
     || this.measurementResult.diameter === undefined)
@@ -1050,8 +1050,6 @@ Meshy.prototype.scaleToRingSize = function() {
   this.measurementToScale = "diameter";
   this.measurementToScaleValue = this.ringSize;
 
-  console.log(this.ringSize);
-
   this.onScaleToMeasurement();
   this.onFinishScale();
 
@@ -1062,22 +1060,28 @@ Meshy.prototype.scaleToRingSize = function() {
   this.onChangeMeasurementToScale();
 }
 
-Meshy.prototype.measureLength = function() { this.startMeasurement(Measurement.Types.length); }
-Meshy.prototype.measureAngle = function() { this.startMeasurement(Measurement.Types.angle); }
-Meshy.prototype.measureCircle = function() { this.startMeasurement(Measurement.Types.circle); }
+Meshy.prototype.measureLength = function() {
+  this.startMeasurement({ type: Measurement.Types.length });
+}
+Meshy.prototype.measureAngle = function() {
+  this.startMeasurement({ type: Measurement.Types.angle });
+}
+Meshy.prototype.measureCircle = function() {
+  this.startMeasurement({ type: Measurement.Types.circle });
+}
 Meshy.prototype.measureCrossSectionX = function() {
-  this.startMeasurement(Measurement.Types.crossSection, { axis: "x" });
+  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "x" });
 }
 Meshy.prototype.measureCrossSectionY = function() {
-  this.startMeasurement(Measurement.Types.crossSection, { axis: "y" });
+  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "y" });
 }
 Meshy.prototype.measureCrossSectionZ = function() {
-  this.startMeasurement(Measurement.Types.crossSection, { axis: "z" });
+  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "z" });
 }
 Meshy.prototype.measureLocalCrossSection = function() {
-  this.startMeasurement(Measurement.Types.orientedCrossSection, { nearestContour: true });
+  this.startMeasurement({ type: Measurement.Types.orientedCrossSection, nearestContour: true });
 }
-Meshy.prototype.startMeasurement = function(type, params) {
+Meshy.prototype.startMeasurement = function(params) {
   // slice mode keeps its own copy of the mesh, so don't allow measuring
   if (this.sliceModeOn) {
     this.printout.warn("Cannot measure mesh while slice mode is on.");
@@ -1115,6 +1119,8 @@ Meshy.prototype.startMeasurement = function(type, params) {
   // add a list to the
   var list = this.infoBox.addList("measurement", InfoBox.Colors.color1);
   this.measurementInfoList = list;
+
+  var type = params.type;
 
   if (type === Measurement.Types.length) {
     list.add("Length", this, ["measurementResult", "length"]);
@@ -1162,7 +1168,7 @@ Meshy.prototype.startMeasurement = function(type, params) {
     list.update();
   }
 
-  this.measurement.activate(type, params);
+  this.measurement.activate(params);
 
   this.buildScaleToMeasurementFolder();
 }
@@ -1173,7 +1179,7 @@ Meshy.prototype.buildScaleToMeasurementFolder = function() {
   if (!this.measurementResult || !this.measurementResult.ready) return;
 
   // measurement type
-  var type = this.measurement.type;
+  var type = this.measurement.getType();
   // measurement result
   var result = this.measurementResult;
   // measurements to scale
@@ -1704,8 +1710,8 @@ Meshy.prototype.initViewport = function() {
       _this.container,
       {
         r: _this.buildVolumeSize.length() * 1,
-        phi: 0,
-        theta: 5*Math.PI/12,
+        phi: -Math.PI / 6,
+        theta: 5 * Math.PI / 12,
         origin: _this.defaultCameraCenter()
       }
     );
@@ -1965,7 +1971,16 @@ Meshy.prototype.handleFile = function(file) {
   this.importEnabled = false;
 
   var loader = new FileLoader();
-  loader.load(file, this.createModel.bind(this));
+  try {
+    loader.load(file, this.createModel.bind(this));
+  }
+  catch (e) {
+    this.printout.error(e);
+
+    this.importEnabled = true;
+    this.fileInput.value = "";
+    this.importingMeshName = "";
+  }
 };
 
 Meshy.prototype.createModel = function(geometry, filename) {
@@ -2015,6 +2030,9 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.pointer.addMesh(this.model.getMesh());
 
   this.infoBox.update();
+
+  // todo: remove
+  this.measureCircle();
 }
 
 // Interface for the dat.gui button. Saves the model.
@@ -2045,9 +2063,8 @@ Meshy.prototype.delete = function() {
   // a model with the same name twice in a row
   this.fileInput.value = "";
 
-  this.pointer.removeMesh(this.model.getMesh());
-
   if (this.model) {
+    this.pointer.removeMesh(this.model.getMesh());
     this.model.dispose();
     this.model = null;
   }
