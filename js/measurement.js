@@ -534,7 +534,7 @@ var Measurement = (function() {
 
         var dist = camera.position.distanceTo(marker.getPosition());
 
-        marker.setRadius(dist * 0.005);
+        marker.setRadius(dist * 0.0025);
       }
     },
 

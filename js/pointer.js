@@ -215,11 +215,19 @@ var Pointer = (function() {
     mouseup: function(pointer) {
       if (!this.active) return;
       if (!this.clickPixelCoords) return;
+      if (!this.intersection) return;
 
       var dist = pointer.pixelCoords.distanceTo(this.clickPixelCoords);
       if (dist < this.clickAllowance) {
         for (var c = 0; c < this.clickCallbacks.length; c++) {
+          // the commented-out code is used for testing BufferGeometry stuff
+          
+          //var object = this.intersection.object;
+          //var geo = object.geometry;
+          //var buffergeo = new THREE.BufferGeometry().fromGeometry(geo);
+          //object.geometry = buffergeo;
           this.clickCallbacks[c](this.intersection);
+          //object.geometry = geo;
         }
       }
 
