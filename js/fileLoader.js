@@ -49,6 +49,9 @@ var FileLoader = function() {
         }
 
         break;
+
+      default:
+        throw "Unsupported format " + format;
     }
   };
 
