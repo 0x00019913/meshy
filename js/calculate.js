@@ -454,6 +454,9 @@ var Calculate = (function() {
 
       do {
         segment = m[current];
+
+        if (segment === undefined) break;
+
         polygon.push(segment);
         delete m[current];
 

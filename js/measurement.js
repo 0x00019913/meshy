@@ -133,6 +133,7 @@ var Measurement = (function() {
         // params of the axis-oriented plane denoting the cross-section
         this.params.normal = this.params.normal || axisToVector3(this.params.axis);
         this.params.point = null;
+        this.params.splitContours = this.params.splitContours || false;
 
         // use this normal to create the plane marker
         mparams.axis = this.params.axis;
@@ -148,6 +149,12 @@ var Measurement = (function() {
         this.params.normal = null;
         this.params.center = null;
         this.params.radius = null;
+        // true if selecting only the closest contour to the center of the circle
+        // subtended by the markers
+        this.params.nearestContour = this.params.nearestContour || false;
+        // true if splitting the segment soup into an array of contiguous loops,
+        // and necessarily true if finding the nearest contour
+        this.params.splitContours = this.params.nearestContour || this.params.splitContours || false;
       }
       else return;
 
@@ -288,7 +295,7 @@ var Measurement = (function() {
         var plane = new Plane();
         plane.setFromNormalAndCoplanarPoint(normal, point);
 
-        var crossSectionResult = Calculate.crossSection(plane, mesh);
+        var crossSectionResult = Calculate.crossSection(plane, mesh, this.params.splitContours);
 
         var segments = [];
         var area = 0;
@@ -297,13 +304,13 @@ var Measurement = (function() {
 
         // accumulate the result
         for (var s = 0, ls = crossSectionResult.length; s < ls; s++) {
-          var polygonResult = crossSectionResult[s];
+          var contour = crossSectionResult[s];
 
-          arrayAppend(segments, polygonResult.segments);
-          area += polygonResult.area;
-          length += polygonResult.length;
-          boundingBox.expandByPoint(polygonResult.boundingBox.min);
-          boundingBox.expandByPoint(polygonResult.boundingBox.max);
+          arrayAppend(segments, contour.segments);
+          area += contour.area;
+          length += contour.length;
+          boundingBox.expandByPoint(contour.boundingBox.min);
+          boundingBox.expandByPoint(contour.boundingBox.max);
         }
 
         this.connectors[0].setFromSegments(segments);
@@ -312,6 +319,7 @@ var Measurement = (function() {
         this.result.min = boundingBox.min;
         this.result.max = boundingBox.max;
         this.result.length = length;
+        this.result.crossSectionResult = crossSectionResult;
         this.result.ready = true;
       }
       else if (this.type === Measurement.Types.orientedCrossSection) {
@@ -319,22 +327,91 @@ var Measurement = (function() {
         var p1 = this.params.p1;
         var p2 = this.params.p2;
 
+        // compute the circle parameters from three points
         var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
 
         if (!circle) return;
 
         var center = circle.center;
         var normal = circle.normal;
+        var circleArea = circle.radius * circle.radius * Math.PI;
 
+        // compute plane-mesh intersection
         var mesh = this.params.mesh;
         var plane = new Plane();
         plane.setFromNormalAndCoplanarPoint(normal, center);
 
-        var crossSectionResult = Calculate.crossSection(plane, mesh);
+        var crossSectionResult = Calculate.crossSection(plane, mesh, this.params.splitContours);
 
-        this.connectors[0].setFromSegments(crossSectionResult.segments);
+        // process the intersection result
 
-        this.result.length = crossSectionResult.length;
+        var segments = [];
+        var area = 0;
+        var length = 0;
+        var boundingBox = new THREE.Box3();
+
+        // if getting the nearest contour, retrieve it and use it as the measurement result
+        if (this.params.nearestContour) {
+          if (crossSectionResult.length > 1) {
+            var nearestContour = null;
+
+            // the three markers will all have some distance from the nearest
+            // contour - they should all be exactly on the contour, so their
+            // total distance to the closest segments of the contour should be
+            // about 0; use this fact to find the closest contour
+            var minDist = Infinity;
+
+            var closestPoint = new THREE.Vector3();
+
+            for (var c = 0, lc = crossSectionResult.length; c < lc; c++) {
+              var contour = crossSectionResult[c];
+
+              // minimum distances of each marker point to the contour's segments
+              var minDist0 = Infinity;
+              var minDist1 = Infinity;
+              var minDist2 = Infinity;
+
+              for (var s = 0, ls = contour.segments.length; s < ls; s++) {
+                var segment = contour.segments[s];
+
+                segment.closestPointToPoint(p0, false, closestPoint);
+                minDist0 = Math.min(minDist0, closestPoint.distanceTo(p0));
+                segment.closestPointToPoint(p1, false, closestPoint);
+                minDist1 = Math.min(minDist1, closestPoint.distanceTo(p1));
+                segment.closestPointToPoint(p2, false, closestPoint);
+                minDist2 = Math.min(minDist2, closestPoint.distanceTo(p2));
+              }
+
+              var sum = minDist0 + minDist1 + minDist2;
+
+              if (sum < minDist) {
+                nearestContour = contour;
+                minDist = sum;
+              }
+            }
+
+            crossSectionResult = [nearestContour];
+          }
+        }
+
+        // accumulate the result
+        for (var c = 0, lc = crossSectionResult.length; c < lc; c++) {
+          var contour = crossSectionResult[c];
+
+          arrayAppend(segments, contour.segments);
+          area += contour.area;
+          length += contour.length;
+          boundingBox.expandByPoint(contour.boundingBox.min);
+          boundingBox.expandByPoint(contour.boundingBox.max);
+        }
+
+        this.connectors[0].setFromSegments(segments);
+
+        this.result.area = area;
+        this.result.min = boundingBox.min;
+        this.result.max = boundingBox.max;
+        this.result.length = length;
+        this.result.crossSectionResult = crossSectionResult;
         this.result.ready = true;
       }
     },
@@ -365,7 +442,7 @@ var Measurement = (function() {
 
     positionConnectors: function() {
       // position connector
-      if (this.isLinear()) {
+      if (this.ctype === Connector.Types.line) {
         for (var c = 0; c < this.cnum; c++) {
           var ms = this.markers[(this.midx + c) % this.mnum];
           var mt = this.markers[(this.midx + 1 + c) % this.mnum];
@@ -376,7 +453,7 @@ var Measurement = (function() {
           }
         }
       }
-      else if (this.isCircular()) {
+      else if (this.ctype === Connector.Types.circle) {
         var connector = this.connectors[0];
 
         // if result is valid, position the connector and turn it on
@@ -393,6 +470,11 @@ var Measurement = (function() {
         // else, turn off the connector because its parameters are invalid
         else {
           connector.deactivate();
+        }
+      }
+      else if (this.ctype === Connector.Types.contour) {
+        if (this.result.ready) {
+          this.connectors[0].activate();
         }
       }
       else {
@@ -430,7 +512,7 @@ var Measurement = (function() {
     },
 
     isPlanar: function() {
-      return this.type === Measurement.Types.crossSection || this.type === Measurement.Types.orientedCrossSection;
+      return this.type === Measurement.Types.crossSection;
     },
 
     isLinear: function() {
@@ -438,7 +520,7 @@ var Measurement = (function() {
     },
 
     isCircular: function() {
-      return this.type === Measurement.Types.circle;
+      return this.type === Measurement.Types.circle || this.type === Measurement.Types.orientedCrossSection;
     },
 
     updateFromCamera: function(camera) {
