@@ -2030,9 +2030,6 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.pointer.addMesh(this.model.getMesh());
 
   this.infoBox.update();
-
-  // todo: remove
-  this.measureCircle();
 }
 
 // Interface for the dat.gui button. Saves the model.
