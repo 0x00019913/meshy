@@ -1291,6 +1291,9 @@ Meshy.prototype.generateSupports = function() {
     if (this.supportRadius < this.lineWidth) {
       this.printout.warn("Support radius is lower than the planar resolution.");
     }
+    else if (this.supportRadius * this.supportTaperFactor < this.lineWidth) {
+      this.printout.warn("Support taper radius is lower than the planar resolution. This may result in missing support slices.");
+    }
 
     this.model.generateSupports({
       angle: this.supportAngle,
