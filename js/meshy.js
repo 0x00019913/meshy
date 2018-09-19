@@ -1770,7 +1770,13 @@ Meshy.prototype.initViewport = function() {
 
   // keyboard controls for the rendering canvas
   function onKeyDown(e) {
-    if (document.activeElement.nodeName.toLowerCase() === "input") return;
+    // don't intercept keyboard events as normal if a text field is in focus
+    if (document.activeElement.nodeName.toLowerCase() === "input") {
+      // esc blurs the current text field
+      if (e.keyCode === 27) document.activeElement.blur();
+      
+      return;
+    }
 
     var k = e.key.toLowerCase();
     var caught = true;
