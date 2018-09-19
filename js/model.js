@@ -634,12 +634,17 @@ Model.prototype.updateSliceMeshesInScene = function() {
   if (this.slicer.mode === Slicer.Modes.preview) {
     if (this.slicer.previewSliceMesh) {
       var slicedMeshGeo = new THREE.Geometry();
-      slicedMeshGeo.vertices = geos.slicedMesh.geo.vertices;
-      slicedMeshGeo.faces = geos.slicedMesh.geo.faces;
-      this.slicePreviewSlicedMesh.geometry = slicedMeshGeo;
+      
+      if (geos.slicedMesh.geo.faces.length === 0) this.slicePreviewSlicedMesh.visible = false;
+      else {
+        this.slicePreviewSlicedMesh.visible = true;
+        slicedMeshGeo.vertices = geos.slicedMesh.geo.vertices;
+        slicedMeshGeo.faces = geos.slicedMesh.geo.faces;
+        this.slicePreviewSlicedMesh.geometry = slicedMeshGeo;
 
-      this.slicePreviewSlicedMesh.geometry.verticesNeedUpdate = true;
-      this.slicePreviewSlicedMesh.geometry.elementsNeedUpdate = true;
+        this.slicePreviewSlicedMesh.geometry.verticesNeedUpdate = true;
+        this.slicePreviewSlicedMesh.geometry.elementsNeedUpdate = true;
+      }
     }
   }
   else if (this.slicer.mode === Slicer.Modes.full) {
