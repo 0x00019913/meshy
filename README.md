@@ -2,7 +2,7 @@
 
 `meshy` is my browser-based tool for performing measurements, transformations, visualizations, repair, and slicing on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
 
-> Everything is under development: slicer improvements and additional features (better G-code exporter, more infill types), a better repair algorithm, UI improvements, more import formats.
+> Everything is under development, including: slicer improvements and additional features (better G-code exporter, more infill types), a better repair algorithm, UI improvements, more import formats.
 
 # Requirements
 
@@ -16,7 +16,7 @@ The user can upload a mesh. At any given time, the tool can contain one mesh (th
 
 The main viewport uses mouse and keyboard controls:
 
-* left-click and drag to rotate the camera
+* LMB to rotate the camera
 * scroll wheel to zoom
 * MMB/RMB to pan
 * `ctrl+i` to import a mesh
@@ -69,7 +69,7 @@ If checked, automatically center the mesh and floor it to the build plate.
 
 # Export
 
-The user can specify a filename and export as either OBJ or STL (`exportSTL` exports as binary STL, `exportSTLascii` exports as ASCII STL).
+The user can specify a filename and export as either OBJ or STL.
 
 ## Export units
 
@@ -277,7 +277,7 @@ Angle range in degrees that determines the set of faces that need support: if th
 
 ### Spacing factor
 
-Determines the spatial frequency of the supports. Having fewer supports saves material; having more supports makes them harder to remove and possibly results in insufficiently supported areas.
+Determines the spatial frequency of the supports. Having fewer supports saves material; having more supports makes them harder to remove and may make the slicer lag.
 
 ### Radius
 
@@ -297,11 +297,11 @@ Determines how strut radius increases based on the approximate volume of support
 
 The mass of the supports above a particular strut will be about proportional to their volume, which should be approximately proportional to their total length (assuming there isn't *too* much variation in radius). A particular support should presumably have cross-sectional area proportional to the volume supported, which goes as the square of the radius. So the radius should vary as the square root of the area, which varies as the total volume supported.
 
-The radius is calculated as `r + k * sqrt(w)`, where `r` is the base radius, `k` is an adjustable constant, and `w` is the "weight" of the supported struts (approximated as the total length). This asymptotically behaves as the square root but doesn't make the radius 0 at support "leaves".
+By default, the radius is calculated as `r + k * sqrt(w)`, where `r` is the base radius, `k` is an adjustable constant, and `w` is the "weight" of the supported struts (approximated as the total length). This asymptotically behaves as the square root but doesn't make the radius 0 at support "leaves".
 
 ### Function constant
 
-The `k` term as described above. Increase to increase support radius.
+The `k` term as described above. Increase this to increase support radius.
 
 ### Generate supports
 
@@ -325,17 +325,19 @@ Options affecting individual layers of the sliced mesh.
 
 #### Walls
 
-Number of walls or "shells" separating the exterior from the interior. The width of each wall is equal to the line width, and the centerline of the outermost wall is inset by half a line width so that the print isn't inflated by half that much.
+Number of walls or "shells" separating the exterior from the interior. The width of each wall is equal to the line width, and the centerline of the outermost wall is inset by half a line width so that the print isn't inflated by that much.
 
 #### Top layers
 
-The interior delimited by the walls is filled with infill. If the infill is non-solid, some parts of a given layer may need to be solid nonetheless because some contour within the `t` layers above or the `t` layers below is exposed to the air. The slicer looks at the surrounding `2t` layers to determine which parts of the contour need to be solid; this value is `t`.
+Call this value `t`.
+
+The interior of each slice contour (delimited by the innermost wall) is filled with infill. If the infill is non-solid, some parts of a given layer may need to be solid nonetheless because some contour within the `t` layers above or the `t` layers below is exposed to the air. The slicer looks at the surrounding `2t` layers to determine which parts of the contour need to be solid.
 
 This is only relevant if using sparse (i.e., non-solid) infill.
 
 #### Optimize top layers
 
-A shortcut that simplifies computation of top layers at a small cost in accuracy. Given the current layer `0`, the `t` layers above `[1, t]`, and the `t` layers below `[-t, -1]`, consider a particular point `p` inside layer `0`. The point will need to have solid infill if it is not in any of the surrounding `2t` layers. However, because variation in the mesh will be approximately monotonic on the spatial scales in question, the conflict will typically arise in either the adjacent layer or the farthest layer, and the intermediate layers can be discarded with minimal risk. So we'll only consider the current layer `0` and layers `{-t, -1, 1, t}` if this box is checked.
+A shortcut that simplifies computation of top layers at a small cost in accuracy. Given the current layer `0` and the surrounding `2t` layers `[-t, t] \ 0`, consider a particular point `p` inside layer `0`. The point will need to have solid infill if it is not in one or more of the surrounding `2t` layers. However, because variation in the mesh will be approximately monotonic on the spatial scales in question, the conflict will typically arise in either the adjacent layer or the farthest layer, and the intermediate layers can be discarded with minimal risk. So we'll only consider the current layer `0` and layers `{-t, -1, 1, t}` if this box is checked.
 
 #### Infill type
 
@@ -356,7 +358,7 @@ Doesn't apply to solid infill because an infill density of `1` makes the infill 
 
 #### Infill overlap
 
-Call this parameter `o` and line width `w`. With this, of each slice contour, the region available for infill ("infill contour") is the innermost wall inset inward by half a `(1 - o) * w`. So, if an infill line starts printing directly on this contour, its approximately circular end will overlap with the innermost wall by `o` times the line width.
+Call this parameter `o` and line width `w`. With this, of each slice contour, the region available for infill ("infill contour") is the innermost wall inset inward by `(1 - o) * w`. So, if an infill line starts printing directly on this contour, its approximately circular end will overlap with the innermost wall by `o` times the line width.
 
 This visibly affects the adhesion of solid top layers to the walls.
 
@@ -412,7 +414,7 @@ How much to extrude (mm) for the priming sequence.
 
 Can be used to tweak under- or over-extrusion. Directly multiplies the computed extrusion values. Defaults to `1.0`.
 
-#### Infill, wall speed
+#### Infill/wall speed
 
 Speed (mm/s) at which the infill/walls are printed.
 
@@ -455,13 +457,13 @@ Two modes are available:
 
 ## Display
 
-If preview mode:
+* If preview mode:
 
 ### Show sliced mesh
 
 If checked, the mesh is actually sliced above the current slice level. If not checked, a ghost of the mesh is shown.
 
-If full mode:
+* If full mode:
 
 ### Up to layer
 
@@ -469,7 +471,7 @@ If checked, only show all layers below and including the current layer. The `Sli
 
 ### Show infill
 
-Show the infill in all layers. Because `meshy` displays geometry with unshaded lines, this tends to not be a useful option to have on.
+Show the infill in all layers. Because `meshy` displays geometry with unshaded lines, this tends to show nothing particularly interesting.
 
 ## Layer Settings, Raft, G-code
 
