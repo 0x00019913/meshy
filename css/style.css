@@ -4,10 +4,16 @@ body, html {
   overflow: hidden;
 }
 
-p {
+p, #intro li {
   font-family: 'Oxygen', sans-serif;
   font-size: 13px;
   color: #dddddd;
+}
+
+h3 {
+  font-family: 'Oxygen', sans-serif;
+  font-size: 15px;
+  color: #eeeeee;
 }
 
 a {
@@ -95,7 +101,7 @@ a {
   left: 50%;
   margin-left: -350px;
   background-color: rgba(0, 0, 0, .4);
-  padding: 0 30px;
+  padding: 30px 30px;
   width: 640px;
   height: 100%;
   overflow-y: auto;
