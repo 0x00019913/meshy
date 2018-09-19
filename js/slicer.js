@@ -1367,7 +1367,7 @@ Layer.prototype.computeInfill = function() {
   var connectLines = this.params.infillConnectLines;
 
   // if grid infill and density is too high, use solid infill instead
-  if (type === Slicer.InfillTypes.grid && density > 0.5) {
+  if (type === Slicer.InfillTypes.grid && density >= 1.0) {
     type = Slicer.InfillTypes.solid;
   }
 
