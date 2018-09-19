@@ -430,7 +430,9 @@ Meshy.prototype.exportSTL = function() { this.export("stl"); }
 Meshy.prototype.exportSTLascii = function() { this.export("stlascii"); }
 
 Meshy.prototype.undo = function() {
-  this.endSliceMode();
+  // if slice mode is on, do nothing
+  if (this.sliceModeOn) return;
+
   this.gizmo.transformFinish();
 
   try {
@@ -443,7 +445,9 @@ Meshy.prototype.undo = function() {
   this.infoBox.update();
 }
 Meshy.prototype.redo = function() {
-  this.endSliceMode();
+  // if slice mode is on, do nothing
+  if (this.sliceModeOn) return;
+  
   this.gizmo.transformFinish();
 
   try {
@@ -1774,7 +1778,7 @@ Meshy.prototype.initViewport = function() {
     if (document.activeElement.nodeName.toLowerCase() === "input") {
       // esc blurs the current text field
       if (e.keyCode === 27) document.activeElement.blur();
-      
+
       return;
     }
 
