@@ -1,6 +1,6 @@
-# Documentation:
+# `meshy`
 
-`Meshy` is my browser-based tool for performing measurements, transformations, visualizations, repair, and slicing on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
+`meshy` is my browser-based tool for performing measurements, transformations, visualizations, repair, and slicing on polygonal meshes, intended to make life easier for 3D printing folks. This post presents a comprehensive guide to all current features of the tool.
 
 > Everything is under development: slicer improvements and additional features (better G-code exporter, more infill types), a better repair algorithm, UI improvements, more import formats.
 
@@ -55,7 +55,7 @@ Regarding world space vs. object space: scaling occurs in object space, so the s
 
 Supported file formats are OBJ and STL (binary and ASCII). There appears to be a rough upper limit of 50-80MB on the upload size, which is in the neighborhood of what you'd use for 3D printing. I've been able to load meshes with around 1-2 million polygons. It depends on your browser and computer. If the page hangs, the file's too big.
 
-`Meshy` uses Three.js importers.
+`meshy` uses Three.js importers.
 
 # Import Settings
 
@@ -71,7 +71,9 @@ If checked, automatically center the mesh and floor it to the build plate.
 
 The user can specify a filename and export as either OBJ or STL (`exportSTL` exports as binary STL, `exportSTLascii` exports as ASCII STL).
 
-OBJ files will export a list of vertices and a list of triangles. Quads are not preserved; neither are normals nor UVs. None of these are typically required for 3D printing. I may change this in the future.
+## Export units
+
+Units of the export mesh: the world-space millimeter coords are scaled to match the export units.
 
 # Settings
 
@@ -149,7 +151,7 @@ This folder uses Euler angles in XYZ order relative to the mesh's original posit
 
 ## Scale
 
-Scaling is performed with respect to the current mesh position. Scaling happens before rotation. `Meshy` has the following modes of scaling:
+Scaling is performed with respect to the current mesh position. Scaling happens before rotation. `meshy` has the following modes of scaling:
 
 ### Scale by factor
 
@@ -196,7 +198,7 @@ Measurement is performed thusly:
 * once the necessary number of markers has been placed, the result of the measurement shows up in the infobox
 * placing more markers performs the measurement again, replacing old markers on a FIFO (first in, first out) basis
 
-`Meshy` has the following modes of measurement:
+`meshy` has the following modes of measurement:
 
 ## Length
 
@@ -233,23 +235,255 @@ Possible alternatives to this method, which I may implement eventually:
 1. use the full SDF (30 rays in a 120-degree cone) over a randomly picked set of faces, then interpolate the SDF over the remaining surface, and
 2. remesh the model to a much lower resolution such that the polygon distribution is more or less even (presumably via the octree) and details are preserved, then do the full SDF over the new model's faces; this seems to vaguely describe Shapeways's internal algorithm and makes a lot of sense to me.
 
-# IT'S LATE AT THE TIME OF WRITING, SO EVERYTHING FROM HERE ON IS TODO
+# Repair
 
-# Repair (beta)
+Patches holes surrounded by loops of edges that each border one triangle. This is not undoable.
 
-Patches holes surrounded by loops of edges that each border one triangle. First, generate the patch with `generatePatch`, which will fill in holes with preview (green) geometry. Then either accept it to integrate it into the model or cancel the patch. This is not undoable.
-
-This algorithm is new and may throw errors (or just fail to patch something). Do let me know via email (0x00019913@gmail.com) or <a href="https://github.com/0x00019913/meshy">on the repo</a> and send me the model in question.
+This algorithm may throw errors (or just fail to patch something). Do let me know via email (0x00019913@gmail.com) or <a href="https://github.com/0x00019913/meshy">on the repo</a> and send me the model in question.
 
 For a broad overview of how it works, see "A robust hole-filling algorithm for triangular mesh", Zhao, Gao, Lin, 2007.
 
-# Slice
+TODO: improve the algorithm. One potential improvement would be to skip the incremental outside-in filling method and instead just connect triangles to fill the hole minimally. Also, use a half-edge data structure instead of an adjacency map.
 
-At the time of writing, the slicing functionality is rudimentary - the mesh is sliced along one particular plane, with everything above the plane hidden. TODO in the very near future: triangulate the hole and make slices over the entire mesh, exporting them as G-code.
+# Supports & Slicing
+
+Three basic parameters are relevant to both:
+
+## Layer height
+
+Height of one slice of the mesh in millimeters.
+
+## Line width
+
+Width of the print line in millimeters. Determines the minimal resolvable feature size and the rate of material extrusion.
+
+## Up axis
+
+Support generation and slicing can be performed on any axis, though the default is `z` and should probably be kept this way.
+
+## Supports
+
+Generate tree supports that attach to the mesh and the floor. Rotating or scaling the mesh removes the supports.
+
+This is a modified implementation of "Clever Support: Efficient Support Structure Generation for Digital Fabrication" by J. Vanek, J. A. G. Galicia, B. Benes. The main difference is that I don't use the GPU to get the closest mesh connection point, instead using raycasting to detect conflicts and cheaper alternatives to those determined by the algorithm.
+
+The supports themselves are built as a binary tree of contiguously joined cylindrical struts. Their thickness changes based on the volume they support to provide greater stability. The supports taper as they connect to the mesh to facilitate removal.
+
+The following parameters are passed to the generator:
+
+### Angle
+
+Angle range in degrees that determines the set of faces that need support: if the angle between the down axis and a face's normal is less than this angle, it needs supports.
+
+### Spacing factor
+
+Determines the spatial frequency of the supports. Having fewer supports saves material; having more supports makes them harder to remove and possibly results in insufficiently supported areas.
+
+### Radius
+
+Base radius of the supports. This radius grows for struts that support more weight.
+
+### Taper factor
+
+Struts taper when connecting to the mesh to facilitate removal. The radius at the end is the strut's computed radius multiplied by this factor. Meshy produces a warning if the resulting radius is smaller than the minimum resolvable feature size, in which case parts of the supports may be omitted in slicing.
+
+### Subdivs
+
+Number of angular steps in every cylindrical strut. A higher subdiv number yields smoother struts.
+
+### Radius function
+
+Determines how strut radius increases based on the approximate volume of supports supported by a particular strut. The function can be `constant` or `sqrt`.
+
+The mass of the supports above a particular strut will be about proportional to their volume, which should be approximately proportional to their total length (assuming there isn't *too* much variation in radius). A particular support should presumably have cross-sectional area proportional to the volume supported, which goes as the square of the radius. So the radius should vary as the square root of the area, which varies as the total volume supported.
+
+The radius is calculated as `r + k * sqrt(w)`, where `r` is the base radius, `k` is an adjustable constant, and `w` is the "weight" of the supported struts (approximated as the total length). This asymptotically behaves as the square root but doesn't make the radius 0 at support "leaves".
+
+### Function constant
+
+The `k` term as described above. Increase to increase support radius.
+
+### Generate supports
+
+Removes any supports present and generates new supports based on the given params.
+
+### Remove supports
+
+Remove any supports present.
+
+## Slice
+
+The basic slicing procedure follows the paper "An Optimal Algorithm for 3D Triangle Mesh Slicing" by Rodrigo Minetto, Neri Volpato, Jorge Stolfi, Rodrigo M. M. H. Gregori, and Murilo V. G. da Silva. The mesh is sliced into layers of uniform height (possible TODO: adaptive layer height?), with the layer height given by the `Supports & Slicing -> Layer height` controller.
+
+Once the mesh has been sliced, the user can examine any layer, adjust slicing parameters, and export the resulting G-code.
+
+The boolean operations used by the slicer are a generalized implementation of the algorithm in "A new algorithm for computing Boolean operations on polygons" by Francisco Martinez, Antonio Jesus Rueda, and Francisco Ramon Feito.
+
+### Layer Settings
+
+Options affecting individual layers of the sliced mesh.
+
+#### Walls
+
+Number of walls or "shells" separating the exterior from the interior. The width of each wall is equal to the line width, and the centerline of the outermost wall is inset by half a line width so that the print isn't inflated by half that much.
+
+#### Top layers
+
+The interior delimited by the walls is filled with infill. If the infill is non-solid, some parts of a given layer may need to be solid nonetheless because some contour within the `t` layers above or the `t` layers below is exposed to the air. The slicer looks at the surrounding `2t` layers to determine which parts of the contour need to be solid; this value is `t`.
+
+This is only relevant if using sparse (i.e., non-solid) infill.
+
+#### Optimize top layers
+
+A shortcut that simplifies computation of top layers at a small cost in accuracy. Given the current layer `0`, the `t` layers above `[1, t]`, and the `t` layers below `[-t, -1]`, consider a particular point `p` inside layer `0`. The point will need to have solid infill if it is not in any of the surrounding `2t` layers. However, because variation in the mesh will be approximately monotonic on the spatial scales in question, the conflict will typically arise in either the adjacent layer or the farthest layer, and the intermediate layers can be discarded with minimal risk. So we'll only consider the current layer `0` and layers `{-t, -1, 1, t}` if this box is checked.
+
+#### Infill type
+
+Possible options are `none`, `solid`, `grid`, and `lines`.
+
+* If we're using no infill, some parts of the mesh will still have to be solid so that flat regions aren't exposed to air.
+* Solid infill is self-explanatory.
+* Grid infill fills each layer with two sets of parallel lines orthogonal to each other.
+* Line infill fills each layer with parallel lines, whose direction alternates with layer index.
+
+TODO: implement at least hex infill and maybe others.
+
+#### Infill density
+
+The infill is printed as some set of parallel, periodically spaced segments. If infill density is `d` and the line width is `w`, the period of the parallel lines will be `w / d`. E.g., if `d = 0.1`, the centerlines of adjacent infill lines will be `10w` millimeters apart.
+
+Doesn't apply to solid infill because an infill density of `1` makes the infill solid anyway.
+
+#### Infill overlap
+
+Call this parameter `o` and line width `w`. With this, of each slice contour, the region available for infill ("infill contour") is the innermost wall inset inward by half a `(1 - o) * w`. So, if an infill line starts printing directly on this contour, its approximately circular end will overlap with the innermost wall by `o` times the line width.
+
+This visibly affects the adhesion of solid top layers to the walls.
+
+### Raft
+
+The raft is composed of some number of raft base layers (thick, wide, widely spaced layers that go directly on the build plate) and raft top layers (relatively fine layers on top of the base layers).
+
+#### Make raft
+
+Uncheck this to skip making the raft and print directly on the build plate.
+
+#### Raft base layers, height, width, density
+
+The default is 1 raft base layer, higher and printed with a larger line width than the main line width. Base layers are printed less densely than other layers so that they don't adhere too strongly to the build plate.
+
+#### Raft top layers, height, width, density
+
+The default is 3 raft top layers, printed more finely and quickly than the base layers. The default is that they're printed as solid infill.
+
+#### Offset
+
+How far the lowest slice of the mesh should be inflated outward. The resulting contour forms the outline of the raft.
+
+#### Air gap
+
+A small gap between the highest point of the topmost raft top layer and the lowest point of the bottommost model layer. Default is half a line height. Makes it easier to detach the model from the raft.
+
+#### Print perimeter
+
+If checked, print walls surrounding the infill of which the raft is composed.
+
+### G-code
+
+Once the mesh is sliced, the user can export the G-code that prints it.
+
+#### Filename, extension
+
+The filename defaults to the name of the imported file. At the time of writing, `meshy` only allows the `gcode` file extension.
+
+#### Temperature
+
+The extruder is required to reach this temperature before printing starts.
+
+#### Filament diameter
+
+Given in millimeters. Determines the extrusion rate.
+
+#### Prime extrusion
+
+How much to extrude (mm) for the priming sequence.
+
+#### Extrusion multiplier
+
+Can be used to tweak under- or over-extrusion. Directly multiplies the computed extrusion values. Defaults to `1.0`.
+
+#### Infill, wall speed
+
+Speed (mm/s) at which the infill/walls are printed.
+
+#### Raft base/top speed
+
+Speed (mm/s) at which the raft base/top layers are printed.
+
+#### Travel speed
+
+Speed (mm/s) at which the extruder travels while not printing. This can be much higher than printing speed because there's no accuracy lost here.
+
+Corresponds to the G-code `G0` command, while printing corresponds to the `G1` command.
+
+#### Coord precision
+
+Number of decimal places for writing spatial coordinates.
+
+#### Extruder precision
+
+Number of decimal places for writing extruder values. The differences in neighboring extrusion values tend to be fairly small, so a higher precision is required here than for spatial coords.
+
+## Slice mode on
+
+When slice mode is activated, the `Supports & Slicing` folder is replaced with the new slice folder since supports can't be generated while slice mode is on.
+
+# Support & Slicing (slice mode on)
+
+When slice mode is on, slicing-specific options appear while support controls are removed.
+
+## Slice
+
+Use this slider to set the current slice index. Indices `[0, n]` form the main mesh; indices below `0` form the raft.
+
+## Mode
+
+Two modes are available:
+
+* Preview mode: slices off the mesh above the current level and displays the print contours in the slice plane.
+* Full mode: displays all layers simultaneously. Requires calculation of all layers at once, so may be quite expensive.
+
+## Display
+
+If preview mode:
+
+### Show sliced mesh
+
+If checked, the mesh is actually sliced above the current slice level. If not checked, a ghost of the mesh is shown.
+
+If full mode:
+
+### Up to layer
+
+If checked, only show all layers below and including the current layer. The `Slice` controller will determine the current layer. If not checked, `meshy` will show all layers simultaneously and the `Slice` controller will do nothing.
+
+### Show infill
+
+Show the infill in all layers. Because `meshy` displays geometry with unshaded lines, this tends to not be a useful option to have on.
+
+## Layer Settings, Raft, G-code
+
+The same options are available here as when slice mode is off. The `Layer Settings` and `Raft` folders have an `Apply` button - use this to apply any updated parameters.
+
+The `G-code` folder has a `Save G-code` button that generates and downloads a G-code file.
+
+## Slice mode off
+
+Turns off slice mode and returns support generation options.
 
 # Undo
 
-*Only the actions under the Transform folder are undoable.* This is because 1. the memory limitations of the typical browser make a more robust undo stack not generally feasible and 2. the sequence of actions performed in `meshy` would, by and large, be minimal and easily replicated in case of a faux pas.
+*Only the actions under the Edit folder and via the gizmo are undoable.* This is because 1. the memory limitations of the typical browser make a more robust undo stack not generally feasible and 2. the sequence of actions performed in `meshy` would, by and large, be minimal and easily replicated in case of a faux pas.
 
 `ctrl+Z` triggers the undo.
 
@@ -259,4 +493,4 @@ At the time of writing, the slicing functionality is rudimentary - the mesh is s
 
 # Delete
 
-This action is not undoable. It removes all geometry data from the current state, allowing the user to import another mesh.
+This action is not undoable. It removes all mesh data from the current state, allowing the user to import another mesh.
