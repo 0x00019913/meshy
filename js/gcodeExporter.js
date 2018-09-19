@@ -189,11 +189,6 @@ var GcodeExporter = (function() {
   }
 
   GcodeExporter.prototype.saveToFile = function() {
-    if (0) {
-      console.log(this.gcode);
-      return;
-    }
-
     var blob = new Blob([this.gcode], { type: 'text/plain' });
     var fname = this.filename + "." + this.extension;
 
