@@ -126,9 +126,15 @@ var Calculate = (function() {
     vb = vb || new Vector3();
     vc = vc || new Vector3();
 
-    va.copy(vertices[face.a]).applyMatrix4(matrix);
-    vb.copy(vertices[face.b]).applyMatrix4(matrix);
-    vc.copy(vertices[face.c]).applyMatrix4(matrix);
+    va.copy(vertices[face.a]);
+    vb.copy(vertices[face.b]);
+    vc.copy(vertices[face.c]);
+
+    if (matrix !== undefined) {
+      va.applyMatrix4(matrix);
+      vb.applyMatrix4(matrix);
+      vc.applyMatrix4(matrix);
+    }
 
     return [va, vb, vc];
   }
