@@ -66,7 +66,7 @@ var SupportGenerator = (function() {
 
     // angle in radians
     var angle = (90 - angleDegrees) * Math.PI / 180;
-    var minHeight = boundingBox.min[axis];
+    var minHeight = 0;
     var resolution = resolution;
     var minSupportLength = 3 * radius;
 
