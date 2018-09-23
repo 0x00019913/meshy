@@ -120,7 +120,7 @@ Model.prototype.generateMaterials = function() {
       color: 0x666666,
       linewidth: 1
     }),
-    slicePreviewMeshVisible: new THREE.MeshStandardMaterial({
+    slicePreviewMesh: new THREE.MeshStandardMaterial({
       side: THREE.DoubleSide,
       color: 0x0f0f30,
       roughness: 0.8,
@@ -128,10 +128,6 @@ Model.prototype.generateMaterials = function() {
       polygonOffset: true,
       polygonOffsetFactor: 1,
       polygonOffsetUnits: 1
-    }),
-    slicePreviewMeshTransparent: new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0
     }),
     slicePreviewMeshGhost: new THREE.MeshStandardMaterial({
       color: 0x0f0f30,
@@ -633,18 +629,7 @@ Model.prototype.updateSliceMeshesInScene = function() {
 
   if (this.slicer.mode === Slicer.Modes.preview) {
     if (this.slicer.previewSliceMesh) {
-      var slicedMeshGeo = new THREE.Geometry();
-      
-      if (geos.slicedMesh.geo.faces.length === 0) this.slicePreviewSlicedMesh.visible = false;
-      else {
-        this.slicePreviewSlicedMesh.visible = true;
-        slicedMeshGeo.vertices = geos.slicedMesh.geo.vertices;
-        slicedMeshGeo.faces = geos.slicedMesh.geo.faces;
-        this.slicePreviewSlicedMesh.geometry = slicedMeshGeo;
-
-        this.slicePreviewSlicedMesh.geometry.verticesNeedUpdate = true;
-        this.slicePreviewSlicedMesh.geometry.elementsNeedUpdate = true;
-      }
+      this.slicePreviewSlicedMesh.visible = true;
     }
   }
   else if (this.slicer.mode === Slicer.Modes.full) {
@@ -693,11 +678,10 @@ Model.prototype.makeSliceMeshes = function() {
   mesh.name = "slice";
   this.sliceAllContourMesh = mesh;
 
-  // make mesh for sliced geometry - supports two material indices for making
-  // faces visible and invisible
+  // make mesh for sliced geometry
   mesh = new THREE.Mesh(
     geos.slicedMesh.geo,
-    [this.materials.slicePreviewMeshVisible, this.materials.slicePreviewMeshTransparent]
+    this.materials.slicePreviewMesh
   );
   mesh.name = "slice";
   this.slicePreviewSlicedMesh = mesh;

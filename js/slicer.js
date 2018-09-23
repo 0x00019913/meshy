@@ -521,100 +521,63 @@ Slicer.prototype.setLevel = function(level) {
     var slicePos = this.getLevelPos(level);
     var faceBoundsArray = this.faceBoundsArray;
 
-    // current vertices and faces
-    var vertices = geos.slicedMesh.geo.vertices;
-    var faces = geos.slicedMesh.geo.faces;
+    var vertices = this.sourceGeo.vertices;
 
     // local vars for ease of access
     var vertexCount = this.sourceVertexCount;
     var faceCount = this.sourceFaceCount;
 
-    // erase any sliced verts and faces
-    vertices.length = vertexCount;
-    faces.length = 0;
-
     if (this.previewSliceMesh) {
-      // current vertex
-      var vidx = vertexCount;
-      var fidx = 0;
+      var position = geos.slicedMesh.geo.attributes.position;
+      var normal = geos.slicedMesh.geo.attributes.normal;
 
-      // array of faces that intersect the slicing plane
-      var slicedFaces = [];
+      var idx = 0;
 
-      for (var i = this.sourceFaceCount - 1; i >= 0; i--) {
-        var bounds = faceBoundsArray[i];
+      for (var f = 0, l = this.faceBoundsArray.length; f < l; f++) {
+        var bounds = faceBoundsArray[f];
         var face = bounds.face;
 
+        // if the face is entirely below the slicing plane, include it whole
         if (bounds.max < slicePos) {
-          faces.push(face);
+          var verts = Calculate.faceVertices(face, vertices);
+
+          for (var v = 0; v < 3; v++) {
+            position.setX(idx, verts[v].x);
+            position.setY(idx, verts[v].y);
+            position.setZ(idx, verts[v].z);
+
+            normal.setX(idx, face.normal.x);
+            normal.setY(idx, face.normal.y);
+            normal.setZ(idx, face.normal.z);
+
+            idx += 1;
+          }
         }
+        // else, if the face intersects the slicing plane, include one or two
+        // faces from slicing the face
         else if (bounds.min < slicePos) {
-          slicedFaces.push(face);
+          this.sliceFace(face, vertices, slicePos, axis, function(n, contour, A, B, C) {
+            var verts = [A, B, C];
+
+            for (var v = 0; v < 3; v++) {
+              position.setX(idx, verts[v].x);
+              position.setY(idx, verts[v].y);
+              position.setZ(idx, verts[v].z);
+
+              normal.setX(idx, n.x);
+              normal.setY(idx, n.y);
+              normal.setZ(idx, n.z);
+
+              idx += 1;
+            }
+          });
         }
       }
 
-      // handle the sliced faces: slice them and insert them (and associated verts)
-      // into sliced mesh
+      position.needsUpdate = true;
+      normal.needsUpdate = true;
 
-      // slice the faces
-      for (var f = 0; f < slicedFaces.length; f++) {
-        var slicedFace = slicedFaces[f];
-
-        this.sliceFace(slicedFace, vertices, slicePos, axis, function(normal, ccw, A, B, C, D) {
-          if (D === undefined) {
-            var idxA = vidx;
-            var idxB = idxA + 1;
-            var idxC = idxA + 2;
-            vertices.push(A);
-            vertices.push(B);
-            vertices.push(C);
-            vidx += 3;
-
-            var newFace;
-            if (ccw) newFace = new THREE.Face3(idxA, idxB, idxC);
-            else newFace = new THREE.Face3(idxB, idxA, idxC);
-
-            newFace.normal.copy(slicedFace.normal);
-
-            // explicitly visible
-            newFace.materialIndex = 0;
-
-            //faces[fidx++] = newFace;
-            faces.push(newFace);
-          }
-          else {
-            var idxA = vidx;
-            var idxB = idxA + 1;
-            var idxC = idxA + 2;
-            var idxD = idxA + 3;
-            vertices.push(A);
-            vertices.push(B);
-            vertices.push(C);
-            vertices.push(D);
-            vidx += 4;
-
-            // create the new faces and push it into the faces array
-            var newFace1, newFace2;
-            if (ccw) {
-              newFace1 = new THREE.Face3(idxA, idxB, idxC);
-              newFace2 = new THREE.Face3(idxC, idxB, idxD);
-            }
-            else {
-              newFace1 = new THREE.Face3(idxB, idxA, idxC);
-              newFace2 = new THREE.Face3(idxB, idxC, idxD);
-            }
-            newFace1.normal.copy(slicedFace.normal);
-            newFace2.normal.copy(slicedFace.normal);
-
-            // explicitly visible
-            newFace1.materialIndex = 0;
-            newFace2.materialIndex = 0;
-
-            faces.push(newFace1);
-            faces.push(newFace2);
-          }
-        });
-      }
+      geos.slicedMesh.geo.setDrawRange(0, idx);
     }
   }
   else if (this.mode === Slicer.Modes.full) {
@@ -658,6 +621,47 @@ Slicer.prototype.makeGeometry = function() {
   };
 
   var geoSlicedMesh = geos.slicedMesh.geo;
+
+  if (1) {
+    geos.slicedMesh.geo = new THREE.BufferGeometry();
+
+    // factor of 2 because each face may be sliced into two faces, so we need
+    // to reserve twice the space
+    var position = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
+    var normal = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
+
+    var positionAttr = new THREE.BufferAttribute(position, 3);
+    var normalAttr = new THREE.BufferAttribute(normal, 3);
+
+    geos.slicedMesh.geo.addAttribute('position', positionAttr);
+    geos.slicedMesh.geo.addAttribute('normal', normalAttr);
+
+    return;
+
+    var vertices = this.sourceGeo.vertices;
+    var faces = this.sourceGeo.faces;
+
+    for (var f = 0; f < faces.length; f++) {
+      var face = faces[f];
+
+      var vs = [vertices[face.a], vertices[face.b], vertices[face.c]];
+
+      for (var v = 0; v < 3; v++) {
+        positionAttr.setX(f*3 + v, vs[v].x);
+        positionAttr.setY(f*3 + v, vs[v].y);
+        positionAttr.setZ(f*3 + v, vs[v].z);
+
+        normalAttr.setX(f*3 + v, face.normal.x);
+        normalAttr.setY(f*3 + v, face.normal.y);
+        normalAttr.setZ(f*3 + v, face.normal.z);
+      }
+    }
+
+    geoSlicedMesh.setDrawRange(0, this.sourceGeo.faces.length * 3);
+
+    return;
+  }
+
   var vertices = this.sourceGeo.vertices;
   var faces = [];
   geoSlicedMesh.vertices = vertices;
@@ -839,7 +843,9 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 
       if (bounds.max < slicePos) sweepSet.delete(idx);
       else {
-        this.sliceFace(bounds.face, vertices, slicePos, axis, function(normal, ccw, A, B) {
+        this.sliceFace(bounds.face, vertices, slicePos, axis, function(normal, contour, A, B) {
+          if (!contour) return;
+
           var segment = new MCG.Segment(context);
           segment.fromVector3Pair(A, B, normal);
           segmentSet.add(segment);
@@ -856,13 +862,11 @@ Slicer.prototype.buildLayerSegmentSets = function() {
 // slice a face at the given level and then call the callback
 // callback arguments:
 //  normal: face normal
-//  ccw: used for winding the resulting verts
-//  A, B, C, D: A and B are the sliced verts, the others are from the original
-//    geometry (if sliced into one triangle, D will be undefined);
-//    if ccw, the triangles are ABC and CBD, else BAC and BCD
+//  contour: true if first two points border the slice plane
+//  P, Q, R: three CCW-wound points forming a triangle
 Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
   // in the following, A is the bottom vert, B is the middle vert, and XY
-  // are the points there the triangle intersects the X-Y segment
+  // are the points where the triangle intersects the X-Y segment
 
   var normal = face.normal;
 
@@ -877,7 +881,8 @@ Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
     var AB = segmentPlaneIntersection(axis, level, A, B);
     var AC = segmentPlaneIntersection(axis, level, A, C);
 
-    callback(normal, ccw, AB, AC, A);
+    if (ccw) callback(normal, true, AB, AC, A);
+    else callback(normal, true, AC, AB, A);
   }
   // else, slice into two triangles: A-B-AC and B-BC-AC
   else {
@@ -885,7 +890,30 @@ Slicer.prototype.sliceFace = function(face, vertices, level, axis, callback) {
     var AC = segmentPlaneIntersection(axis, level, A, C);
     var BC = segmentPlaneIntersection(axis, level, B, C);
 
-    callback(normal, ccw, BC, AC, B, A);
+    if (ccw) {
+      callback(normal, false, A, B, AC);
+      callback(normal, true, BC, AC, B);
+    }
+    else {
+      callback(normal, false, B, A, AC);
+      callback(normal, true, AC, BC, B);
+    }
+  }
+
+  // intersection between line segment and plane normal to axis
+  function segmentPlaneIntersection(axis, level, va, vb) {
+    if (axis === undefined) axis = 'z';
+
+    // if equal, just return va
+    if (va[axis] === vb[axis]) return va;
+
+    // calculate linear interpolation factor; note that, as checked above, the
+    // denominator will be positive
+    var t = (level - va[axis]) / (vb[axis] - va[axis]);
+    // difference vector
+    var d = vb.clone().sub(va);
+    // interpolate
+    return va.clone().addScaledVector(d, t);
   }
 }
 
