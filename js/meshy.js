@@ -216,9 +216,9 @@ Meshy.prototype.generateUI = function() {
   this.supportSliceFolder = this.gui.addFolder("Supports & Slicing",
     "Generate supports, slice the mesh, and export the resulting G-code.");
   this.supportAngle = 45;
-  this.supportSpacingFactor = 6;
-  this.supportRadius = this.lineWidth * 2;
-  this.supportTaperFactor = 0.5;
+  this.supportSpacingFactor = 24;
+  this.supportRadius = this.lineWidth * 4;
+  this.supportTaperFactor = 0.25;
   this.supportSubdivs = 16;
   // can't set support radius fn directly from dat.gui because it returns the
   // function stringified, so just set fn name and then convert it to the fn
@@ -447,7 +447,7 @@ Meshy.prototype.undo = function() {
 Meshy.prototype.redo = function() {
   // if slice mode is on, do nothing
   if (this.sliceModeOn) return;
-  
+
   this.gizmo.transformFinish();
 
   try {
