@@ -101,9 +101,7 @@ var Gizmo = (function() {
     this.transformType = Gizmo.HandleTypes.none;
     this.transformAxis = "";
     this.transformStart = null;
-
-    this.ctrlKey = false;
-    this.shiftKey = false;
+    this.transformStartCoords = null;
 
     // each group contains the handles of a particular type so that they can be
     // transformed together
@@ -437,18 +435,14 @@ var Gizmo = (function() {
       }
 
       this.raycaster.setFromCamera(pointer.coords, this.camera);
-      this.ctrlKey = pointer.ctrlKey;
-      this.shiftKey = pointer.shiftKey;
 
       // if currently active transform
       if (this.transformType !== Gizmo.HandleTypes.none && this.transformAxis !== "") {
-        this.transformmove();
+        this.transformmove(pointer);
       }
       // no currently active transform, so handle handle mouseover
       else {
-        var raycaster = this.raycaster;
-
-        var intersections = raycaster.intersectObjects(this.colliders, true);
+        var intersections = this.raycaster.intersectObjects(this.colliders, true);
 
         // intersecting some collider - the intersections are sorted by
         // distance, but the first one or more may be disabled, so find the
@@ -481,7 +475,6 @@ var Gizmo = (function() {
           this.deactivateHandle();
         }
       }
-
     },
 
     mousedown: function(pointer) {
@@ -492,7 +485,7 @@ var Gizmo = (function() {
       if (handle !== null) {
         if (this.params.onTransform) this.params.onTransform();
 
-        var handleData = handle.userData
+        var handleData = handle.userData;
         var type = handleData.type;
         var axis = handleData.axis;
 
@@ -508,6 +501,8 @@ var Gizmo = (function() {
         else if (type === Gizmo.HandleTypes.scale) {
           this.transformStart = this.params.getScale().clone();
         }
+
+        this.transformStartCoords = pointer.coords;
       }
     },
 
@@ -518,7 +513,7 @@ var Gizmo = (function() {
     },
 
     // with a transform currently active, handles the effect of a mouse move
-    transformmove: function() {
+    transformmove: function(pointer) {
       if (this.activePoint === null) return;
 
       var type = this.transformType;
@@ -535,7 +530,7 @@ var Gizmo = (function() {
         // if translating but one axis is disabled, set normal to that axis;
         // else, just use the default normal
         var normal = new THREE.Vector3();
-        if (type === Gizmo.HandleTypes.translate && axis === "o") {
+        if (type === Gizmo.HandleTypes.translate) {
           if (!this.handleEnabled(type, "x")) normal.set(1, 0, 0);
           else if (!this.handleEnabled(type, "y")) normal.set(0, 1, 0);
           else if (!this.handleEnabled(type, "z")) normal.set(0, 0, 1);
@@ -548,10 +543,8 @@ var Gizmo = (function() {
         this.raycaster.ray.intersectPlane(plane, cursor);
 
         if (cursor) {
-          var d = cursor.clone().sub(this.position);
-
           var v0 = this.activePoint.clone().sub(this.position).normalize();
-          var v1 = d.clone().normalize();
+          var v1 = cursor.clone().sub(this.position).normalize();
 
           // handle rotation, normal or orthogonal
           if (type === Gizmo.HandleTypes.rotate) {
@@ -562,7 +555,7 @@ var Gizmo = (function() {
 
             // if ctrl is pressed, round the angle to 15 degrees
             var c = 180.0 / Math.PI;
-            if (this.ctrlKey) angle = Math.round(angle * c / 15) * 15 / c;
+            if (pointer.ctrlKey) angle = Math.round(angle * c / 15) * 15 / c;
 
             // get initial quaternion, rotate it by the angle, set euler from
             // the quaternion
@@ -575,13 +568,14 @@ var Gizmo = (function() {
             this.params.onRotate();
           }
           else if (type === Gizmo.HandleTypes.scale) {
-            var right = this.up.clone().cross(normal);
-            var up = normal.clone().cross(right).normalize();
+            // difference in vertical screen-space coords
+            var coordDelta = pointer.coords.y - this.transformStartCoords.y;
 
-            var factor = Math.exp(d.dot(up) / this.params.scaleHandleOffset);
+            // factor of 20 empirically determined
+            var factor = Math.exp(4.0 * coordDelta);
 
             // if ctrl key, round factor to powers of 2
-            if (this.ctrlKey) factor = roundToPowerOf2(factor);
+            if (pointer.ctrlKey) factor = roundToPowerOf2(factor);
 
             var scale = this.transformStart.clone().multiplyScalar(factor);
             this.params.setScale(scale);
@@ -591,7 +585,7 @@ var Gizmo = (function() {
             var shift = cursor.clone().sub(this.activePoint);
 
             // if ctrl key, snap to integer values
-            if (this.ctrlKey) shift.round();
+            if (pointer.ctrlKey) shift.round();
 
             this.params.setPosition(this.transformStart.clone().add(shift));
             this.params.onTranslate();
@@ -622,7 +616,7 @@ var Gizmo = (function() {
 
         if (type === Gizmo.HandleTypes.translate) {
           // if ctrl key, snap to integer values
-          if (this.ctrlKey) shift.round();
+          if (pointer.ctrlKey) shift.round();
 
           this.params.setPosition(this.transformStart.clone().add(shift));
           this.params.onTranslate();
@@ -635,7 +629,7 @@ var Gizmo = (function() {
           if (factor <= 0) factor = 1;
 
           // if ctrl key, round factor to powers of 2
-          if (this.ctrlKey) factor = roundToPowerOf2(factor);
+          if (pointer.ctrlKey) factor = roundToPowerOf2(factor);
 
           scale[axis] *= factor;
           this.params.setScale(scale);
@@ -670,6 +664,7 @@ var Gizmo = (function() {
       this.transformType = Gizmo.HandleTypes.none;
       this.transformAxis = "";
       this.transformStart = null;
+      this.transformStartCoords = null;
 
       if (this.params.onFinishTransform) this.params.onFinishTransform();
     },
