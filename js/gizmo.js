@@ -571,7 +571,7 @@ var Gizmo = (function() {
             // difference in vertical screen-space coords
             var coordDelta = pointer.coords.y - this.transformStartCoords.y;
 
-            // factor of 20 empirically determined
+            // factor of 4.0 empirically determined
             var factor = Math.exp(4.0 * coordDelta);
 
             // if ctrl key, round factor to powers of 2
