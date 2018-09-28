@@ -47,6 +47,8 @@ The gizmo can scale, rotate, and translate the mesh. The colored handles indicat
 * the white chevrons translate in the viewing plane, though the mesh will be constrained to make contact with the build plate if the `Edit -> Snap to floor` box is checked
 * the white sphere scales uniformly
 
+![gizmo](0x00019913.github.com/meshy/img/screenshots/gizmo.png)
+
 `ctrl` will force transformations to happen in increments (15 degrees for rotations, 1 unit for translations, powers of 2 for scaling).
 
 Regarding world space vs. object space: scaling occurs in object space, so the scaling handles will rotate to match the object-space axes. General scaling in world space is disallowed. The rotation handles, however, will not rotate to facilitate intuitive rotation on world axes.
