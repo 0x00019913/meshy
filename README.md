@@ -39,6 +39,8 @@ The printout area next to the axis widget indicates status changes, events, and 
 
 # Gizmo
 
+![gizmo](/img/screenshots/gizmo.png)
+
 The gizmo is anchored at the current position of the mesh. Toggle its visibility with `g`.
 
 The gizmo can scale, rotate, and translate the mesh. The colored handles indicate axis-oriented transformations; the white handles indicate transformation in the viewing plane:
@@ -46,8 +48,6 @@ The gizmo can scale, rotate, and translate the mesh. The colored handles indicat
 * the white rotation handle rotates around a vector normal to the viewing plane
 * the white chevrons translate in the viewing plane, though the mesh will be constrained to make contact with the build plate if the `Edit -> Snap to floor` box is checked
 * the white sphere scales uniformly
-
-![gizmo](/img/screenshots/gizmo.png)
 
 `ctrl` will force transformations to happen in increments (15 degrees for rotations, 1 unit for translations, powers of 2 for scaling).
 
@@ -61,6 +61,8 @@ Supported file formats are OBJ and STL (binary and ASCII). There appears to be a
 
 # Import Settings
 
+![import](/img/screenshots/import_settings.png)
+
 ## Import units
 
 Common file formats don't specify units, while `meshy` uses millimeters as its internal units. Use this field to specify the units of one unit of length in the imported file, which will then be converted to millimeters.
@@ -71,6 +73,8 @@ If checked, automatically center the mesh and floor it to the build plate.
 
 # Export
 
+![export](/img/screenshots/export.png)
+
 The user can specify a filename and export as either OBJ or STL.
 
 ## Export units
@@ -78,6 +82,8 @@ The user can specify a filename and export as either OBJ or STL.
 Units of the export mesh: the world-space millimeter coords are scaled to match the export units.
 
 # Settings
+
+![settings](/img/screenshots/settings.png)
 
 ## Little endian
 
@@ -88,6 +94,8 @@ Affects how the exporter writes files.
 Generally determines the conversion factor between floating-point and fixed-point coordinates and specifies the number of digits in the float values exported in ASCII files.
 
 # Display
+
+![display](/img/screenshots/display.png)
 
 ## Display precision
 
@@ -127,6 +135,8 @@ The dimensions of the build volume in millimeters.
 
 # Edit
 
+![edit](/img/screenshots/edit.png)
+
 Functions that modify the mesh.
 
 ## Snap to floor
@@ -143,9 +153,13 @@ Automatically center the mesh and floor it to the build plate.
 
 ## Translate
 
+![translate](/img/screenshots/translate.png)
+
 Self-explanatory.
 
 ## Rotate
+
+![rotate](/img/screenshots/rotate.png)
 
 Values are given in degrees, normalized to the `[0, 360)` range. Rotations are performed before translations.
 
@@ -157,17 +171,25 @@ Scaling is performed with respect to the current mesh position. Scaling happens 
 
 ### Scale by factor
 
+![scale_by_factor](/img/screenshots/scale_by_factor.png)
+
 Scale the mesh by a given factor on the given axis.
 
 ### Scale to size
+
+![scale_to_size](/img/screenshots/scale_to_size.png)
 
 Scale the mesh uniformly such that it attains the correct size on the given axis.
 
 ### Scale to measurement
 
+![scale_to_measurement](/img/screenshots/scale_to_measurement.png)
+
 If a measurement is active, this folder will contain a selection box - use this to select one of the measured values. Change the value to scale the mesh such that the measurement now equals the given value.
 
 ### Scale to ring size
+
+![scale_to_ring_size](/img/screenshots/scale_to_ring_size.png)
 
 Start a circle measurement and mark a circle around the ring's inner periphery. Select a size and scale: `meshy` will scale the ring to have the correct inner diameter. The ring sizes and their respective measurements are given according to the US, Canada, and Mexico standard <a href="https://en.wikipedia.org/wiki/Ring_size">as specified on Wikipedia</a>.
 
@@ -177,21 +199,31 @@ I advise ending the circle measurement after scaling because the pointer code do
 
 ## Mirror
 
+![mirror](/img/screenshots/mirror.png)
+
 Mirror the mesh in object space.
 
 ## Floor
+
+![floor](/img/screenshots/floor.png)
 
 Translate the mesh along the given axis such that its lowest bound is at 0 on that axis.
 
 ## Center
 
+![center](/img/screenshots/center.png)
+
 Center the mesh in the current build volume.
 
 ## Flip normals
 
+![flip_normals](/img/screenshots/flip_normals.png)
+
 Self-explanatory.
 
 # Measurement
+
+![measurement](/img/screenshots/measurement.png)
 
 Measurement is performed thusly:
 
@@ -226,6 +258,8 @@ Takes 3 markers that denote a path around a particular part of the mesh. The 3 m
 
 # Mesh Thickness
 
+![mesh_thickness](/img/screenshots/mesh_thickness.png)
+
 Visualizes approximate mesh thickness below the specified threshold. This is done by casting a ray along each face's negative normal and measuring the distance it travels before hitting the inside of the mesh.
 
 Any part of the mesh that's below the threshold `t` is shown in red, interpolated linearly from full white to full red over the `[t, 0]` interval.
@@ -239,6 +273,8 @@ Possible alternatives to this method, which I may implement eventually:
 
 # Repair
 
+![repair](/img/screenshots/repair.png)
+
 Patches holes surrounded by loops of edges that each border one triangle. This is not undoable.
 
 This algorithm may throw errors (or just fail to patch something). Do let me know via email (0x00019913@gmail.com) or <a href="https://github.com/0x00019913/meshy">on the repo</a> and send me the model in question.
@@ -248,6 +284,8 @@ For a broad overview of how it works, see "A robust hole-filling algorithm for t
 TODO: improve the algorithm. One potential improvement would be to skip the incremental outside-in filling method and instead just connect triangles to fill the hole minimally. Also, use a half-edge data structure instead of an adjacency map.
 
 # Supports & Slicing
+
+![supports_slicing](/img/screenshots/supports_slicing.png)
 
 Three basic parameters are relevant to both:
 
@@ -264,6 +302,8 @@ Width of the print line in millimeters. Determines the minimal resolvable featur
 Support generation and slicing can be performed on any axis, though the default is `z` and should probably be kept this way.
 
 ## Supports
+
+![supports](/img/screenshots/supports.png)
 
 Generate tree supports that attach to the mesh and the floor. Rotating or scaling the mesh removes the supports.
 
@@ -315,6 +355,8 @@ Remove any supports present.
 
 ## Slice
 
+![slice](/img/screenshots/slice.png)
+
 The basic slicing procedure follows the paper "An Optimal Algorithm for 3D Triangle Mesh Slicing" by Rodrigo Minetto, Neri Volpato, Jorge Stolfi, Rodrigo M. M. H. Gregori, and Murilo V. G. da Silva. The mesh is sliced into layers of uniform height (possible TODO: adaptive layer height?), with the layer height given by the `Supports & Slicing -> Layer height` controller.
 
 Once the mesh has been sliced, the user can examine any layer, adjust slicing parameters, and export the resulting G-code.
@@ -322,6 +364,8 @@ Once the mesh has been sliced, the user can examine any layer, adjust slicing pa
 The boolean operations used by the slicer are a generalized implementation of the algorithm in "A new algorithm for computing Boolean operations on polygons" by Francisco Martinez, Antonio Jesus Rueda, and Francisco Ramon Feito.
 
 ### Layer Settings
+
+![layer_settings](/img/screenshots/layer_settings.png)
 
 Options affecting individual layers of the sliced mesh.
 
@@ -366,6 +410,8 @@ This visibly affects the adhesion of solid top layers to the walls.
 
 ### Raft
 
+![raft](/img/screenshots/raft.png)
+
 The raft is composed of some number of raft base layers (thick, wide, widely spaced layers that go directly on the build plate) and raft top layers (relatively fine layers on top of the base layers).
 
 #### Make raft
@@ -393,6 +439,8 @@ A small gap between the highest point of the topmost raft top layer and the lowe
 If checked, print walls surrounding the infill of which the raft is composed.
 
 ### G-code
+
+![gcode](/img/screenshots/gcode.png)
 
 Once the mesh is sliced, the user can export the G-code that prints it.
 
@@ -444,6 +492,8 @@ When slice mode is activated, the `Supports & Slicing` folder is replaced with t
 
 # Support & Slicing (slice mode on)
 
+![supports_slicing_on](/img/screenshots/supports_slicing_on.png)
+
 When slice mode is on, slicing-specific options appear while support controls are removed.
 
 ## Slice
@@ -458,6 +508,8 @@ Two modes are available:
 * Full mode: displays all layers simultaneously. Requires calculation of all layers at once, so may be quite expensive.
 
 ## Display
+
+![slice_display](/img/screenshots/slice_display.png)
 
 * If preview mode:
 
