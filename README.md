@@ -55,13 +55,15 @@ Regarding world space vs. object space: scaling occurs in object space, so the s
 
 # Import
 
+![import](/img/screenshots/import.png)
+
 Supported file formats are OBJ and STL (binary and ASCII). There appears to be a rough upper limit of 50-80MB on the upload size, which is in the neighborhood of what you'd use for 3D printing. I've been able to load meshes with around 1-2 million polygons. It depends on your browser and computer. If the page hangs, the file's too big.
 
 `meshy` uses Three.js importers.
 
 # Import Settings
 
-![import](/img/screenshots/import_settings.png)
+![import_settings](/img/screenshots/import_settings.png)
 
 ## Import units
 
