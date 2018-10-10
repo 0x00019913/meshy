@@ -186,9 +186,9 @@ var Calculate = (function() {
   }
 
   // apply a function to each face
-  // - the callback takes three vertices and a normal, all in world space; these
-  //   vectors are local variables in this function and should be copied, never
-  //   stored directly
+  // - the callback takes three vertices, a normal, and an index, all in world
+  //   space; these vectors are local variables in this function and should be
+  //   copied, never stored directly
   // - both THREE.Geometry and THREE.BufferGeometry are supported
   function _traverseFaces(mesh, callback) {
     var geo = mesh.geometry;
@@ -216,7 +216,7 @@ var Calculate = (function() {
 
           THREE.Triangle.getNormal(va, vb, vc, normal);
 
-          callback(va, vb, vc, normal);
+          callback(va, vb, vc, normal, i / 3);
         }
       }
       // else, each three contiguous verts in position attribute constitute a
@@ -229,7 +229,7 @@ var Calculate = (function() {
 
           THREE.Triangle.getNormal(va, vb, vc, normal);
 
-          callback(va, vb, vc, normal);
+          callback(va, vb, vc, normal, i / 3);
         }
       }
     }
@@ -242,7 +242,7 @@ var Calculate = (function() {
         _faceVertices(face, vertices, matrixWorld, va, vb, vc);
         normal.copy(face.normal).transformDirection(matrixWorld);
 
-        callback(va, vb, vc, normal);
+        callback(va, vb, vc, normal, f);
       }
     }
   }
@@ -472,8 +472,6 @@ var Calculate = (function() {
       if (current === start) polygons.push(polygon);
     }
 
-    //console.log(polygons);
-
     return polygons;
   }
 
@@ -482,6 +480,9 @@ var Calculate = (function() {
     faceArea: _faceArea,
     faceCenter: _faceCenter,
     faceBoundingBox: _faceBoundingBox,
+
+    traverseFaces: _traverseFaces,
+
     surfaceArea: _surfaceArea,
     volume: _volume,
     centerOfMass: _centerOfMass,
