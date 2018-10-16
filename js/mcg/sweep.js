@@ -14,7 +14,7 @@ Object.assign(MCG.Sweep, (function() {
     var p = context.p;
 
     // the farthest event that has occurred (with respect to the scanline) -
-    // used to catch event pairs that exist entirely in the past
+    // used to catch events that occur in the past
     var front = null;
 
     var efactory = new MCG.Sweep.SweepEventFactory(context);
