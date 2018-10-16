@@ -26,27 +26,28 @@ var Measurement = (function() {
     this.active = false;
     this.params = null;
 
-    this.markerFactory = new MarkerFactory();
-    this.connectorFactory = new ConnectorFactory();
-
-    this.markers = [];
-    this.connectors = [];
-
-    this.result = this.makeResult(false)
+    this.result = this.makeResult(false);
 
     // index of the point due to be set
     this.pidx = 0;
-    // number of active markers
-    this.pactive = 0;
-    // total number of markers and connectors
-    this.mnum = 0;
-    this.cnum = 0;
+    // number of active primary markers
+    this.pnumactive = 0;
+
+    // primary and secondary markers; primary markers are placed by the user,
+    // while secondary markers are derived from the configuration of the
+    // primary markers
+    this.pmarkers = [];
+    this.smarkers = [];
+
+    // total numbers of primary/secondary markers
+    this.pnum = 0;
+    this.snum = 0;
+
+    // type of primary/secondary markers
+    this.ptype = Markers.Types.none;
+    this.stype = Markers.Types.none;
 
     this.mesh = null;
-
-    // type of markers and connectors
-    this.mtype = Marker.Types.none;
-    this.ctype = Connector.Types.none;
 
     this.pointerCallbackIdx = -1;
 
@@ -72,57 +73,55 @@ var Measurement = (function() {
 
       this.params = params || {};
       this.params.type = this.params.type || Measurement.Types.length;
+      this.params.color = this.params.color || 0x2adeff;
 
       // if true, don't automatically calculate the measurement when there are
-      // enough points - necessiatates a manual call to .calculateResult()
+      // enough points - necessiatates a manual call to .calculate()
       this.params.calculateManually = this.params.calculateManually || false;
 
-      this.markers.length = 0;
-      this.connectors.length = 0;
+      this.pmarkers.length = 0;
+      this.smarkers.length = 0;
 
       this.pidx = 0;
-      this.mnum = 0;
-      this.cnum = 0;
-      this.pactive = 0;
+      this.pnum = 0;
+      this.snum = 0;
+      this.pnumactive = 0;
 
-      this.mtype = Marker.Types.none;
-      this.ctype = Connector.Types.none;
+      this.ptype = Markers.Types.none;
+      this.stype = Markers.Types.none;
 
       this.result = this.makeResult(false);
 
-      var mparams = {};
-      var cparams = {};
+      var pparams = { name: "measurementMarker" };
+      var sparams = { name: "measurementMarker" };
 
-      var mfactory = this.markerFactory;
-      var cfactory = this.connectorFactory;
       var scene = this.scene;
-
       var type = this.params.type;
 
-      // set the correct number and types of markers and connectors
+      // set the correct number and types of markers
       if (type === Measurement.Types.length) {
-        this.mnum = 2; // 2 point markers
-        this.cnum = 1; // 1 line connector
-        this.mtype = Marker.Types.point;
-        this.ctype = Connector.Types.line;
+        this.pnum = 2; // 2 sphere markers
+        this.snum = 1; // 1 line marker
+        this.ptype = Markers.Types.sphere;
+        this.stype = Markers.Types.line;
       }
       else if (type === Measurement.Types.angle) {
-        this.mnum = 3; // 3 point markers
-        this.cnum = 2; // 2 line connectors
-        this.mtype = Marker.Types.point;
-        this.ctype = Connector.Types.line;
+        this.pnum = 3; // 3 sphere markers
+        this.snum = 2; // 2 line marker
+        this.ptype = Markers.Types.sphere;
+        this.stype = Markers.Types.line;
       }
       else if (type === Measurement.Types.circle) {
-        this.mnum = 3; // 3 point markers
-        this.cnum = 1; // 1 circle connector
-        this.mtype = Marker.Types.point;
-        this.ctype = Connector.Types.circle;
+        this.pnum = 3; // 3 sphere markers
+        this.snum = 1; // 1 circle marker
+        this.ptype = Markers.Types.sphere;
+        this.stype = Markers.Types.circle;
       }
       else if (type === Measurement.Types.crossSection) {
-        this.mnum = 1; // 1 plane marker
-        this.cnum = 1; // 1 contour connector
-        this.mtype = Marker.Types.plane;
-        this.ctype = Connector.Types.contour;
+        this.pnum = 1; // 1 plane marker
+        this.snum = 1; // 1 contour marker
+        this.ptype = Markers.Types.plane;
+        this.stype = Markers.Types.contour;
 
         this.params.axis = this.params.axis || "z";
         // normal of the axis-oriented plane denoting the cross-section
@@ -130,14 +129,14 @@ var Measurement = (function() {
         this.params.splitContours = this.params.splitContours || false;
 
         // use this normal to create the plane marker
-        mparams.axis = this.params.axis;
-        mparams.normal = this.params.normal;
+        pparams.axis = this.params.axis;
+        pparams.normal = this.params.normal;
       }
       else if (type === Measurement.Types.orientedCrossSection) {
-        this.mnum = 3; // 3 point markers
-        this.cnum = 1; // 1 contour connector
-        this.mtype = Marker.Types.point;
-        this.ctype = Connector.Types.contour;
+        this.pnum = 3; // 3 sphere markers
+        this.snum = 1; // 1 contour Marker
+        this.ptype = Markers.Types.sphere;
+        this.stype = Markers.Types.contour;
 
         // true if selecting only the closest contour to the center of the circle
         // subtended by the markers
@@ -148,37 +147,38 @@ var Measurement = (function() {
       }
       else return;
 
-      // generate the markers and connectors, and add them to the scene
-      for (var m = 0; m < this.mnum; m++) {
-        var marker = mfactory.make(this.mtype, mparams);
-        this.markers.push(marker);
+      // generate the markers and add them to the scene
+      for (var ip = 0; ip < this.pnum; ip++) {
+        var marker = Markers.create(this.ptype, pparams);
+        marker.setColor(this.params.color);
         marker.addToScene(scene);
+        this.pmarkers.push(marker);
       }
-      for (var c = 0; c < this.cnum; c++) {
-        var connector = cfactory.make(this.ctype, cparams);
-        this.connectors.push(connector);
-        connector.addToScene(scene);
+      for (var is = 0; is < this.snum; is++) {
+        var marker = Markers.create(this.stype, sparams);
+        marker.setColor(this.params.color);
+        marker.addToScene(scene);
+        this.smarkers.push(marker);
       }
 
       // if the params already contain the points necessary to compute the
       // measurement, place the markers and compute the measurement
       if (this.isFullyDetermined()) {
-        this.pactive = this.mnum;
+        this.pnumactive = this.pnum;
         this.pidx = 0;
 
-        this.calculateResult();
+        this.calculate();
 
-        this.setMarkersAndConnectors();
+        this.positionMarkers();
       }
       // else, initialize the points
       else {
         this.params.p = [];
 
-        for (var p = 0; p < this.mnum; p++) this.params.p.push(null);
+        for (var p = 0; p < this.pnum; p++) this.params.p.push(null);
       }
 
       this.pointerCallbackIdx = this.pointer.addClickCallback(this.placePoint.bind(this));
-      this.pointer.setCursor(0);
       this.pointer.activate();
     },
 
@@ -193,12 +193,12 @@ var Measurement = (function() {
       this.mesh = mesh;
 
       this.params.p[this.pidx] = point;
-      this.pactive = Math.min(this.mnum, this.pactive + 1);
-      this.pidx = (this.pidx + 1) % this.mnum;
+      this.pnumactive = Math.min(this.pnum, this.pnumactive + 1);
+      this.pidx = (this.pidx + 1) % this.pnum;
 
-      this.calculateResult();
+      this.calculate();
 
-      this.setMarkersAndConnectors();
+      this.positionMarkers();
     },
 
     getParams: function() {
@@ -234,7 +234,7 @@ var Measurement = (function() {
       else return true;
     },
 
-    calculateResult: function() {
+    calculate: function() {
       // if not enough points, do nothing
       if (!this.isFullyDetermined()) return;
 
@@ -315,11 +315,10 @@ var Measurement = (function() {
           boundingBox.expandByPoint(contour.boundingBox.max);
         }
 
-        this.connectors[0].setFromSegments(segments);
+        this.smarkers[0].setFromSegments(segments);
 
         this.result.area = area;
-        this.result.min = boundingBox.min;
-        this.result.max = boundingBox.max;
+        this.result.boundingBox = boundingBox;
         this.result.length = length;
         this.result.crossSectionResult = crossSectionResult;
         this.result.ready = true;
@@ -407,11 +406,10 @@ var Measurement = (function() {
           boundingBox.expandByPoint(contour.boundingBox.max);
         }
 
-        this.connectors[0].setFromSegments(segments);
+        this.smarkers[0].setFromSegments(segments);
 
         this.result.area = Math.abs(area);
-        this.result.min = boundingBox.min;
-        this.result.max = boundingBox.max;
+        this.result.boundingBox = boundingBox;
         this.result.length = length;
         this.result.crossSectionResult = crossSectionResult;
         this.result.ready = true;
@@ -422,110 +420,77 @@ var Measurement = (function() {
       }
     },
 
-    setMarkersAndConnectors: function() {
-      this.setMarkerColors();
-      this.setConnectorColors();
-
-      this.positionMarkers();
-      this.positionConnectors();
-    },
-
     positionMarkers: function() {
-      if (this.mtype === Marker.Types.point) {
-        for (var m = 0; m < this.mnum; m++) {
+      // position primary markers
+
+      if (this.ptype === Markers.Types.sphere) {
+        for (var m = 0; m < this.pnum; m++) {
           var pos = this.params.p[m];
 
           if (pos !== null) {
-            var marker = this.markers[(this.pidx + m) % this.mnum];
+            var marker = this.pmarkers[(this.pidx + m) % this.pnum];
 
             marker.setPosition(pos);
             marker.activate();
           }
         }
       }
-      else if (this.mtype === Marker.Types.plane) {
-        var marker = this.markers[0];
+      else if (this.ptype === Markers.Types.plane) {
+        var marker = this.pmarkers[0];
 
-        var min = this.result.min;
-        var max = this.result.max;
+        // if no valid bounding box to which to size the marker, deactivate
+        if (Math.abs(this.result.boundingBox.min.length()) === Infinity) {
+          marker.deactivate();
+        }
 
-        // no valid bounding box to which to size the marker, so deactivate
-        if (Math.abs(min.length()) === Infinity) marker.deactivate();
-
-        // move the marker to the center
-        var center = max.clone().add(min).multiplyScalar(0.5);
-        marker.setPosition(center);
-
-        // cross-section marker extends by 0.1 size in each direction
-        var size = max.clone().sub(min).multiplyScalar(1.5);
-        if (size.x <= 0) size.x = 1;
-        if (size.y <= 0) size.y = 1;
-        if (size.z <= 0) size.z = 1;
-        marker.setScale(size);
+        marker.setFromBoundingBox(this.result.boundingBox, 1.5);
 
         marker.activate();
       }
-    },
 
-    positionConnectors: function() {
-      if (this.ctype === Connector.Types.line) {
-        for (var c = 0; c < this.cnum; c++) {
-          var ps = this.params.p[(this.pidx + c) % this.mnum];
-          var pt = this.params.p[(this.pidx + 1 + c) % this.mnum];
+      // position secondary markers
+
+      if (this.stype === Markers.Types.line) {
+        for (var m = 0; m < this.snum; m++) {
+          var ps = this.params.p[(this.pidx + m) % this.pnum];
+          var pt = this.params.p[(this.pidx + 1 + m) % this.pnum];
 
           if (ps && pt) {
-            this.connectors[c].setFromPointPair(ps, pt);
-            this.connectors[c].activate();
+            this.smarkers[m].setFromPointPair(ps, pt);
+            this.smarkers[m].activate();
           }
           else {
-            this.connectors[c].deactivate();
+            this.smarkers[m].deactivate();
           }
         }
       }
-      else if (this.ctype === Connector.Types.circle) {
-        var connector = this.connectors[0];
+      else if (this.stype === Markers.Types.circle) {
+        var marker = this.smarkers[0];
 
-        // if result is valid, position the connector and turn it on
+        // if result is valid, position the marker and turn it on
         if (this.result.ready) {
           var normal = this.result.normal;
           var center = this.result.center;
           var radius = this.result.radius;
 
-          connector.setFromNormalAndCenter(normal, center);
-          connector.setScale(new Vector3().setScalar(radius));
+          marker.setCenter(this.result.center);
+          marker.setNormal(this.result.normal);
+          marker.setScale(this.result.radius);
 
-          connector.activate();
+          marker.activate();
         }
-        // else, turn off the connector because its parameters are invalid
+        // else, turn off the marker because its parameters are invalid
         else {
-          connector.deactivate();
+          marker.deactivate();
         }
       }
-      else if (this.ctype === Connector.Types.contour) {
+      else if (this.stype === Markers.Types.contour) {
         if (this.result.ready) {
-          this.connectors[0].activate();
+          this.smarkers[0].activate();
         }
       }
       else {
-        this.connectors[0].activate();
-      }
-    },
-
-    setMarkerColors: function() {
-      var markers = this.markers;
-      var color = 0x2adeff;
-
-      for (var m = 0; m < this.mnum; m++) {
-        this.markers[m].setColor(color);
-      }
-    },
-
-    setConnectorColors: function(color) {
-      var connectors = this.connectors;
-      color = color !== undefined ? color : 0x8adeff;
-
-      for (var c = 0; c < this.cnum; c++) {
-        this.connectors[c].setColor(color);
+        this.smarkers[0].activate();
       }
     },
 
@@ -537,12 +502,12 @@ var Measurement = (function() {
 
     updateFromCamera: function(camera) {
       // only update if active and measurement uses non-plane markers
-      if (!this.active || this.mtype !== Marker.Types.point) return;
+      if (!this.active || this.ptype !== Markers.Types.sphere) return;
 
-      for (var m = 0; m < this.mnum; m++) {
-        var marker = this.markers[m];
+      for (var m = 0; m < this.pnum; m++) {
+        var marker = this.pmarkers[m];
 
-        if (marker.type !== Marker.Types.point) continue;
+        if (marker.type !== Markers.Types.sphere) continue;
 
         var dist = camera.position.distanceTo(marker.getPosition());
 
@@ -550,15 +515,15 @@ var Measurement = (function() {
       }
     },
 
-    scaleFromCenter: function(factor, center) {
+    scaleFromPoint: function(factor, point) {
       if (!this.active) return;
 
-      for (var m = 0; m < this.mnum; m++) {
-        this.markers[m].scaleFromCenter(factor, center);
+      for (var m = 0; m < this.pnum; m++) {
+        this.pmarkers[m].scaleFromPoint(factor, point);
       }
 
-      for (var c = 0; c < this.cnum; c++) {
-        this.connectors[c].scaleFromCenter(factor, center);
+      for (var m = 0; m < this.snum; m++) {
+        this.smarkers[m].scaleFromPoint(factor, point);
       }
 
       // copy the current result
@@ -580,12 +545,13 @@ var Measurement = (function() {
         result.diameter *= f;
         result.circumference *= f;
         result.area *= f * f;
-        result.center.sub(center).multiplyScalar(f).add(center);
+        result.center.sub(point).multiplyScalar(f).add(point);
       }
-      else if (this.params.type === Measurement.Types.crossSection) {
+      else if (this.params.type === Measurement.Types.crossSection
+        || this.params.type === Measurement.Types.orientedCrossSection) {
         result.area *= f * f;
-        result.min.sub(center).multiplyScalar(f).add(center);
-        result.max.sub(center).multiplyScalar(f).add(center);
+        result.boundingBox.min.sub(point).multiplyScalar(f).add(point);
+        result.boundingBox.max.sub(point).multiplyScalar(f).add(point);
         result.length *= f;
       }
 
@@ -600,12 +566,24 @@ var Measurement = (function() {
     translate: function(delta) {
       if (!this.active) return;
 
-      for (var m = 0; m < this.mnum; m++) {
-        this.markers[m].translate(delta);
+      for (var m = 0; m < this.pnum; m++) {
+        this.pmarkers[m].translate(delta);
       }
 
-      for (var c = 0; c < this.cnum; c++) {
-        this.connectors[c].translate(delta);
+      for (var c = 0; c < this.snum; c++) {
+        this.smarkers[c].translate(delta);
+      }
+
+      // translate relevant quantities in the computed result
+
+      if (!this.result.ready) return;
+
+      if (this.params.type === Measurement.Types.circle) {
+        this.result.center.add(delta);
+      }
+      else if (this.params.type === Measurement.Types.crossSection
+        || this.params.type === Measurement.Types.orientedCrossSection) {
+        this.result.boundingBox.translate(delta);
       }
     },
 
@@ -618,7 +596,6 @@ var Measurement = (function() {
       this.pointer.deactivate();
 
       removeMeshByName(this.scene, "measurementMarker");
-      removeMeshByName(this.scene, "measurementConnector");
 
       this.onResultChange = null;
     }
@@ -645,7 +622,7 @@ var Measurement = (function() {
   // marker/connector types and factories
 
   // abstract Marker class
-  function Marker(params) {
+  /*function Marker(params) {
     params = params || {};
 
     this.active = false;
@@ -1067,7 +1044,7 @@ var Measurement = (function() {
       }
       else return null;
     };
-  }
+  }*/
 
 
 

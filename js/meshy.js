@@ -522,7 +522,7 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
     // if measurement is active, scale markers with respect to mesh center
     if (_this.measurement.active) {
       var vfactor = scale.clone().divide(_this.model.getScale());
-      _this.measurement.scaleFromCenter(vfactor, _this.position);
+      _this.measurement.scaleFromPoint(vfactor, _this.position);
 
       _this.onChangeMeasurementToScale();
     }
@@ -773,7 +773,7 @@ Meshy.prototype.startSetBase = function() {
 
   this.pointer.deactivate();
   this.pointer.addClickCallback(this.faceOrientDown.bind(this));
-  this.pointer.setCursor(1);
+  this.pointer.setCursorPointer();
   this.pointer.activate();
 }
 
@@ -1140,14 +1140,14 @@ Meshy.prototype.startMeasurement = function(params) {
   }
   else if (type === Measurement.Types.crossSection) {
     list.add("Area", this, ["measurementResult", "area"]);
-    list.add("Min", this, ["measurementResult", "min"]);
-    list.add("Max", this, ["measurementResult", "max"]);
+    list.add("Min", this, ["measurementResult", "boundingBox", "min"]);
+    list.add("Max", this, ["measurementResult", "boundingBox", "max"]);
     list.add("Contour length", this, ["measurementResult", "length"]);
   }
   else if (type === Measurement.Types.orientedCrossSection) {
     list.add("Area", this, ["measurementResult", "area"]);
-    list.add("Min", this, ["measurementResult", "min"]);
-    list.add("Max", this, ["measurementResult", "max"]);
+    list.add("Min", this, ["measurementResult", "boundingBox", "min"]);
+    list.add("Max", this, ["measurementResult", "boundingBox", "max"]);
     list.add("Contour length", this, ["measurementResult", "length"]);
   }
 
