@@ -620,59 +620,50 @@ Slicer.prototype.makeGeometry = function() {
     geo: new THREE.Geometry()
   };
 
-  var geoSlicedMesh = geos.slicedMesh.geo;
+  geos.slicedMesh.geo = new THREE.BufferGeometry();
 
-  if (1) {
-    geos.slicedMesh.geo = new THREE.BufferGeometry();
+  // factor of 2 because each face may be sliced into two faces, so we need
+  // to reserve twice the space
+  var position = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
+  var normal = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
 
-    // factor of 2 because each face may be sliced into two faces, so we need
-    // to reserve twice the space
-    var position = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
-    var normal = new Float32Array(this.sourceGeo.faces.length * 9 * 2);
+  var positionAttr = new THREE.BufferAttribute(position, 3);
+  var normalAttr = new THREE.BufferAttribute(normal, 3);
 
-    var positionAttr = new THREE.BufferAttribute(position, 3);
-    var normalAttr = new THREE.BufferAttribute(normal, 3);
+  geos.slicedMesh.geo.addAttribute('position', positionAttr);
+  geos.slicedMesh.geo.addAttribute('normal', normalAttr);
 
-    geos.slicedMesh.geo.addAttribute('position', positionAttr);
-    geos.slicedMesh.geo.addAttribute('normal', normalAttr);
-
-    return;
-
-    var vertices = this.sourceGeo.vertices;
-    var faces = this.sourceGeo.faces;
-
-    for (var f = 0; f < faces.length; f++) {
-      var face = faces[f];
-
-      var vs = [vertices[face.a], vertices[face.b], vertices[face.c]];
-
-      for (var v = 0; v < 3; v++) {
-        positionAttr.setX(f*3 + v, vs[v].x);
-        positionAttr.setY(f*3 + v, vs[v].y);
-        positionAttr.setZ(f*3 + v, vs[v].z);
-
-        normalAttr.setX(f*3 + v, face.normal.x);
-        normalAttr.setY(f*3 + v, face.normal.y);
-        normalAttr.setZ(f*3 + v, face.normal.z);
-      }
-    }
-
-    geoSlicedMesh.setDrawRange(0, this.sourceGeo.faces.length * 3);
-
-    return;
-  }
+  /*
+  return;
 
   var vertices = this.sourceGeo.vertices;
-  var faces = [];
-  geoSlicedMesh.vertices = vertices;
-  geoSlicedMesh.faces = faces;
+  var faces = this.sourceGeo.faces;
+
+  for (var f = 0; f < faces.length; f++) {
+    var face = faces[f];
+
+    var vs = [vertices[face.a], vertices[face.b], vertices[face.c]];
+
+    for (var v = 0; v < 3; v++) {
+      positionAttr.setX(f*3 + v, vs[v].x);
+      positionAttr.setY(f*3 + v, vs[v].y);
+      positionAttr.setZ(f*3 + v, vs[v].z);
+
+      normalAttr.setX(f*3 + v, face.normal.x);
+      normalAttr.setY(f*3 + v, face.normal.y);
+      normalAttr.setZ(f*3 + v, face.normal.z);
+    }
+  }
+
+  geos.slicedMesh.geo.setDrawRange(0, this.sourceGeo.faces.length * 3);
+  */
 }
 
 Slicer.prototype.makeLayers = function() {
   var numSlices = this.numSlices;
   var layers = new Array(numSlices);
 
-  // arrays of segments, each array signifying all segments in one layer
+  // arrays of segment sets, each array signifying all segments in one layer
   var segmentSets = this.buildLayerSegmentSets();
   var layerParamsInit = {
     lineWidth: this.lineWidth,
