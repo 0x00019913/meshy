@@ -2040,7 +2040,7 @@ Meshy.prototype.createModel = function(geometry, filename) {
   this.gizmoVisible = true;
   this.handleGizmoVisibility();
 
-  this.pointer.addMesh(this.model.getMesh());
+  this.pointer.addObject(this.model.getMesh());
 
   this.infoBox.update();
 }
@@ -2074,7 +2074,7 @@ Meshy.prototype.delete = function() {
   this.fileInput.value = "";
 
   if (this.model) {
-    this.pointer.removeMesh(this.model.getMesh());
+    this.pointer.removeObject(this.model.getMesh());
     this.model.dispose();
     this.model = null;
   }

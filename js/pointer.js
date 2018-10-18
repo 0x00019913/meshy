@@ -7,7 +7,7 @@ var Pointer = (function() {
     // for displaying the cursor
     this.scene = scene;
 
-    this.meshes = [];
+    this.objects = [];
     this.active = false;
 
     this.raycaster = new THREE.Raycaster();
@@ -21,12 +21,12 @@ var Pointer = (function() {
     this.cursorColor = 0xcccccc;
     this.cursorColorDown = 0x2adeff;
 
-    // mouse interaction
+    // mouse/touch interaction
 
     var _this = this;
 
-    // pointer object; not null when mouse is down
-    this.mousedownPointer = null;
+    // pointer object; not null when mouse is down or screen is tapped
+    this.pressedPointer = null;
 
     // allowance in pixels between the mousedown and mouseup events - determines
     // whether a click counts or not
@@ -36,9 +36,23 @@ var Pointer = (function() {
     // intersects mesh, else null
     this.intersection = null;
 
-    domElement.addEventListener('mousemove', mousemove, false);
-    domElement.addEventListener('mousedown', mousedown, false);
-    domElement.addEventListener('mouseup', mouseup, false);
+    domElement.addEventListener('mousemove', pointerMove, false);
+    domElement.addEventListener('mousedown', pointerDown, false);
+    domElement.addEventListener('touchstart', pointerDown, false);
+    domElement.addEventListener('mouseup', pointerUp, false);
+    domElement.addEventListener('touchend', pointerUp, false);
+    domElement.addEventListener('touchcancel', pointerUp, false);
+    domElement.addEventListener('touchleave', pointerUp, false);
+
+    this.dispose = function() {
+      domElement.removeEventListener('mousemove', pointerMove);
+      domElement.removeEventListener('mousedown', pointerDown);
+      domElement.removeEventListener('touchstart', pointerDown);
+      domElement.removeEventListener('mouseup', pointerUp);
+      domElement.removeEventListener('touchend', pointerUp);
+      domElement.removeEventListener('touchcancel', pointerUp);
+      domElement.removeEventListener('touchleave', pointerUp);
+    };
 
     // collect normalized screen coordinates and keys/button pressed
     function getPointer(event) {
@@ -58,36 +72,44 @@ var Pointer = (function() {
       };
     }
 
-    function mousemove(event) {
-      _this.mousemove(getPointer(event));
+    function pointerMove(event) {
+      if (!_this.active) return;
+
+      _this.pointerMove(getPointer(event));
     }
 
-    function mousedown(event) {
-      _this.mousedown(getPointer(event));
+    function pointerDown(event) {
+      if (!_this.active) return;
+
+      _this.pointerDown(getPointer(event));
     }
 
-    function mouseup(event) {
-      _this.mouseup(getPointer(event));
+    function pointerUp(event) {
+      if (!_this.active) return;
+
+      event.preventDefault();
+
+      _this.pointerUp(getPointer(event));
     }
   }
 
   Object.assign(Pointer.prototype, {
 
-    addMesh: function(mesh) {
-      this.meshes.push(mesh);
+    addObject: function(object) {
+      this.objects.push(object);
       return this;
     },
 
-    removeMesh: function(mesh) {
-      var idx = this.meshes.indexOf(mesh);
+    removeObject: function(object) {
+      var idx = this.objects.indexOf(object);
 
-      if (idx > -1) this.meshes.splice(idx);
+      if (idx > -1) this.objects.splice(idx);
 
       return this;
     },
 
-    removeMeshes: function() {
-      this.meshes.length = 0;
+    removeObjects: function() {
+      this.objects.length = 0;
       return this;
     },
 
@@ -150,58 +172,63 @@ var Pointer = (function() {
       this.clickCallbacks.splice(idx);
     },
 
-    mousemove: function(pointer) {
-      if (!this.active) return;
-
+    // calculate three.js intersection object from the pointer position
+    getPointerIntersection: function(pointer) {
       this.raycaster.setFromCamera(pointer.coords, this.camera);
 
-      var intersects = this.raycaster.intersectObjects(this.meshes, false);
+      var intersects = this.raycaster.intersectObjects(this.objects, false);
 
-      // if intersecting mesh, get the first intersection
-      if (intersects.length > 0) {
-        var intersection = intersects[0];
+      if (intersects.length > 0) return intersects[0];
+      else return null;
+    },
 
+    pointerMove: function(pointer) {
+      var intersection = this.getPointerIntersection(pointer);
+      var cursor = this.cursor;
+
+      // if intersecting mesh, position the cursor
+      if (intersection) {
         // get the normal in world space
         var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
         var normal = intersection.face.normal.clone().applyMatrix3(rotation);
         var point = intersection.point;
-        var cursor = this.cursor;
 
         cursor.setPosition(point);
         cursor.setNormal(normal);
-        cursor.activate();
-        this.updateCursor();
 
-        this.intersection = intersection;
+        if (!cursor.active) cursor.activate();
+
+        this.updateCursor();
       }
       else {
-        this.cursor.deactivate();
-
-        this.intersection = null;
+        cursor.deactivate();
       }
     },
 
-    mousedown: function(pointer) {
-      if (!this.active) return;
-      if (!this.intersection || pointer.button !== 0) return;
+    pointerDown: function(pointer) {
+      // do nothing if pressing a button but the button is not LMB
+      if (pointer.button !== undefined && pointer.button !== 0) return;
 
-      this.mousedownPointer = pointer;
+      this.pressedPointer = pointer;
       if (this.cursor) this.cursor.setColor(this.cursorColorDown);
     },
 
-    mouseup: function(pointer) {
-      if (!this.active) return;
-      if (!this.mousedownPointer || !this.intersection) return;
+    pointerUp: function(pointer) {
+      if (!this.pressedPointer) return;
 
-      var dist = pointer.pixelCoords.distanceTo(this.mousedownPointer.pixelCoords);
+      var dist = pointer.pixelCoords.distanceTo(this.pressedPointer.pixelCoords);
 
       if (dist < this.clickAllowance) {
-        for (var c = 0; c < this.clickCallbacks.length; c++) {
-          this.clickCallbacks[c](this.intersection);
+        var intersection = this.getPointerIntersection(pointer);
+
+        if (intersection) {
+          for (var c = 0; c < this.clickCallbacks.length; c++) {
+            this.clickCallbacks[c](intersection);
+          }
         }
       }
 
-      this.mousedownPointer = null;
+      this.pressedPointer = null;
       if (this.cursor) this.cursor.setColor(this.cursorColor);
     },
 
