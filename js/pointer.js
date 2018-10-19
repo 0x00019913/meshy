@@ -58,8 +58,10 @@ var Pointer = (function() {
     function getPointer(event) {
       var r = domElement.getBoundingClientRect();
 
-      var cx = event.clientX - r.left;
-      var cy = event.clientY - r.top;
+      var ptr = event.changedTouches ? event.changedTouches[0] : event;
+
+      var cx = ptr.clientX - r.left;
+      var cy = ptr.clientY - r.top;
       var x = (cx / r.width) * 2 - 1;
       var y = -((cy / r.height) * 2 - 1);
 
