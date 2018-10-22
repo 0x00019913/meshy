@@ -3,18 +3,12 @@
 //  InfoBox
 // description:
 //  Hangs out in the corner and provides information.
-//  Two types of data displayed:
-//   1. mouse-based measurements (updated on click) and
-//   2. more static data like mesh parameters.
+//
 //  Usage:
 //   // for non-manual data
 //   var box = new InfoBox();
 //   box.add(title, source, props, def;
 //   box.update(); // called manually to update the values in the box
-//   // for measurements
-//   box.showMeasurementOutput();
-//   box.showMeasurement(m); // m is an object { key:val, ... }
-//   box.hideMeasurementOutput(); // when measurement turns off
 //
 //  Arguments for .add:
 //   -title: title for the line in the info box
@@ -43,22 +37,16 @@ var InfoBox = (function() {
   function InfoBox(domElement, decimals) {
     domElement = domElement || document;
 
-    this.div = document.createElement("div");
-    this.div.id = "infobox"
-    this.styleDiv();
-    document.body.appendChild(this.div);
+    this.container = document.createElement("div");
+    this.container.id = "infoBox"
+    //this.styleContainer();
+    document.body.appendChild(this.container);
 
     this.lists = {};
 
     this.addList("default");
 
     this.decimals = decimals !== undefined ? decimals : 4;
-  }
-
-  InfoBox.Colors = {
-    color0: "transparent",
-    color1: "#8adeff",
-    color2: "#ffff00"
   }
 
   Object.assign(InfoBox.prototype, {
@@ -71,14 +59,14 @@ var InfoBox = (function() {
     },
 
     // add a list to the InfoBox
-    addList: function(name, color) {
+    addList: function(name, title, color) {
       if (this.lists.hasOwnProperty(name)) return null;
 
-      var list = new InfoList(name, color);
+      var list = new InfoList(name, title, color);
 
       list.parent = this;
       this.lists[name] = list;
-      this.div.appendChild(list.ul);
+      this.container.appendChild(list.container);
 
       return list;
     },
@@ -92,7 +80,7 @@ var InfoBox = (function() {
       if (!this.lists.hasOwnProperty(list.name)) return;
 
       // remove the HTML node
-      this.div.removeChild(list.ul);
+      this.container.removeChild(list.container);
 
       // remove the lists entry
       delete this.lists[list.name];
@@ -104,17 +92,19 @@ var InfoBox = (function() {
     },
 
     // Style the div container.
-    styleDiv: function() {
-      this.div.style.position = "absolute";
-      this.div.style.left = "0";
-      this.div.style.top = "0";
-      this.div.style.width = "255px";
-      this.div.style.marginLeft = "15px";
-      this.div.style.backgroundColor = "#000";
+    styleContainer: function() {
+      this.container.style.position = "absolute";
+      this.container.style.left = "0";
+      this.container.style.top = "0";
+      this.container.style.width = "255px";
+      this.container.style.marginLeft = "15px";
+      this.container.style.backgroundColor = "#000";
+      this.container.style.overflowY = "auto";
+      this.container.style.maxHeight = "100%";
 
-      this.div.style.color = "#eee";
-      this.div.style.font = "11px Lucida Grande, sans-serif";
-      this.div.style.textShadow = "0 -1px 0 #111";
+      this.container.style.color = "#eee";
+      this.container.style.font = "11px Lucida Grande, sans-serif";
+      this.container.style.textShadow = "0 -1px 0 #111";
     }
 
   });
@@ -122,12 +112,28 @@ var InfoBox = (function() {
 
 
   // a list that goes into the InfoBox
-  function InfoList(name, color) {
-    if (!name) return;
+  function InfoList(name, title, color) {
+    if (name === undefined || name === null) return;
 
     this.name = name;
+
+    this.container = document.createElement("div");
+    this.container.className = "listContainer";
+    //this.styleContainer(color);
+    if (color !== undefined) this.container.style.border = "1px solid #" + color.toString(16);
+
+    if (title !== undefined && title !== "default") {
+      this.title = document.createElement("div");
+      this.title.textContent = title;
+      this.title.className = "listTitle";
+      //this.styleTitle();
+      this.container.appendChild(this.title);
+    }
+
     this.ul = document.createElement("ul");
-    this.styleUL(color);
+    this.container.appendChild(this.ul);
+    this.ul.className = "listUL";
+    //this.styleUL();
 
     this.items = [];
   }
@@ -142,7 +148,7 @@ var InfoBox = (function() {
       }
 
       this.items.push({
-        element: liValueElement,
+        value: liValueElement,
         source: source,
         props: props,
         def: def
@@ -152,17 +158,20 @@ var InfoBox = (function() {
     // Creates a line in the InfoList, returns HTML element that contains the value.
     createLine: function(title) {
       var li = document.createElement("li");
-      this.styleLI(li);
+      li.className = "listLI";
+      //this.styleLI(li);
 
       var liTitle = document.createElement("span");
-      this.styleLITitle(liTitle);
+      liTitle.className = "listLITitle";
+      //this.styleLITitle(liTitle);
       var liTitleText = document.createTextNode(title);
       liTitle.appendChild(liTitleText);
 
       li.appendChild(liTitle);
 
       var liValue = document.createElement("span");
-      this.styleLIValue(liValue);
+      liValue.className = "listLIValue";
+      //this.styleLIValue(liValue);
 
       li.appendChild(liValue);
 
@@ -171,13 +180,13 @@ var InfoBox = (function() {
       return liValue;
     },
 
-    // Update the gettable values (like mesh bounds).
+    // Update the gettable values.
     update: function() {
       for (var itemIdx=0; itemIdx<this.items.length; itemIdx++) {
         var item = this.items[itemIdx];
 
         if (!item.source) {
-          item.element.textContent = "";
+          item.value.textContent = "";
           continue;
         }
 
@@ -185,7 +194,7 @@ var InfoBox = (function() {
 
         if (value==="" && item.def) value = item.def;
 
-        item.element.textContent = value;
+        item.value.textContent = value;
       }
     },
 
@@ -226,23 +235,34 @@ var InfoBox = (function() {
       return value;
     },
 
-    styleUL: function(color) {
-      this.ul.style.boxSizing = "border-box";
+    styleContainer: function(color) {
+      this.container.style.boxSizing = "border-box";
+      this.container.style.width = "100%";
+      this.container.style.height = "auto";
+      this.container.style.margin = "2px 0";
+      this.container.style.padding = "0 6px";
+      if (color !== undefined) this.container.style.border = "1px solid #" + color.toString(16);
+    },
+
+    styleTitle: function() {
+      this.title.style.padding = "8px 0";
+      this.title.style.borderBottom = "solid 1px #222";
+      this.title.style.fontWeight = "bold";
+    },
+
+    styleUL: function() {
       this.ul.style.width = "100%";
       this.ul.style.height = "auto";
       this.ul.style.margin = "0";
       this.ul.style.padding = "0";
-      if (color !== undefined) this.ul.style.border = "1px solid " + color;
     },
 
     // Style list item.
     styleLI: function(listItem) {
       listItem.style.width = "100%";
       listItem.style.minHeight = "21px";
-      //listItem.style.lineHeight = "27px";
       listItem.style.overflow = "hidden";
-      listItem.style.padding = "5px 4px 0 4px";
-      //listItem.style.borderBottom = "1px solid #2c2c2c";
+      listItem.style.paddingTop = "5px";
     },
 
     // Style the span containing the title of a list item.

@@ -179,23 +179,11 @@ Meshy.prototype.generateUI = function() {
     "Mesh edit functions: translation, scaling, rotation, normals.");
   this.buildEditFolder();
 
-  var measurementFolder = this.gui.addFolder("Measure", "Make calculations based on mouse-placed markers.");
-  measurementFolder.add(this, "measureLength").name("Length")
-    .title("Measure point-to-point length.");
-  measurementFolder.add(this, "measureAngle").name("Angle")
-    .title("Measure angle (in degrees) between two segments formed by three consecutive points.");
-  measurementFolder.add(this, "measureCircle").name("Circle")
-    .title("Circle measurement: radius, diameter, circumference, arc length.");
-  measurementFolder.add(this, "measureCrossSectionX").name("Cross-section x")
-    .title("Measure cross-section on x axis.");
-  measurementFolder.add(this, "measureCrossSectionY").name("Cross-section y")
-    .title("Measure cross-section on y axis.");
-  measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
-    .title("Measure cross-section on z axis.");
-  measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
-    .title("Measure the cross-section of a single part of the mesh.");
-  measurementFolder.add(this, "endMeasurement").name("End measurement (ESC)")
-    .title("Turn off the current measurement (ESC).");
+  // init measurement structures
+  this.measurementData = [];
+  this.measurementIdx = -1;
+  this.measurementFolder = this.gui.addFolder("Measure", "Make calculations based on mouse-placed markers.");
+  this.buildMeasurementFolder();
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
   this.thicknessThreshold = 1.0;
@@ -292,9 +280,8 @@ Meshy.prototype.generateUI = function() {
   this.initViewport();
   this.makeBuildVolume();
 
-  // initialize the pointer and the measurement
+  // initialize the pointer from the viewport
   this.pointer = new Pointer(this.camera, this.renderer.domElement, this.scene);
-  this.measurement = new Measurement(this.pointer, this.scene);
 
   // gizmo creation:
   // set parameters, building the gizmo outward - first scale handles, then
@@ -475,11 +462,11 @@ Meshy.prototype.makeTranslateTransform = function(invertible) {
     return pos;
   }
   transform.onApply = function(pos) {
-    // if measurement is active, translate markers
-    if (_this.measurement.active) {
-      var delta = pos.clone().sub(_this.model.getPosition());
-      _this.measurement.translate(delta);
-    }
+    // if any measurements active, translate markers
+    var delta = pos.clone().sub(_this.model.getPosition());
+    _this.forEachMeasurement(function(item) {
+      item.measurement.translate(delta);
+    });
 
     _this.model.translate(pos);
   };
@@ -493,10 +480,8 @@ Meshy.prototype.makeRotateTransform = function(invertible) {
   var transform = new Transform("rotate", this.model.getRotation()), _this = this;
 
   transform.onApply = function(euler) {
-    // disallow having an active measurement while rotating
-    if (_this.measurement && _this.measurement.active) {
-      _this.endMeasurement();
-    }
+    // disallow having measurements while rotating
+    _this.removeAllMeasurements();
 
     _this.model.rotate(euler);
   };
@@ -519,13 +504,14 @@ Meshy.prototype.makeScaleTransform = function(invertible) {
     if (scale.y <= 0) scale.y = 1;
     if (scale.z <= 0) scale.z = 1;
 
-    // if measurement is active, scale markers with respect to mesh center
-    if (_this.measurement.active) {
-      var vfactor = scale.clone().divide(_this.model.getScale());
-      _this.measurement.scaleFromPoint(vfactor, _this.position);
+    // scale measurement markers with respect to mesh center
+    var vfactor = scale.clone().divide(_this.model.getScale());
+    _this.forEachMeasurement(function(item, idx) {
+      item.measurement.scaleFromPoint(vfactor, _this.position);
+    });
 
-      _this.onChangeMeasurementToScale();
-    }
+    _this.onChangeMeasurementToScale();
+
 
     _this.model.scale(scale);
   };
@@ -633,10 +619,12 @@ Meshy.prototype.onScaleToSize = function() {
   this.onScaleByFactor();
 }
 Meshy.prototype.onScaleToMeasurement = function() {
-  if (!this.measurementResult || !this.measurementResult.ready) return;
+  var result = this.getCurrentMeasurementResult();
+
+  if (!result || !result.ready) return;
 
   var key = this.measurementToScale;
-  var currentValue = this.measurementResult[key];
+  var currentValue = result[key];
 
   if (currentValue !== undefined) {
     var factor = this.measurementToScaleValue / currentValue;
@@ -751,25 +739,21 @@ Meshy.prototype.autoCenter = function(invertible) {
   this.updatePosition();
 }
 
-Meshy.prototype.setBaseToggle = function() {
-  this.endMeasurement();
-
+Meshy.prototype.toggleSetBase = function() {
   if (!this.pointer) return;
 
   // if currently setting the base, cancel
-  if (this.pointer.active) {
-    this.endSetBase();
-  }
+  if (this.setBaseOn) this.endSetBase();
   // else, start
-  else {
-    this.startSetBase();
-  }
+  else this.startSetBase();
 }
 
 Meshy.prototype.startSetBase = function() {
-  if (this.setBaseController) {
-    this.setBaseController.name("Cancel (ESC)");
-  }
+  if (this.setBaseOn) return;
+
+  this.setBaseOn = true;
+
+  if (this.setBaseController) this.setBaseController.name("Cancel (ESC)");
 
   this.pointer.deactivate();
   this.pointer.addClickCallback(this.faceOrientDown.bind(this));
@@ -778,11 +762,15 @@ Meshy.prototype.startSetBase = function() {
 }
 
 Meshy.prototype.endSetBase = function() {
-  if (this.setBaseController) {
-    this.setBaseController.name("Set base");
-  }
+  if (!this.setBaseOn) return;
 
+  this.setBaseOn = false;
+
+  if (this.setBaseController) this.setBaseController.name("Set base");
   if (this.pointer) this.pointer.deactivate();
+
+  // a measurement may have been active - treat this as setting it active again
+  this.onSetCurrentMeasurement();
 }
 
 Meshy.prototype.faceOrientDown = function(intersection) {
@@ -911,7 +899,8 @@ Meshy.prototype.buildEditFolder = function() {
     return;
   }
 
-  this.setBaseController = this.editFolder.add(this, "setBaseToggle").name("Set base")
+  this.setBaseOn = false;
+  this.setBaseController = this.editFolder.add(this, "toggleSetBase").name("Set base")
     .title("Select a face to align so that its normal points down.");
 
   // position vector
@@ -1000,7 +989,7 @@ Meshy.prototype.buildEditFolder = function() {
     .title("Select ring size.");
   ringSizeFolder.add(this, "scaleToRingSize").name("3. Scale to size")
     .title("Scale the ring.");
-  ringSizeFolder.add(this, "endMeasurement").name("4. End measurement")
+  ringSizeFolder.add(this, "removeCurrentMeasurement").name("4. End measurement")
     .title("Turn off the measurement tool (ESC).");
 
   var mirrorFolder = this.editFolder.addFolder("Mirror", "Mirror the mesh on a given axis in object space.");
@@ -1031,13 +1020,13 @@ Meshy.prototype.buildEditFolder = function() {
     .title("Flip mesh normals.");
 }
 Meshy.prototype.scaleToRingSize = function() {
+  var measurement = this.getCurrentMeasurement();
+  var result = this.getCurrentMeasurementResult();
+
   // must have an active circle measurement
-  if (!this.measurement
-    || !this.measurement.active
-    || this.measurement.getType() !== Measurement.Types.circle
+  if (!measurement || !measurement.active || measurement.getType() !== Measurement.Types.circle
     // must have a measurement result and a diameter field in that result
-    || !this.measurementResult
-    || this.measurementResult.diameter === undefined)
+    || !result || result.diameter === undefined)
   {
     this.printout.warn("Scaling to ring size requires an active, valid circle measurement.");
     return;
@@ -1064,28 +1053,137 @@ Meshy.prototype.scaleToRingSize = function() {
   this.onChangeMeasurementToScale();
 }
 
+Meshy.prototype.buildMeasurementFolder = function() {
+  this.clearFolder(this.measurementFolder);
+
+  this.measurementFolder.add(this, "measureLength").name("Length")
+    .title("Measure point-to-point length.");
+  this.measurementFolder.add(this, "measureAngle").name("Angle")
+    .title("Measure angle (in degrees) between two segments formed by three consecutive points.");
+  this.measurementFolder.add(this, "measureCircle").name("Circle")
+    .title("Circle measurement: radius, diameter, circumference, arc length.");
+  this.measurementFolder.add(this, "measureCrossSectionX").name("Cross-section x")
+    .title("Measure cross-section on x axis.");
+  this.measurementFolder.add(this, "measureCrossSectionY").name("Cross-section y")
+    .title("Measure cross-section on y axis.");
+  this.measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
+    .title("Measure cross-section on z axis.");
+  this.measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
+    .title("Measure the cross-section of a single part of the mesh.");
+
+  if (this.measurementsExist()) {
+    var indices = {};
+    this.forEachMeasurement(function(item, idx) {
+      indices[idx + " (" + item.measurement.getType() + ")"] = idx;
+    });
+
+    this.measurementFolder.add(this, "measurementIdx", indices).name("Current")
+      .title("Current measurement.")
+      .onChange(this.onSetCurrentMeasurement.bind(this));
+    this.measurementFolder.add(this, "removeCurrentMeasurement").name("Remove")
+      .title("Remove the current measurement.");
+    this.measurementFolder.add(this, "removeAllMeasurements").name("Remove all")
+      .title("Remove the all measurements.");
+  }
+}
+Meshy.prototype.onSetCurrentMeasurement = function() {
+  var currentIdx = this.measurementIdx;
+
+  if (currentIdx < 0) return;
+
+  // deactivate every other measurement
+  this.forEachMeasurement(function(item, idx) {
+    item.measurement.deactivate();
+  });
+
+  // activate the current measurement
+  this.getMeasurementItem(currentIdx).measurement.activate();
+
+  // current measurement changed, so rebuild the scale to measurement folder
+  this.buildScaleToMeasurementFolder();
+}
+Meshy.prototype.getMeasurementItem = function(idx) {
+  return this.measurementData[idx];
+}
+Meshy.prototype.getCurrentMeasurement = function() {
+  var item = this.getMeasurementItem(this.measurementIdx);
+
+  return item ? item.measurement : null;
+}
+Meshy.prototype.getCurrentMeasurementResult = function() {
+  if (this.measurementIdx >= 0) return this.measurementData[this.measurementIdx].result;
+  else return null;
+}
+Meshy.prototype.setCurrentMeasurementResult = function(result) {
+  var item = this.getMeasurementItem(this.measurementIdx);
+
+  if (item) item.result = result;
+}
+Meshy.prototype.removeCurrentMeasurement = function() {
+  var item = this.getMeasurementItem(this.measurementIdx);
+  if (!item) return;
+
+  // destroy measurement
+  item.measurement.dispose();
+
+  // remove entry from infobox
+  this.infoBox.removeList(item.list);
+
+  var measurementCount = this.measurementData.length;
+
+  // remove measurement data item
+  this.measurementData.splice(this.measurementIdx, 1);
+
+  // if removing the last measurement, shift current measurement down
+  if (this.measurementIdx >= measurementCount - 1) this.measurementIdx--;
+
+  this.onSetCurrentMeasurement();
+
+  this.buildMeasurementFolder();
+
+  if (!this.measurementsExist()) this.onRemoveLastMeasurement();
+}
+Meshy.prototype.removeAllMeasurements = function() {
+  for (var i = 0, l = this.measurementData.length; i < l; i++) {
+    var item = this.getMeasurementItem(i);
+
+    // destroy measurement
+    item.measurement.dispose();
+
+    // remove entry from infobox
+    this.infoBox.removeList(item.list);
+  }
+
+  this.measurementData.length = 0;
+  this.measurementIdx = -1;
+
+  this.buildMeasurementFolder();
+
+  this.onRemoveLastMeasurement();
+}
+
 Meshy.prototype.measureLength = function() {
-  this.startMeasurement({ type: Measurement.Types.length });
+  this.addMeasurement({ type: Measurement.Types.length });
 }
 Meshy.prototype.measureAngle = function() {
-  this.startMeasurement({ type: Measurement.Types.angle });
+  this.addMeasurement({ type: Measurement.Types.angle });
 }
 Meshy.prototype.measureCircle = function() {
-  this.startMeasurement({ type: Measurement.Types.circle });
+  this.addMeasurement({ type: Measurement.Types.circle });
 }
 Meshy.prototype.measureCrossSectionX = function() {
-  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "x" });
+  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "x" });
 }
 Meshy.prototype.measureCrossSectionY = function() {
-  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "y" });
+  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "y" });
 }
 Meshy.prototype.measureCrossSectionZ = function() {
-  this.startMeasurement({ type: Measurement.Types.crossSection, axis: "z" });
+  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "z" });
 }
 Meshy.prototype.measureLocalCrossSection = function() {
-  this.startMeasurement({ type: Measurement.Types.orientedCrossSection, nearestContour: true });
+  this.addMeasurement({ type: Measurement.Types.orientedCrossSection, nearestContour: true });
 }
-Meshy.prototype.startMeasurement = function(params) {
+Meshy.prototype.addMeasurement = function(params) {
   // slice mode keeps its own copy of the mesh, so don't allow measuring
   if (this.sliceModeOn) {
     this.printout.warn("Cannot measure mesh while slice mode is on.");
@@ -1094,9 +1192,7 @@ Meshy.prototype.startMeasurement = function(params) {
 
   if (!this.model) return;
 
-  // turn off previous measurement if one exists
-  this.endMeasurement();
-  // likewise for set base function
+  // if setting base, stop doing that
   this.endSetBase();
 
   // disable rotation and axis scaling handles on the gizmo
@@ -1111,54 +1207,62 @@ Meshy.prototype.startMeasurement = function(params) {
     this.gizmo.disableHandle(Gizmo.HandleTypes.scale, "z");
   }
 
-  // make the mesh partially transparent so that it doesn't fully block the
-  // visual elements used to display measurements
-  this.model.setMeshMaterialParams({
-    transparent: true,
-    opacity: 0.75
-  });
+  // have a set color for the first measurement, random colors for anything after that
+  params.color = !this.measurementsExist() ? 0x8adeff : Math.round((Math.random() / 2.0 + 0.5) * 0xffffff);
 
-  this.measurementResult = null;
+  // construct the structure containing the measurement, its infobox list, and the result
+  var item = {
+    measurement: new Measurement(this.pointer, this.scene),
+    list: null,
+    result: null
+  };
 
-  // add a list to the
-  var list = this.infoBox.addList("measurement", InfoBox.Colors.color1);
-  this.measurementInfoList = list;
+  this.measurementIdx = this.measurementData.length;
+  this.measurementData.push(item);
 
   var type = params.type;
 
   if (type === Measurement.Types.length) {
-    list.add("Length", this, ["measurementResult", "length"]);
+    item.list = this.infoBox.addList(item.measurement.uuid, "Length", params.color);
+    item.list.add("Length", item, ["result", "length"]);
   }
   else if (type === Measurement.Types.angle) {
-    list.add("Angle", this, ["measurementResult", "angleDegrees"]);
+    item.list = this.infoBox.addList(item.measurement.uuid, "Angle", params.color);
+    item.list.add("Angle", item, ["result", "angleDegrees"]);
   }
   else if (type === Measurement.Types.circle) {
-    list.add("Radius", this, ["measurementResult", "radius"]);
-    list.add("Diameter", this, ["measurementResult", "diameter"]);
-    list.add("Circumference", this, ["measurementResult", "circumference"]);
-    list.add("Area", this, ["measurementResult", "area"]);
+    item.list = this.infoBox.addList(item.measurement.uuid, "Circle", params.color);
+    item.list.add("Radius", item, ["result", "radius"]);
+    item.list.add("Diameter", item, ["result", "diameter"]);
+    item.list.add("Circumference", item, ["result", "circumference"]);
+    item.list.add("Area", item, ["result", "area"]);
   }
   else if (type === Measurement.Types.crossSection) {
-    list.add("Area", this, ["measurementResult", "area"]);
-    list.add("Min", this, ["measurementResult", "boundingBox", "min"]);
-    list.add("Max", this, ["measurementResult", "boundingBox", "max"]);
-    list.add("Contour length", this, ["measurementResult", "length"]);
+    item.list = this.infoBox.addList(item.measurement.uuid, "Cross-section " + params.axis, params.color);
+    item.list.add("Area", item, ["result", "area"]);
+    item.list.add("Min", item, ["result", "boundingBox", "min"]);
+    item.list.add("Max", item, ["result", "boundingBox", "max"]);
+    item.list.add("Contour length", item, ["result", "length"]);
   }
   else if (type === Measurement.Types.orientedCrossSection) {
-    list.add("Area", this, ["measurementResult", "area"]);
-    list.add("Min", this, ["measurementResult", "boundingBox", "min"]);
-    list.add("Max", this, ["measurementResult", "boundingBox", "max"]);
-    list.add("Contour length", this, ["measurementResult", "length"]);
+    item.list = this.infoBox.addList(item.measurement.uuid, "Local cross-section", params.color);
+    item.list.add("Area", item, ["result", "area"]);
+    item.list.add("Min", item, ["result", "boundingBox", "min"]);
+    item.list.add("Max", item, ["result", "boundingBox", "max"]);
+    item.list.add("Contour length", item, ["result", "length"]);
   }
+  else return;
+
+  // construct the onResultChange function
 
   var _this = this;
-  this.measurement.onResultChange = function(result) {
+  item.measurement.onResultChange = function(result) {
     // need to update the folder if no result or result ready status changed
     var folderNeedsUpdate =
-      _this.measurementResult === null || _this.measurementResult.ready !== result.ready;
+      item.result === null || item.result.ready !== result.ready;
 
     // update internal result
-    _this.measurementResult = result;
+    item.result = result;
 
     // if necessary, rebuild the folder
     if (folderNeedsUpdate) {
@@ -1169,23 +1273,36 @@ Meshy.prototype.startMeasurement = function(params) {
     if (!this.currentTransform) _this.onChangeMeasurementToScale();
 
     // update infobox list
-    list.update();
+    item.list.update();
   }
 
-  this.measurement.activate(params);
+  item.measurement.start(params);
 
+  this.buildMeasurementFolder();
   this.buildScaleToMeasurementFolder();
+  this.onSetCurrentMeasurement();
+}
+Meshy.prototype.forEachMeasurement = function(fn) {
+  for (var m = 0; m < this.measurementData.length; m++) {
+    fn(this.measurementData[m], m);
+  }
+}
+Meshy.prototype.measurementsExist = function() {
+  return this.measurementData.length > 0;
 }
 Meshy.prototype.buildScaleToMeasurementFolder = function() {
   this.clearFolder(this.scaleToMeasurementFolder);
 
-  if (!this.measurement || !this.measurement.active) return;
-  if (!this.measurementResult || !this.measurementResult.ready) return;
+  if (!this.measurementsExist()) return;
+
+  var result = this.getCurrentMeasurementResult();
+  if (!result || !result.ready) return;
+
+  var measurement = this.getCurrentMeasurement();
+  if (!measurement) return;
 
   // measurement type
-  var type = this.measurement.getType();
-  // measurement result
-  var result = this.measurementResult;
+  var type = measurement.getType();
   // measurements to scale
   var scalableMeasurements = [];
   this.scalableMeasurements = scalableMeasurements;
@@ -1225,28 +1342,27 @@ Meshy.prototype.buildScaleToMeasurementFolder = function() {
 
   this.setFolderDisplayPrecision(this.scaleToMeasurementFolder);
 
+  this.onChangeMeasurementToScale();
+
   // adds a key to the scalableMeasurements array if
   function addScalableMeasurement(name) {
     if (result.hasOwnProperty(name)) scalableMeasurements.push(name);
   }
 }
 Meshy.prototype.onChangeMeasurementToScale = function() {
+  var result = this.getCurrentMeasurementResult();
+  if (!result || !result.ready) return;
+
   // the new value defaults to the current value
-  this.measurementToScaleValue = this.measurementResult[this.measurementToScale];
+  this.measurementToScaleValue = result[this.measurementToScale];
 
   // update controller
   var controller = this.measurementToScaleValueController;
 
   if (controller) controller.updateDisplay();
 }
-Meshy.prototype.endMeasurement = function() {
-  if (!this.measurement || !this.measurement.active) return;
-
-  // measurement off
-  if (this.measurement) this.measurement.deactivate();
-
-  // remove the result
-  this.measurementResult = null;
+Meshy.prototype.onRemoveLastMeasurement = function() {
+  if (this.measurementsExist()) return;
 
   // clear scale to measurement folder
   if (this.scaleToMeasurementFolder) {
@@ -1254,8 +1370,6 @@ Meshy.prototype.endMeasurement = function() {
     this.measurementToScale = "";
     this.measurementToScaleValueController = null;
   }
-  // if infobox measurement list exists, remove it
-  if (this.infoBox && this.measurementInfoList) this.infoBox.removeList(this.measurementInfoList);
 
   // reenable rotation and axis scaling handles on the gizmo
   if (this.gizmo) {
@@ -1267,15 +1381,6 @@ Meshy.prototype.endMeasurement = function() {
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "x");
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "y");
     this.gizmo.enableHandle(Gizmo.HandleTypes.scale, "z");
-  }
-
-  // model was made partially transparent at measurement activation - make it
-  // opaque again
-  if (this.model) {
-    this.model.setMeshMaterialParams({
-      transparent: false,
-      opacity: 1.0
-    });
   }
 }
 Meshy.prototype.viewThickness = function() {
@@ -1532,7 +1637,7 @@ Meshy.prototype.updateSlicerParams = function() {
   this.setSliceLevel();
 }
 Meshy.prototype.startSliceMode = function() {
-  this.endMeasurement();
+  this.removeAllMeasurements();
 
   if (this.model) {
     this.sliceModeOn = true;
@@ -1806,9 +1911,13 @@ Meshy.prototype.initViewport = function() {
       else caught = false;
     }
 
+    // esc key
     if (e.keyCode === 27) {
-      _this.endMeasurement();
-      _this.endSetBase();
+      // if setting base, turn that off
+      if (_this.setBaseOn) _this.endSetBase();
+      // else, if not setting base but a measurement is active, remove it
+      else _this.removeCurrentMeasurement();
+
       caught = true;
     }
 
@@ -1838,9 +1947,9 @@ Meshy.prototype.initViewport = function() {
       _this.pointer.updateCursor();
     }
     // update measurement markers
-    if (_this.measurement && _this.measurement.active) {
-      _this.measurement.updateFromCamera(_this.camera);
-    }
+    _this.forEachMeasurement(function(item) {
+      item.measurement.updateFromCamera(_this.camera);
+    });
     // update axis widget
     _this.axisWidget.update();
 
@@ -2085,7 +2194,7 @@ Meshy.prototype.delete = function() {
 
   this.endSliceMode();
 
-  this.endMeasurement();
+  this.removeAllMeasurements();
   this.endSetBase();
 
   this.editStack.clear();

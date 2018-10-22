@@ -3,6 +3,19 @@ var Measurement = (function() {
   var Vector3 = THREE.Vector3;
   var Plane = THREE.Plane;
 
+  // utility functions
+
+  // clamp a number to two boundary values
+  function clamp(x, minVal, maxVal) {
+    if (x < minVal) x = minVal;
+    else if (x > maxVal) x = maxVal;
+    return x;
+  }
+  // compute acos, but clamp the input
+  function acos(a) { return Math.acos(clamp(a, -1, 1)); }
+  // compute asin, but clamp the input
+  function asin(a) { return Math.asin(clamp(a, -1, 1)); }
+
   function axisToVector3(axis) {
     var v = new Vector3();
     v[axis] = 1;
@@ -17,11 +30,16 @@ var Measurement = (function() {
     for (var i = 0; i < sourceLength; i++) target.push(source[i]);
   }
 
+
+
   // Measurement constructor
 
   function Measurement(pointer, scene) {
     this.pointer = pointer;
     this.scene = scene;
+
+    // unique id for managing the markers
+    this.uuid = THREE.Math.generateUUID();
 
     this.active = false;
     this.params = null;
@@ -68,12 +86,27 @@ var Measurement = (function() {
 
     constructor: Measurement,
 
-    activate: function(params) {
-      this.active = true;
+    // prototype material for line markers
+    lineMarkerMaterial: new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      // if marker has z-fighting with a surface, prioritize the marker
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 1
+    }),
 
+    meshMarkerMaterial: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      // if marker has z-fighting with a surface, prioritize the marker
+      polygonOffset: true,
+      polygonOffsetFactor: 2,
+      polygonOffsetUnits: 1
+    }),
+
+    start: function(params) {
       this.params = params || {};
       this.params.type = this.params.type || Measurement.Types.length;
-      this.params.color = this.params.color || 0x2adeff;
+      if (!this.params.hasOwnProperty("color")) this.params.color =  0x2adeff;
 
       // if true, don't automatically calculate the measurement when there are
       // enough points - necessiatates a manual call to .calculate()
@@ -92,8 +125,8 @@ var Measurement = (function() {
 
       this.result = this.makeResult(false);
 
-      var pparams = { name: "measurementMarker" };
-      var sparams = { name: "measurementMarker" };
+      var pparams = { name: "measurementMarker" + this.uuid };
+      var sparams = { name: "measurementMarker" + this.uuid };
 
       var scene = this.scene;
       var type = this.params.type;
@@ -104,18 +137,24 @@ var Measurement = (function() {
         this.snum = 1; // 1 line marker
         this.ptype = Markers.Types.sphere;
         this.stype = Markers.Types.line;
+        pparams.material = this.meshMarkerMaterial.clone();
+        sparams.material = this.lineMarkerMaterial.clone();
       }
       else if (type === Measurement.Types.angle) {
         this.pnum = 3; // 3 sphere markers
         this.snum = 2; // 2 line marker
         this.ptype = Markers.Types.sphere;
         this.stype = Markers.Types.line;
+        pparams.material = this.meshMarkerMaterial.clone();
+        sparams.material = this.lineMarkerMaterial.clone();
       }
       else if (type === Measurement.Types.circle) {
         this.pnum = 3; // 3 sphere markers
         this.snum = 1; // 1 circle marker
         this.ptype = Markers.Types.sphere;
         this.stype = Markers.Types.circle;
+        pparams.material = this.meshMarkerMaterial.clone();
+        sparams.material = this.lineMarkerMaterial.clone();
       }
       else if (type === Measurement.Types.crossSection) {
         this.pnum = 1; // 1 plane marker
@@ -131,6 +170,13 @@ var Measurement = (function() {
         // use this normal to create the plane marker
         pparams.axis = this.params.axis;
         pparams.normal = this.params.normal;
+        pparams.material = this.meshMarkerMaterial.clone();
+        pparams.material.setValues({
+          transparent: true,
+          opacity: 0.25,
+          side: THREE.DoubleSide
+        });
+        sparams.material = this.lineMarkerMaterial.clone();
       }
       else if (type === Measurement.Types.orientedCrossSection) {
         this.pnum = 3; // 3 sphere markers
@@ -144,6 +190,9 @@ var Measurement = (function() {
         // true if splitting the segment soup into an array of contiguous loops,
         // and necessarily true if finding the nearest contour
         this.params.splitContours = this.params.nearestContour || this.params.splitContours || false;
+
+        pparams.material = this.meshMarkerMaterial.clone();
+        sparams.material = this.lineMarkerMaterial.clone();
       }
       else return;
 
@@ -178,8 +227,31 @@ var Measurement = (function() {
         for (var p = 0; p < this.pnum; p++) this.params.p.push(null);
       }
 
-      this.pointerCallbackIdx = this.pointer.addClickCallback(this.placePoint.bind(this));
+      this.activate();
+    },
+
+    dispose: function() {
+      this.deactivate();
+
+      removeMeshByName(this.scene, "measurementMarker" + this.uuid);
+
+      this.onResultChange = null;
+    },
+
+    activate: function() {
       this.pointer.activate();
+
+      this.pointerCallbackIdx = this.pointer.addClickCallback(this.placePoint.bind(this));
+
+      this.active = true;
+    },
+
+    deactivate: function() {
+      this.pointer.deactivate();
+
+      this.pointerCallbackIdx = -1;
+
+      this.active = false;
     },
 
     getType: function() {
@@ -501,8 +573,8 @@ var Measurement = (function() {
     },
 
     updateFromCamera: function(camera) {
-      // only update if active and measurement uses non-plane markers
-      if (!this.active || this.ptype !== Markers.Types.sphere) return;
+      // only update if measurement uses non-plane markers
+      if (this.ptype !== Markers.Types.sphere) return;
 
       for (var m = 0; m < this.pnum; m++) {
         var marker = this.pmarkers[m];
@@ -516,8 +588,6 @@ var Measurement = (function() {
     },
 
     scaleFromPoint: function(factor, point) {
-      if (!this.active) return;
-
       for (var m = 0; m < this.pnum; m++) {
         this.pmarkers[m].scaleFromPoint(factor, point);
       }
@@ -564,8 +634,6 @@ var Measurement = (function() {
     },
 
     translate: function(delta) {
-      if (!this.active) return;
-
       for (var m = 0; m < this.pnum; m++) {
         this.pmarkers[m].translate(delta);
       }
@@ -585,466 +653,9 @@ var Measurement = (function() {
         || this.params.type === Measurement.Types.orientedCrossSection) {
         this.result.boundingBox.translate(delta);
       }
-    },
-
-    deactivate: function() {
-      this.active = false;
-
-      this.pointer.removeClickCallback(this.pointerCallbackIdx);
-      this.pointerCallbackIdx = -1;
-
-      this.pointer.deactivate();
-
-      removeMeshByName(this.scene, "measurementMarker");
-
-      this.onResultChange = null;
     }
 
   });
-
-
-
-  // utility functions
-
-  // clamp a number to two boundary values
-  function clamp(x, minVal, maxVal) {
-    if (x < minVal) x = minVal;
-    else if (x > maxVal) x = maxVal;
-    return x;
-  }
-  // compute acos, but clamp the input
-  function acos(a) { return Math.acos(clamp(a, -1, 1)); }
-  // compute asin, but clamp the input
-  function asin(a) { return Math.asin(clamp(a, -1, 1)); }
-
-
-
-  // marker/connector types and factories
-
-  // abstract Marker class
-  /*function Marker(params) {
-    params = params || {};
-
-    this.active = false;
-
-    this.mesh = new THREE.Mesh();
-    this.mesh.visible = false;
-    this.mesh.name = "measurementMarker";
-
-    this.type = "";
-  }
-
-  Marker.Types = {
-    none: "none",
-    point: "point",
-    plane: "plane"
-  };
-
-  Object.assign(Marker.prototype, {
-    // set the material color
-    setColor: function(color) {
-      this.mesh.material.color.set(color);
-      return this;
-    },
-
-    addToScene: function(scene) {
-      scene.add(this.mesh);
-      return this;
-    },
-
-    activate: function() {
-      this.active = true;
-      this.mesh.visible = true;
-      return this;
-    },
-
-    deactivate: function() {
-      this.active = false;
-      this.mesh.visible = false;
-      return this;
-    }
-  });
-
-  // derived marker class representing a point
-  function PointMarker(params) {
-    params = params || {};
-
-    Marker.call(this, params);
-
-    var radius = params.radius || 1;
-    var widthSegments = params.widthSegments || 16;
-    var heightSegments = params.heightSegments || 8;
-    var geo = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
-    var mat = params.material ? params.material.clone() : new THREE.MeshStandardMaterial({
-      color: 0xffffff
-    });
-
-    this.mesh.geometry = geo;
-    this.mesh.material = mat;
-
-    this.type = Marker.Types.point;
-  }
-
-  PointMarker.prototype = Object.create(Marker.prototype);
-  Object.assign(PointMarker.prototype, {
-    constructor: PointMarker,
-
-    setPosition: function(position) {
-      this.mesh.position.copy(position);
-      return this;
-    },
-
-    getPosition: function() {
-      return this.mesh.position;
-    },
-
-    setRadius: function(radius) {
-      this.mesh.scale.set(radius, radius, radius);
-
-      return this;
-    },
-
-    scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
-      this.mesh.position.sub(center).multiply(factor).add(center);
-
-      return this;
-    },
-
-    translate: function(delta) {
-      this.mesh.position.add(delta);
-
-      return this;
-    }
-  });
-
-  // derived marker class representing a plane
-  function PlaneMarker(params) {
-    params = params || {};
-
-    Marker.call(this, params);
-
-    var dim = params.dim || 1;
-    var geo = new THREE.PlaneBufferGeometry(dim, dim);
-
-    // geometry points up z by default, so reorient if necessary
-    if (params.axis === "x") geo.rotateY(Math.PI / 2);
-    else if (params.axis === "y") geo.rotateX(Math.PI / 2);
-
-    var mat = params.material ? params.material.clone : new THREE.MeshStandardMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.25,
-      side: THREE.DoubleSide
-    });
-
-    // display mesh
-    this.mesh.geometry = geo;
-    this.mesh.material = mat;
-
-    this.normal = params.normal || new THREE.Vector(0, 0, 1);
-
-    this.type = Marker.Types.plane;
-  }
-
-  PlaneMarker.prototype = Object.create(Marker.prototype);
-  Object.assign(PlaneMarker.prototype, {
-    constructor: PointMarker,
-
-    setPosition: function(point) {
-      // position display mesh
-      this.mesh.position.copy(point);
-
-      return this;
-    },
-
-    getPosition: function() {
-      return this.mesh.position;
-    },
-
-    setScale: function(scale) {
-      this.mesh.scale.copy(scale);
-
-      return this;
-    },
-
-    scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
-      this.mesh.position.sub(center).multiply(factor).add(center);
-
-      this.mesh.scale.multiply(factor);
-
-      return this;
-    },
-
-    translate: function(delta) {
-      this.mesh.position.add(delta);
-
-      return this;
-    }
-  });
-
-  // creates markers of a given type
-  function MarkerFactory() {
-    this.make = function(type, params) {
-      if (type === Marker.Types.point) {
-        return new PointMarker(params);
-      }
-      else if (type === Marker.Types.plane) {
-        return new PlaneMarker(params);
-      }
-      else return null;
-    };
-  }
-
-  // abstract Connector class
-  function Connector(params) {
-    params = params || {};
-
-    this.active = false;
-
-    this.mesh = new THREE.LineSegments();
-    this.mesh.visible = false;
-    this.mesh.name = "measurementConnector";
-
-    this.type = "";
-  }
-
-  Connector.Types = {
-    none: "none",
-    circle: "circle",
-    line: "line",
-    contour: "contour"
-  };
-
-  Object.assign(Connector.prototype, {
-    // set the material color
-    setColor: function(color) {
-      this.mesh.material.color.set(color);
-      return this;
-    },
-
-    addToScene: function(scene) {
-      scene.add(this.mesh);
-      return this;
-    },
-
-    activate: function() {
-      this.active = true;
-      this.mesh.visible = true;
-      return this;
-    },
-
-    deactivate: function() {
-      this.active = false;
-      this.mesh.visible = false;
-      return this;
-    }
-  });
-
-  // derived connector class representing a line
-  function LineConnector(params) {
-    params = params || {};
-
-    Connector.call(this, params);
-
-    var geo = new THREE.Geometry();
-    var vertices = geo.vertices;
-    vertices.push(new Vector3());
-    vertices.push(new Vector3());
-    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
-      color: 0xffffff
-    });
-
-    this.mesh.geometry = geo;
-    this.mesh.material = mat;
-
-    this.type = Connector.Types.line;
-  }
-
-  LineConnector.prototype = Object.create(Connector.prototype);
-  Object.assign(LineConnector.prototype, {
-    constructor: LineConnector,
-
-    setFromPointPair: function(a, b) {
-      var geo = this.mesh.geometry;
-      var vertices = geo.vertices;
-
-      vertices[0].copy(a);
-      vertices[1].copy(b);
-
-      geo.verticesNeedUpdate = true;
-
-      return this;
-    },
-
-    scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
-
-      var geo = this.mesh.geometry;
-      var vertices = geo.vertices;
-
-      vertices[0].sub(center).multiply(factor).add(center);
-      vertices[1].sub(center).multiply(factor).add(center);
-
-      geo.verticesNeedUpdate = true;
-
-      return this;
-    },
-
-    translate: function(delta) {
-      var vertices = this.mesh.geometry.vertices;
-
-      vertices[0].add(delta);
-      vertices[1].add(delta);
-
-      this.mesh.geometry.verticesNeedUpdate = true;
-
-      return this;
-    }
-  });
-
-  // derived connector class representing a circle
-  function CircleConnector(params) {
-    params = params || {};
-
-    Connector.call(this, params);
-
-    var geo = new THREE.Geometry();
-    var vertices = geo.vertices;
-
-    var r = params.radius || 1;
-    var segments = params.segments || 64;
-    var dt = 2 * Math.PI / segments;
-
-    for (var i = 0; i <= segments; i++) {
-      var theta = i * dt;
-      vertices.push(new Vector3(r*Math.cos(theta), r*Math.sin(theta), 0));
-      vertices.push(new Vector3(r*Math.cos(theta+dt), r*Math.sin(theta+dt), 0));
-    }
-    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
-      color: 0xffffff
-    });
-
-    this.mesh.geometry = geo;
-    this.mesh.material = mat;
-
-    this.type = Connector.Types.circle;
-  }
-
-  CircleConnector.prototype = Object.create(Connector.prototype);
-  Object.assign(CircleConnector.prototype, {
-    constructor: CircleConnector,
-
-    setFromNormalAndCenter: function(normal, center) {
-      this.mesh.position.copy(center);
-      this.mesh.lookAt(center.clone().add(normal));
-
-      return this;
-    },
-
-    setScale: function(scale) {
-      this.mesh.scale.copy(scale);
-
-      return this;
-    },
-
-    scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
-
-      this.mesh.position.sub(center).multiply(factor).add(center);
-      this.mesh.scale.multiply(factor);
-
-      return this;
-    },
-
-    translate: function(delta) {
-      this.mesh.position.add(delta);
-
-      return this;
-    }
-  });
-
-  function ContourConnector(params) {
-    params = params || {};
-
-    Connector.call(this, params);
-
-    var geo = new THREE.Geometry();
-    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
-      color: 0xffffff
-    });
-
-    this.mesh.geometry = geo;
-    this.mesh.material = mat;
-
-    this.type = Connector.Types.contour;
-  }
-
-  ContourConnector.prototype = Object.create(Connector.prototype);
-  Object.assign(ContourConnector.prototype, {
-    constructor: ContourConnector,
-
-    setFromSegments: function(segments) {
-      if (!segments) return;
-
-      // when this connector is set from a set of segments (in world space),
-      // reset the mesh position to 0 and rebuild geometry
-      this.mesh.position.setScalar(0);
-      this.mesh.scale.setScalar(1);
-
-      var geo = new THREE.Geometry();
-      var vertices = geo.vertices;
-
-      for (var s = 0, l = segments.length; s < l; s++) {
-        var segment = segments[s];
-
-        vertices.push(segment.start);
-        vertices.push(segment.end);
-      }
-
-      this.mesh.geometry = geo;
-
-      return this;
-    },
-
-    setScale: function(scale) {
-      this.mesh.scale.copy(scale);
-
-      return this;
-    },
-
-    scaleFromCenter: function(factor, center) {
-      if (!factor.isVector3) factor = new Vector3().setScalar(factor);
-
-      this.mesh.position.sub(center).multiply(factor).add(center);
-      this.mesh.scale.multiply(factor);
-
-      return this;
-    },
-
-    translate: function(delta) {
-      this.mesh.position.add(delta);
-
-      return this;
-    }
-  });
-
-  // creates connectors of a given type
-  function ConnectorFactory() {
-    this.make = function(type, params) {
-      if (type === Connector.Types.line) {
-        return new LineConnector(params);
-      }
-      else if (type === Connector.Types.circle) {
-        return new CircleConnector(params);
-      }
-      else if (type === Connector.Types.contour) {
-        return new ContourConnector(params);
-      }
-      else return null;
-    };
-  }*/
 
 
 
