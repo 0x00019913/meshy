@@ -31,15 +31,13 @@ Debug.prototype.line = function(v, w, n, lastonly, o, axis) {
   this.debugLineGeo.vertices.push(ww);
   this.debugPointGeo.verticesNeedUpdate = true;
 }
-Debug.prototype.oneline = function(v, w, o, axis, c) {
-  if (o === undefined) o = 0;
-  if (axis === undefined) axis = "z";
+Debug.prototype.oneline = function(v, w, c, offset, dist) {
   if (c === undefined) c = 0xff6666;
+  if (offset === undefined) offset = new THREE.Vector3();
+  if (dist !== undefined) offset = offset.clone().setLength(dist);
 
-  var vv = v.clone();
-  vv[axis] += o;
-  var ww = w.clone();
-  ww[axis] += o;
+  var vv = v.clone().add(offset);
+  var ww = w.clone().add(offset);
 
   var geo = new THREE.Geometry();
   geo.vertices.push(vv);
