@@ -425,7 +425,7 @@ var Calculate = (function() {
   // returns an object like { segments, boundingBox, area, length }
   function _planarConvexHull(plane, segments) {
     if (THREE.QuickHull === undefined) {
-      console.log("Calculating the convex hull relies on THREE.QuickHull.");
+      console.error("Calculating the convex hull relies on THREE.QuickHull.");
 
       return null;
     }
