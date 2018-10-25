@@ -289,6 +289,13 @@ var Calculate = (function() {
     return center.divideScalar(volume);
   }
 
+  // calculate the intersection of the plane and mesh
+  // arguments:
+  //  plane: THREE.Plane
+  //  mesh: THREE.Mesh
+  //  splitPolygons: true to split the intersection into polygons, false to
+  //    leave the result as an unordered array of segments
+  // returns an array of objects like { segments, boundingBox, area, length }
   function _crossSection(plane, mesh, splitPolygons) {
     // don't split by default
     splitPolygons = splitPolygons || false;
@@ -359,6 +366,170 @@ var Calculate = (function() {
     }
 
     return result;
+  }
+
+  // gets the contour (object like { segments, boundingBox, area, length })
+  // whose total distance to the set of points is minimal
+  function _nearestContourToPoints(contours, points) {
+    if (contours.length < 1) return null;
+    if (contours.length === 1) return contours[0];
+
+    var n = points.length;
+    var nearestContour = null;
+
+    // the points will all have some distance from the nearest
+    // contour - they should all be exactly on the contour, so their
+    // total distance to the closest segments of the contour should be
+    // about 0; use this fact to find the closest contour
+    var minDist = Infinity;
+
+    var closestPoint = new THREE.Vector3();
+
+    for (var c = 0, lc = contours.length; c < lc; c++) {
+      var contour = contours[c];
+
+      // minimum distances of each marker point to the contour's segments
+      var contourMinDist = [];
+      for (var p = 0; p < n; p++) contourMinDist.push(Infinity);
+
+      for (var s = 0, ls = contour.segments.length; s < ls; s++) {
+        var segment = contour.segments[s];
+
+        for (var p = 0; p < n; p++) {
+          var point = points[p];
+
+          // calculate closest point on segment to this point
+          segment.closestPointToPoint(point, false, closestPoint);
+
+          // update min distance from contour to this point
+          contourMinDist[p] = Math.min(contourMinDist[p], closestPoint.distanceTo(point));
+        }
+      }
+
+      var distSum = 0;
+      for (var p = 0; p < n; p++) distSum += contourMinDist[p];
+
+      if (distSum < minDist) {
+        nearestContour = contour;
+        minDist = distSum;
+      }
+    }
+
+    return nearestContour;
+  }
+
+  // calculates a planar convex hull of a set of segments
+  // arguments:
+  //  plane: THREE.Plane
+  //  segments: an array of THREE.Line3 objects
+  // returns an object like { segments, boundingBox, area, length }
+  function _planarConvexHull(plane, segments) {
+    if (THREE.QuickHull === undefined) {
+      console.log("Calculating the convex hull relies on THREE.QuickHull.");
+
+      return null;
+    }
+
+    var boundingBox = new Box3();
+
+    // build an array of the points forming the cross-section to compute
+    // the hull
+    var points = [];
+
+    for (var p = 0, lp = segments.length; p < lp; p++) {
+      var point = segments[p].start;
+
+      points.push(point);
+      boundingBox.expandByPoint(point);
+    }
+
+    // push two points on either side of the plane to force the convex
+    // hull to occupy some volume (else, the 3D hull would be in a plane,
+    // which is not well-defined behavior);
+    // the resulting 3D hull will consist of triangles with two verts on
+    // the intended 2D hull and the remaining vert on either above or
+    // below vert
+    var center = new THREE.Vector3();
+    var size = new THREE.Vector3();
+    boundingBox.getCenter(center);
+    boundingBox.getSize(size);
+    var maxSize = Math.max(size.x, size.y, size.z);
+
+    var below = center.clone().addScaledVector(plane.normal, -maxSize);
+    var above = center.clone().addScaledVector(plane.normal, maxSize);
+
+    points.push(below, above);
+
+    // compute the hull
+    var hull = new THREE.QuickHull().setFromPoints(points);
+
+    // get one of the halfedges in the plane of the cross-section
+    var faces = hull.faces;
+    var startHalfedge = null;
+
+    for (var f = 0, lf = faces.length; f < lf; f++) {
+      var face = faces[f];
+      var he = face.edge;
+
+      // iterate over a face's halfedges (wound CCW), find the one that
+      // ends on above vert, get its predecessor
+      do {
+        if (he.head().point.equals(above)) {
+          startHalfedge = he.prev;
+          break;
+        }
+        he = he.next;
+      } while (he !== face.edge);
+
+      if (startHalfedge !== null) break;
+    }
+
+    // trace around the 2D hull from the starting halfedge, store segments
+    var halfedge = startHalfedge;
+    var segments = [];
+    var area = 0;
+    var length = 0;
+
+    var pa = new Vector3();
+    var pb = new Vector3();
+    var delta = new Vector3();
+    var cross = new Vector3();
+    var planePoint = new Vector3();
+    plane.coplanarPoint(planePoint);
+
+    do {
+      var v0 = halfedge.tail().point;
+      var v1 = halfedge.head().point;
+      var segment = new Line3(v0, v1);
+
+      // push new segment
+      segments.push(segment);
+
+      // increment contour length
+      length += v0.distanceTo(v1);
+
+      pa.subVectors(v0, planePoint);
+      pb.subVectors(v1, planePoint);
+
+      // compute area of the triangle; possibly change sign depending on the
+      // normal
+      segment.delta(delta);
+      cross.crossVectors(delta, plane.normal);
+      var sign = Math.sign(pa.dot(cross));
+      var segmentArea = pa.cross(pb).length() / 2;
+
+      // increment area
+      area += segmentArea * sign;
+
+      halfedge = halfedge.next.twin.next;
+    } while (halfedge !== startHalfedge);
+
+    return {
+      segments: segments,
+      boundingBox: boundingBox,
+      area: area,
+      length: length
+    };
   }
 
   // calculate circle normal, center, and radius from three coplanar points:
@@ -487,6 +658,8 @@ var Calculate = (function() {
     volume: _volume,
     centerOfMass: _centerOfMass,
     crossSection: _crossSection,
+    nearestContourToPoints: _nearestContourToPoints,
+    planarConvexHull: _planarConvexHull,
     circleFromThreePoints: _circleFromThreePoints
   };
 
