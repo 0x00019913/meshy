@@ -1068,6 +1068,8 @@ Meshy.prototype.buildMeasurementFolder = function() {
     .title("Measure cross-section on y axis.");
   this.measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
+  // todo: remove
+  if (this.measureConvexHull === undefined) this.measureConvexHull = false;
   this.measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
     .title("Measure the cross-section of a single part of the mesh.");
 
@@ -1181,7 +1183,11 @@ Meshy.prototype.measureCrossSectionZ = function() {
   this.addMeasurement({ type: Measurement.Types.crossSection, axis: "z" });
 }
 Meshy.prototype.measureLocalCrossSection = function() {
-  this.addMeasurement({ type: Measurement.Types.orientedCrossSection, nearestContour: true });
+  this.addMeasurement({
+    type: Measurement.Types.orientedCrossSection,
+    nearestContour: true,
+    convexHull: this.measureConvexHull
+  });
 }
 Meshy.prototype.addMeasurement = function(params) {
   // slice mode keeps its own copy of the mesh, so don't allow measuring
