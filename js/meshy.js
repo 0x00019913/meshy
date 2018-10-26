@@ -1070,6 +1070,9 @@ Meshy.prototype.buildMeasurementFolder = function() {
     .title("Measure cross-section on z axis.");
   // todo: remove
   if (this.measureConvexHull === undefined) this.measureConvexHull = false;
+  if (this.calculateManually === undefined) this.calculateManually = false;
+  if (this.showPreviewMarker === undefined) this.showPreviewMarker = false;
+  if (this.previewMarkerRadiusOffset === undefined) this.previewMarkerRadiusOffset = false;
   this.measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
     .title("Measure the cross-section of a single part of the mesh.");
 
@@ -1082,6 +1085,8 @@ Meshy.prototype.buildMeasurementFolder = function() {
     this.measurementFolder.add(this, "measurementIdx", indices).name("Current")
       .title("Current measurement.")
       .onChange(this.onSetCurrentMeasurement.bind(this));
+    // todo: remove
+    //this.measurementFolder.add(this, "measurementCalculate").name("Calculate");
     this.measurementFolder.add(this, "removeCurrentMeasurement").name("Remove")
       .title("Remove the current measurement.");
     this.measurementFolder.add(this, "removeAllMeasurements").name("Remove all")
@@ -1120,6 +1125,10 @@ Meshy.prototype.setCurrentMeasurementResult = function(result) {
   var item = this.getMeasurementItem(this.measurementIdx);
 
   if (item) item.result = result;
+}
+// todo: remove
+Meshy.prototype.measurementCalculate = function() {
+  this.getCurrentMeasurement().calculate();
 }
 Meshy.prototype.removeCurrentMeasurement = function() {
   var item = this.getMeasurementItem(this.measurementIdx);
@@ -1198,7 +1207,11 @@ Meshy.prototype.measureLocalCrossSection = function() {
   this.addMeasurement({
     type: Measurement.Types.orientedCrossSection,
     nearestContour: true,
-    convexHull: this.measureConvexHull
+    convexHull: this.measureConvexHull,
+    // todo: remove
+    calculateManually: this.calculateManually,
+    showPreviewMarker: this.showPreviewMarker,
+    previewMarkerRadiusOffset: this.previewMarkerRadiusOffset
   });
 }
 Meshy.prototype.addMeasurement = function(params) {

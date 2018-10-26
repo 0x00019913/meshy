@@ -116,7 +116,7 @@ var Markers = (function() {
 
       for (var i = scene.children.length - 1; i >= 0; i--) {
         var child = scene.children[i];
-        if (child.name === this.object.name) {
+        if (child === this.object) {
           scene.remove(child);
         }
       }

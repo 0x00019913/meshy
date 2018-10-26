@@ -57,6 +57,9 @@ var Measurement = (function() {
     this.pmarkers = [];
     this.smarkers = [];
 
+    // a special preview marker
+    this.previewMarker = null;
+
     // total numbers of primary/secondary markers
     this.pnum = 0;
     this.snum = 0;
@@ -191,11 +194,26 @@ var Measurement = (function() {
         this.stype = Markers.Types.contour;
 
         // true if selecting only the closest contour to the center of the circle
-        // subtended by the markers
+        // subtended by the 3 primary markers
         this.params.nearestContour = this.params.nearestContour || false;
         // true if splitting the segment soup into an array of contiguous loops,
         // and necessarily true if finding the nearest contour
         this.params.splitContours = this.params.nearestContour || this.params.splitContours || false;
+        // true if calculating manually and need to show an intermediate circle
+        // marker while the measurement hasn't been calculated
+        this.params.showPreviewMarker =
+          this.params.calculateManually && (this.params.showPreviewMarker || false);
+        // if showing preview circle marker, this is its radial offset from the
+        // computed circle subtended by the 3 primary markers
+        this.params.previewMarkerRadiusOffset = this.params.previewMarkerRadiusOffset || 0.0;
+        this.params.previewMarkerColor = this.params.previewMarkerColor || this.params.color;
+
+        // make a special preview marker if necessary
+        if (this.params.showPreviewMarker) {
+          this.previewMarker = Markers.create(Markers.Types.circle, sparams);
+          this.previewMarker.setColor(this.params.previewMarkerColor);
+          this.previewMarker.addToScene(scene);
+        }
 
         pparams.material = this.meshMarkerMaterial.clone();
         sparams.material = this.lineMarkerMaterial.clone();
@@ -224,7 +242,7 @@ var Measurement = (function() {
 
         this.calculate();
 
-        this.positionMarkers();
+        this.positionPrimaryMarkers();
       }
       // else, initialize the points
       else {
@@ -274,9 +292,10 @@ var Measurement = (function() {
       this.pnumactive = Math.min(this.pnum, this.pnumactive + 1);
       this.pidx = (this.pidx + 1) % this.pnum;
 
-      this.calculate();
+      if (!this.params.calculateManually) this.calculate();
 
-      this.positionMarkers();
+      this.positionPrimaryMarkers();
+      this.positionPreviewMarker();
     },
 
     getParams: function() {
@@ -315,6 +334,12 @@ var Measurement = (function() {
     calculate: function() {
       // if not enough points, do nothing
       if (!this.isFullyDetermined()) return;
+
+      // remove the preview marker if it exists
+      if (this.previewMarker) {
+        this.previewMarker.removeFromScene();
+        this.previewMarker = null;
+      }
 
       this.result = this.makeResult(false);
 
@@ -450,14 +475,23 @@ var Measurement = (function() {
         this.result.ready = true;
       }
 
+      // if a result has been calculated, the secondary markers need to be
+      // positioned
+      this.positionSecondaryMarkers();
+
       if (this.onResultChange) {
         this.onResultChange(this.result);
       }
     },
 
+    // position all markers
     positionMarkers: function() {
-      // position primary markers
+      this.positionPrimaryMarkers();
+      this.positionSecondaryMarkers();
+    },
 
+    // position the mouse-driven markers
+    positionPrimaryMarkers: function() {
       if (this.ptype === Markers.Types.sphere) {
         for (var m = 0; m < this.pnum; m++) {
           var pos = this.params.p[m];
@@ -473,6 +507,8 @@ var Measurement = (function() {
       else if (this.ptype === Markers.Types.plane) {
         var marker = this.pmarkers[0];
 
+        if (!this.result || !this.result.ready) return;
+
         // if no valid bounding box to which to size the marker, deactivate
         if (Math.abs(this.result.boundingBox.min.length()) === Infinity) {
           marker.deactivate();
@@ -482,9 +518,10 @@ var Measurement = (function() {
 
         marker.activate();
       }
+    },
 
-      // position secondary markers
-
+    // position secondary markers
+    positionSecondaryMarkers: function() {
       if (this.stype === Markers.Types.line) {
         for (var m = 0; m < this.snum; m++) {
           var ps = this.params.p[(this.pidx + m) % this.pnum];
@@ -510,7 +547,7 @@ var Measurement = (function() {
 
           marker.setCenter(this.result.center);
           marker.setNormal(this.result.normal);
-          marker.setScale(this.result.radius);
+          marker.setRadius(this.result.radius);
 
           marker.activate();
         }
@@ -527,6 +564,30 @@ var Measurement = (function() {
       else {
         this.smarkers[0].activate();
       }
+    },
+
+    // if a preview marker exists, position it
+    positionPreviewMarker: function() {
+      if (!this.previewMarker || !this.isFullyDetermined()) return;
+
+      var p0 = this.params.p[0];
+      var p1 = this.params.p[1];
+      var p2 = this.params.p[2];
+
+      // compute the circle parameters from three points
+      var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+
+      if (!circle) return;
+
+      var center = circle.center;
+      var normal = circle.normal;
+      var radius = circle.radius;
+
+      this.previewMarker.setCenter(center);
+      this.previewMarker.setNormal(normal);
+      this.previewMarker.setRadius(radius + this.params.previewMarkerRadiusOffset);
+
+      this.previewMarker.activate();
     },
 
     makeResult: function(ready) {
