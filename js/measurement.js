@@ -551,10 +551,24 @@ var Measurement = (function() {
     },
 
     scaleFromPoint: function(factor, point) {
+      // scale measurement constraints
+      for (var i = 0; i < this.params.p.length; i++) {
+        var p = this.params.p[i];
+
+        if (p !== null) {
+          // if factor is a 3-vector
+          if (factor.isVector3) p.sub(point).multiply(factor).add(point);
+          // else, it's a scalar
+          else p.sub(point).multiplyScalar(factor).add(point);
+        }
+      }
+
+      // scale primary markers
       for (var m = 0; m < this.pnum; m++) {
         this.pmarkers[m].scaleFromPoint(factor, point);
       }
 
+      // scale secondary markers
       for (var m = 0; m < this.snum; m++) {
         this.smarkers[m].scaleFromPoint(factor, point);
       }
@@ -597,10 +611,19 @@ var Measurement = (function() {
     },
 
     translate: function(delta) {
+      // translate measurement constraints
+      for (var i = 0; i < this.params.p.length; i++) {
+        var p = this.params.p[i];
+
+        if (p !== null) p.add(delta);
+      }
+
+      // translate primary markers
       for (var m = 0; m < this.pnum; m++) {
         this.pmarkers[m].translate(delta);
       }
 
+      // translate secondary markers
       for (var c = 0; c < this.snum; c++) {
         this.smarkers[c].translate(delta);
       }
