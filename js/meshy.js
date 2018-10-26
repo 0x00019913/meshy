@@ -1174,13 +1174,25 @@ Meshy.prototype.measureCircle = function() {
   this.addMeasurement({ type: Measurement.Types.circle });
 }
 Meshy.prototype.measureCrossSectionX = function() {
-  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "x" });
+  this.addMeasurement({
+    type: Measurement.Types.crossSection,
+    axis: "x",
+    convexHull: this.measureConvexHull
+  });
 }
 Meshy.prototype.measureCrossSectionY = function() {
-  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "y" });
+  this.addMeasurement({
+    type: Measurement.Types.crossSection,
+    axis: "y",
+    convexHull: this.measureConvexHull
+  });
 }
 Meshy.prototype.measureCrossSectionZ = function() {
-  this.addMeasurement({ type: Measurement.Types.crossSection, axis: "z" });
+  this.addMeasurement({
+    type: Measurement.Types.crossSection,
+    axis: "z",
+    convexHull: this.measureConvexHull
+  });
 }
 Meshy.prototype.measureLocalCrossSection = function() {
   this.addMeasurement({

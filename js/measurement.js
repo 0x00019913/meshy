@@ -106,6 +106,7 @@ var Measurement = (function() {
     start: function(params) {
       this.params = params || {};
       this.params.type = this.params.type || Measurement.Types.length;
+
       if (!this.params.hasOwnProperty("color")) this.params.color =  0x2adeff;
 
       // if true, don't automatically calculate the measurement when there are
@@ -165,7 +166,12 @@ var Measurement = (function() {
         this.params.axis = this.params.axis || "z";
         // normal of the axis-oriented plane denoting the cross-section
         this.params.normal = this.params.normal || axisToVector3(this.params.axis);
-        this.params.splitContours = this.params.splitContours || false;
+        // true if selecting only the closest contour to the center of the circle
+        // subtended by the markers
+        this.params.nearestContour = this.params.nearestContour || false;
+        // true if splitting the segment soup into an array of contiguous loops,
+        // and necessarily true if finding the nearest contour
+        this.params.splitContours = this.params.nearestContour || this.params.splitContours || false;
 
         // use this normal to create the plane marker
         pparams.axis = this.params.axis;
@@ -359,73 +365,46 @@ var Measurement = (function() {
         this.result.normal = normal;
         this.result.ready = true;
       }
-      else if (type === Measurement.Types.crossSection) {
-        var normal = this.params.normal;
-        var point = this.params.p[0];
+      else if (type === Measurement.Types.crossSection || type === Measurement.Types.orientedCrossSection) {
+        // variables that determine the plane
+        var normal, point;
 
-        if (normal === null || point === null) return;
+        // if normal cross-section, set the plane from point and normal
+        if (type === Measurement.Types.crossSection) {
+          normal = this.params.normal;
+          point = this.params.p[0];
 
-        var mesh = this.mesh;
-        var plane = new Plane();
-        plane.setFromNormalAndCoplanarPoint(normal, point);
+          if (normal === null || point === null) return;
+        }
+        // else, compute circle and set from its center and normal
+        else {
+          var p0 = this.params.p[0];
+          var p1 = this.params.p[1];
+          var p2 = this.params.p[2];
 
-        var contours = Calculate.crossSection(plane, mesh, this.params.splitContours);
+          // compute the circle parameters from three points
+          var circle = Calculate.circleFromThreePoints(p0, p1, p2);
 
-        var segments = [];
-        var area = 0;
-        var length = 0;
-        var boundingBox = new THREE.Box3();
+          if (!circle) return;
 
-        // accumulate the result
-        for (var s = 0, ls = contours.length; s < ls; s++) {
-          var contour = contours[s];
-
-          arrayAppend(segments, contour.segments);
-          area += contour.area;
-          length += contour.length;
-          boundingBox.expandByPoint(contour.boundingBox.min);
-          boundingBox.expandByPoint(contour.boundingBox.max);
+          normal = circle.normal;
+          point = circle.center;
         }
 
-        // set the contour marker from the segment array
-        this.smarkers[0].setFromSegments(segments);
-
-        // fill the measurement result
-        this.result.area = area;
-        this.result.boundingBox = boundingBox;
-        this.result.length = length;
-        this.result.contours = contours;
-        this.result.ready = true;
-      }
-      else if (type === Measurement.Types.orientedCrossSection) {
-        var p0 = this.params.p[0];
-        var p1 = this.params.p[1];
-        var p2 = this.params.p[2];
-
-        // compute the circle parameters from three points
-        var circle = Calculate.circleFromThreePoints(p0, p1, p2);
-
-        if (!circle) return;
-
-        var center = circle.center;
-        var normal = circle.normal;
-        var circleArea = circle.radius * circle.radius * Math.PI;
-
-        // compute plane-mesh cross-section
-        var mesh = this.mesh;
         var plane = new Plane();
-        plane.setFromNormalAndCoplanarPoint(normal, center);
 
-        var contours = Calculate.crossSection(plane, mesh, this.params.splitContours);
+        // set the plane
+        plane.setFromNormalAndCoplanarPoint(normal, point);
 
-        // process the cross-section result
+        // having the plane, we can compute the cross-section
+        var contours = Calculate.crossSection(plane, this.mesh, this.params.splitContours);
 
         // if getting the nearest contour, retrieve it and use it as the measurement result
         if (this.params.nearestContour) {
           contours = [Calculate.nearestContourToPoints(contours, this.params.p)];
         }
 
-        // return values
+        // final quantities
         var segments = [];
         var area = 0;
         var length = 0;
@@ -447,6 +426,7 @@ var Measurement = (function() {
             boundingBox = hull.boundingBox;
           }
         }
+        // else, just accumulate the final bounding box, area, and length
         else {
           for (var c = 0, lc = contours.length; c < lc; c++) {
             var contour = contours[c];
@@ -463,8 +443,7 @@ var Measurement = (function() {
         this.smarkers[0].setFromSegments(segments);
 
         // fill the measurement result
-        this.result.segments = segments;
-        this.result.area = Math.abs(area);
+        this.result.area = area;
         this.result.boundingBox = boundingBox;
         this.result.length = length;
         this.result.contours = contours;
