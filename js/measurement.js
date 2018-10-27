@@ -634,6 +634,10 @@ var Measurement = (function() {
         this.smarkers[m].scaleFromPoint(factor, point);
       }
 
+      if (this.previewMarker) {
+        this.previewMarker.scaleFromPoint(factor, point);
+      }
+
       // copy the current result
       var result = Object.assign({}, this.result);
 
@@ -687,6 +691,10 @@ var Measurement = (function() {
       // translate secondary markers
       for (var c = 0; c < this.snum; c++) {
         this.smarkers[c].translate(delta);
+      }
+
+      if (this.previewMarker) {
+        this.previewMarker.translate(delta);
       }
 
       // translate relevant quantities in the computed result
