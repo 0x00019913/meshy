@@ -183,6 +183,7 @@ Meshy.prototype.generateUI = function() {
   this.measurementData = [];
   this.measurementIdx = -1;
   this.measurementFolder = this.gui.addFolder("Measure", "Make calculations based on mouse-placed markers.");
+  this.measureConvexHull = false;
   this.buildMeasurementFolder();
 
   var thicknessFolder = this.gui.addFolder("Mesh Thickness", "Visualize approximate local mesh thickness.");
@@ -1069,12 +1070,13 @@ Meshy.prototype.buildMeasurementFolder = function() {
   this.measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
   // todo: remove
-  if (this.measureConvexHull === undefined) this.measureConvexHull = false;
   if (this.calculateManually === undefined) this.calculateManually = false;
   if (this.showPreviewMarker === undefined) this.showPreviewMarker = false;
   if (this.previewMarkerRadiusOffset === undefined) this.previewMarkerRadiusOffset = false;
   this.measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
     .title("Measure the cross-section of a single part of the mesh.");
+  this.measurementFolder.add(this, "measureConvexHull").name("Convex hull")
+    .title("Compute the convex hull for cross-sections.");
 
   if (this.measurementsExist()) {
     var indices = {};
