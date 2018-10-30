@@ -1,3 +1,75 @@
+// measurement.js
+//
+// dependencies:
+//  three.js
+//  markers.js
+//  pointer.js
+//
+// description:
+//  does interactive mouse-controlled measurements
+//
+// classes:
+//  Measurement
+//  constructor arguments:
+//   - pointer: an instance of Pointer
+//   - scene: THREE.Scene for adding measurement markers
+//
+// usage:
+//  /* making a fresh measurement */
+//  var pointer = new Pointer(camera, domElement, scene);
+//  var measurement = new Measurement(pointer, scene);
+//  var params = {
+//    type: Measurement.Types.circle
+//  };
+//  measurement.start(params); // make measurement interactive
+//  measurement.deactivate(); // disengage the pointer but leave the measurement
+//  measurement.activate(); // activate the existing measurement again
+//  measurement.dispose(); // destroy
+//
+//  /* restoring an old measurement */
+//  - todo -
+//
+//  shared params:
+//   type: measurement type
+//   color: marker color, shared between all markers
+//   calculateManually: if true, don't autocalculate the measurement when
+//    enough markers have been placed; false by default
+//
+//  measurement types:
+//   length:
+//    point-to-point measurement
+//
+//   angle:
+//    angle between three consecutive points
+//
+//   circle:
+//    quantities calculated from a circle subtended by three points
+//
+//   cross-section:
+//    measurements of a cross-section of the mesh by an axis-aligned plane
+//    params:
+//     axis: "x", "y", or "z", signifies plane normal
+//     normal: normal vector, if axis is unspecified
+//     nearestContour: if true, only use the closest contour from the
+//      cross-section
+//     splitContours: if true, split the cross-section into contours;
+//      necessarily true if nearestContour is true
+//
+//   oriented cross-section:
+//    cross-section by a plane determined by three points
+//    params:
+//     nearestContour: if true, only use the closest contour from the
+//      cross-section
+//     splitContours: if true, split the cross-section into contours;
+//      necessarily true if nearestContour is true
+//     showPreviewMarker: if true and calculating manually, show a preview
+//      marker when the measurement is ready to calculate
+//     previewMarkerRadiusOffset: expand the marker radially by this much from
+//      the circle subtended by the three points
+//     previewMarkerColor: optional custom color for the preview marker
+
+
+
 var Measurement = (function() {
 
   var Vector3 = THREE.Vector3;

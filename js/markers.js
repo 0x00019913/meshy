@@ -1,3 +1,41 @@
+// markers.js
+//
+// dependencies:
+//  three.js
+//
+// description:
+//  visual element to mark stuff on the screen
+//
+// classes:
+//  Marker (base class, rest are derived)
+//  constructor arguments:
+//   - params
+//  params:
+//   - material: optional material to use
+//   - color: optional material color, unless material is set
+//
+//  SphereMarker
+//  params:
+//   - radius: radius for the sphere
+//   - widthSegments: subdivisions along width
+//   - heightSegments: subdivisions along height
+//  PlaneMarker
+//  params:
+//   - axis: "x", "y", or "z"
+//  CircleMarker
+//   - segments: number of segments in the circle
+//  LineMarker
+//  ContourMarker
+//  PointerMarker
+//
+// usage:
+//  var marker = Markers.create(Markers.Types.sphere, params);
+//
+//  see the individual marker constructors for typical usage functions;
+//  functions in the Marker prototype is shared between all derived classes
+
+
+
 var Markers = (function() {
 
   var Types = {
@@ -87,19 +125,6 @@ var Markers = (function() {
       return this;
     },
 
-    generateMaterial: function(color) {
-      if (this.type === Types.sphere || this.type === Types.plane || this.type === Types.pointer) {
-        return new THREE.MeshStandardMaterial({
-          color: color !== undefined ? color : 0xffffff
-        });
-      }
-      else if (this.type === Types.circle || this.type === Types.line || this.type === Types.contour) {
-        return new THREE.LineBasicMaterial({
-          color: color !== undefined ? color : 0xffffff
-        });
-      }
-    },
-
     addToScene: function(scene) {
       if (this.object) {
         scene.add(this.object);
@@ -116,7 +141,7 @@ var Markers = (function() {
 
       for (var i = scene.children.length - 1; i >= 0; i--) {
         var child = scene.children[i];
-        if (child === this.object) {
+        if (child.name === this.object.name) {
           scene.remove(child);
         }
       }
@@ -160,16 +185,18 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.sphere;
-
     var radius = params.radius || 1;
     var widthSegments = params.widthSegments || 16;
     var heightSegments = params.heightSegments || 8;
 
     var geo = new THREE.SphereBufferGeometry(radius, widthSegments, heightSegments);
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.MeshStandardMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+    });
 
     this.createObject(THREE.Mesh, geo, mat);
+
+    this.type = Types.sphere;
   }
 
   Markers.SphereMarker.prototype = Object.create(Marker.prototype);
@@ -191,17 +218,22 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.plane;
-
     var geo = new THREE.PlaneBufferGeometry(1, 1);
 
     // geometry points up z by default, so reorient if necessary
     if (params.axis === "x") geo.rotateY(Math.PI / 2);
     else if (params.axis === "y") geo.rotateX(Math.PI / 2);
 
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.MeshStandardMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+      transparent: true,
+      opacity: 0.25,
+      side: THREE.DoubleSide
+    });
 
     this.createObject(THREE.Mesh, geo, mat);
+
+    this.type = Types.plane;
   }
 
   Markers.PlaneMarker.prototype = Object.create(Marker.prototype);
@@ -248,8 +280,6 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.circle;
-
     var segments = params.segments || 64;
     var dt = 2 * Math.PI / segments;
 
@@ -268,9 +298,13 @@ var Markers = (function() {
       positionAttr.setXYZ(i * 2 + 1, Math.cos(thetanext), Math.sin(thetanext), 0);
     }
 
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+    });
 
     this.createObject(THREE.LineSegments, geo, mat);
+
+    this.type = Types.circle;
   }
 
   Markers.CircleMarker.prototype = Object.create(Marker.prototype);
@@ -317,8 +351,6 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.line;
-
     // use a normal geometry for ease of manipulation
     var geo = new THREE.Geometry();
 
@@ -326,9 +358,13 @@ var Markers = (function() {
     vertices.push(new THREE.Vector3());
     vertices.push(new THREE.Vector3());
 
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+    });
 
     this.createObject(THREE.LineSegments, geo, mat);
+
+    this.type = Types.line;
   }
 
   Markers.LineMarker.prototype = Object.create(Marker.prototype);
@@ -362,12 +398,14 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.contour;
-
     var geo = new THREE.Geometry();
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.LineBasicMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+    });
 
     this.createObject(THREE.LineSegments, geo, mat);
+
+    this.type = Types.contour;
   }
 
   Markers.ContourMarker.prototype = Object.create(Marker.prototype);
@@ -407,8 +445,6 @@ var Markers = (function() {
 
     Marker.call(this, params);
 
-    this.type = Types.pointer;
-
     var segments = params.segments || 32;
 
     var coneBufferGeo = new THREE.ConeBufferGeometry(1, 4.0, segments);
@@ -420,9 +456,15 @@ var Markers = (function() {
     geo.merge(new THREE.Geometry().fromBufferGeometry(coneBufferGeo));
     geo.merge(new THREE.Geometry().fromBufferGeometry(sphereBufferGeo));
 
-    var mat = params.material ? params.material.clone() : this.generateMaterial(params.color);
+    var mat = params.material ? params.material.clone() : new THREE.MeshStandardMaterial({
+      color: params.hasOwnProperty("color") ? params.color : 0xffffff,
+      roughness: 0.0,
+      metalness: 0.5
+    });
 
     this.createObject(THREE.Mesh, geo, mat);
+
+    this.type = Types.pointer;
   }
 
   Markers.PointerMarker.prototype = Object.create(Marker.prototype);

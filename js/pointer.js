@@ -1,6 +1,7 @@
 // pointer.js
 //
 // dependencies:
+//  three.js
 //  marker.js
 //
 // description:
