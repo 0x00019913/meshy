@@ -1,6 +1,53 @@
+// pointer.js
+//
+// dependencies:
+//  marker.js
+//
+// description:
+//  enables clicking/tapping an object
+//
+// classes:
+//  Pointer
+//  constructor arguments:
+//   - camera: THREE.Camera, used to cast rays
+//   - domElement: DOM element with which to interact - usually renderer.domElement
+//   - scene: THREE.Scene necessary to add cursors
+//
+// usage:
+//  /* create a new Pointer */
+//  var pointer = new Pointer(camera, domElement, scene);
+//
+//  /* add a THREE.Object3D (or derived class like THREE.Mesh) for raycasting */
+//  pointer.addObject(obj);
+//
+//  /* optionally set cursor */
+//  pointer.setCursorCircle(); // follows the surface
+//  /* or */
+//  pointer.setCursorPointer(); // explicitly shows the surface normal
+//
+//  /* add callbacks that occur upon clicking the object */
+//  pointer.addClickCallback(callback);
+//
+//  /* activate the pointer */
+//  pointer.activate();
+//
+//  /* do stuff with the pointer */
+//
+//  /* turn off the pointer to make it noninteractive */
+//  pointer.deactivate();
+//
+//  /* destroy the pointer */
+//  pointer.dispose();
+
+
+
 var Pointer = (function() {
 
   function Pointer(camera, domElement, scene) {
+    if (!camera) console.error("Pointer requires a THREE.Camera.");
+    if (!domElement) console.error("Pointer requires a DOM element.");
+    if (!scene) console.error("Pointer requires a THREE.Scene.");
+
     // these are required for raycasting
     this.camera = camera;
     this.domElement = domElement;
