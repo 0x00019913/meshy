@@ -70,8 +70,6 @@ var Measurement = (function() {
 
     this.mesh = null;
 
-    this.pointerCallbackIdx = -1;
-
     // optionally called when a result has been calculated
     this.onResultChange = null;
   }
@@ -265,15 +263,18 @@ var Measurement = (function() {
     activate: function() {
       this.pointer.activate();
 
-      this.pointerCallbackIdx = this.pointer.addClickCallback(this.placePoint.bind(this));
+      this.pointer.addCallback(this.uuid, this.placePoint.bind(this));
 
       this.active = true;
     },
 
     deactivate: function() {
-      this.pointer.deactivate();
-
-      this.pointerCallbackIdx = -1;
+      // if this measurement is associated with the pointer, remove the click
+      // callback and deactivate the pointer; don't deactivate if pointer isn't
+      // associated with the current measurement b/c the pointer might be shared
+      if (this.pointer.removeCallback(this.uuid)) {
+        this.pointer.deactivate();
+      }
 
       this.active = false;
     },

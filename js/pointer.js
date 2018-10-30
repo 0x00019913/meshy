@@ -14,30 +14,21 @@
 //   - scene: THREE.Scene necessary to add cursors
 //
 // usage:
-//  /* create a new Pointer */
 //  var pointer = new Pointer(camera, domElement, scene);
-//
-//  /* add a THREE.Object3D (or derived class like THREE.Mesh) for raycasting */
-//  pointer.addObject(obj);
+//  pointer.addObject(obj); // object for raycasting
 //
 //  /* optionally set cursor */
 //  pointer.setCursorCircle(); // follows the surface
 //  /* or */
 //  pointer.setCursorPointer(); // explicitly shows the surface normal
 //
-//  /* add callbacks that occur upon clicking the object */
-//  pointer.addClickCallback(callback);
-//
-//  /* activate the pointer */
+//  pointer.addCallback(callback); // callback after a click
 //  pointer.activate();
 //
 //  /* do stuff with the pointer */
 //
-//  /* turn off the pointer to make it noninteractive */
-//  pointer.deactivate();
-//
-//  /* destroy the pointer */
-//  pointer.dispose();
+//  pointer.deactivate(); // make noninteractive
+//  pointer.dispose(); // destroy
 
 
 
@@ -60,9 +51,9 @@ var Pointer = (function() {
     this.raycaster = new THREE.Raycaster();
 
     // contains functions invoked on mouse up
-    this.clickCallbacks = [];
+    this.callbacks = {};
 
-    // create the cursors
+    // create the cursor
     this.cursor = null;
 
     this.cursorColor = 0xcccccc;
@@ -80,7 +71,7 @@ var Pointer = (function() {
     this.clickAllowance = 5;
 
     // intersection object returned by raycasting if the cursor currently
-    // intersects mesh, else null
+    // intersects an object, else null
     this.intersection = null;
 
     domElement.addEventListener('mousemove', pointerMove, false);
@@ -92,6 +83,13 @@ var Pointer = (function() {
     domElement.addEventListener('touchleave', pointerUp, false);
 
     this.dispose = function() {
+      this.deactivate();
+
+      if (this.cursor) {
+        this.cursor.removeFromScene();
+        this.cursor = null;
+      }
+
       domElement.removeEventListener('mousemove', pointerMove);
       domElement.removeEventListener('mousedown', pointerDown);
       domElement.removeEventListener('touchstart', pointerDown);
@@ -175,50 +173,57 @@ var Pointer = (function() {
     },
 
     deactivate: function() {
-      // clear callbacks
-      this.clickCallbacks.length = 0;
-
       // make inactive and invisible
       this.active = false;
 
-      if (this.cursor) {
-        this.cursor.deactivate();
-        this.cursor.removeFromScene();
-        this.cursor = null;
-      }
+      // deactivate cursor, if any
+      if (this.cursor) this.cursor.deactivate();
 
       return this;
     },
 
+    // set the cursor to a circle marker
     setCursorCircle: function() {
+      if (this.cursor) this.cursor.removeFromScene();
+
       this.cursor = new Markers.CircleMarker().setColor(this.cursorColor);
 
       return this;
     },
 
+    // set the cursor to the pointer marker
     setCursorPointer: function() {
+      if (this.cursor) this.cursor.removeFromScene();
+
       this.cursor = new Markers.PointerMarker().setColor(this.cursorColor);
 
       return this;
     },
 
+    // unset the cursor
     setCursorNull: function() {
+      if (this.cursor) this.cursor.removeFromScene();
+
       this.cursor = null;
 
       return this;
     },
 
-    addClickCallback: function(callback) {
-      var callbacks = this.clickCallbacks;
-      var idx = callbacks.length;
+    // add a callback to call when the object is clicked
+    addCallback: function(key, callback) {
+      this.callbacks[key] = callback;
 
-      callbacks.push(callback);
-
-      return idx;
+      return true;
     },
 
-    removeClickCallback: function(idx) {
-      this.clickCallbacks.splice(idx);
+    // remove a callback at the given key, return true if removed, else false
+    removeCallback: function(key) {
+      if (this.callbacks.hasOwnProperty(key)) {
+        delete this.callbacks[key];
+        return true;
+      }
+
+      return false;
     },
 
     // calculate three.js intersection object from the pointer position
@@ -235,7 +240,7 @@ var Pointer = (function() {
       var intersection = this.getPointerIntersection(pointer);
       var cursor = this.cursor;
 
-      // if intersecting mesh, position the cursor
+      // if intersecting object, position the cursor
       if (intersection) {
         // get the normal in world space
         var rotation = new THREE.Matrix3().getNormalMatrix(intersection.object.matrixWorld);
@@ -271,8 +276,8 @@ var Pointer = (function() {
         var intersection = this.getPointerIntersection(pointer);
 
         if (intersection) {
-          for (var c = 0; c < this.clickCallbacks.length; c++) {
-            this.clickCallbacks[c](intersection);
+          for (var key in this.callbacks) {
+            this.callbacks[key](intersection);
           }
         }
       }

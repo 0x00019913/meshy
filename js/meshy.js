@@ -756,8 +756,12 @@ Meshy.prototype.startSetBase = function() {
 
   if (this.setBaseController) this.setBaseController.name("Cancel (ESC)");
 
+  this.forEachMeasurement(function(item, idx) {
+    item.measurement.deactivate();
+  });
+
   this.pointer.deactivate();
-  this.pointer.addClickCallback(this.faceOrientDown.bind(this));
+  this.pointer.addCallback("set base", this.faceOrientDown.bind(this));
   this.pointer.setCursorPointer();
   this.pointer.activate();
 }
@@ -768,7 +772,10 @@ Meshy.prototype.endSetBase = function() {
   this.setBaseOn = false;
 
   if (this.setBaseController) this.setBaseController.name("Set base");
-  if (this.pointer) this.pointer.deactivate();
+  if (this.pointer) {
+    this.pointer.removeCallback("set base");
+    this.pointer.deactivate();
+  }
 
   // a measurement may have been active - treat this as setting it active again
   this.onSetCurrentMeasurement();
@@ -1096,6 +1103,8 @@ Meshy.prototype.buildMeasurementFolder = function() {
   }
 }
 Meshy.prototype.onSetCurrentMeasurement = function() {
+  this.pointer.setCursorCircle();
+
   var currentIdx = this.measurementIdx;
 
   if (currentIdx < 0) return;
