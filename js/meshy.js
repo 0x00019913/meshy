@@ -1083,7 +1083,8 @@ Meshy.prototype.buildMeasurementFolder = function() {
   this.measurementFolder.add(this, "measureLocalCrossSection").name("Local cross-section")
     .title("Measure the cross-section of a single part of the mesh.");
   this.measurementFolder.add(this, "measureConvexHull").name("Convex hull")
-    .title("Compute the convex hull for cross-sections.");
+    .title("Compute the convex hull for cross-sections.")
+    .onChange(this.onToggleConvexHull.bind(this));
 
   if (this.measurementsExist()) {
     var indices = {};
@@ -1119,6 +1120,21 @@ Meshy.prototype.onSetCurrentMeasurement = function() {
 
   // current measurement changed, so rebuild the scale to measurement folder
   this.buildScaleToMeasurementFolder();
+}
+Meshy.prototype.onToggleConvexHull = function() {
+  var convexHull = this.measureConvexHull;
+
+  this.forEachMeasurement(function(item, idx) {
+    var measurement = item.measurement;
+
+    measurement.setParams({ convexHull: convexHull });
+
+    // recalculate the measurement, but do it only if there's a valid current
+    // result, else there's no point
+    if (measurement.result && measurement.result.ready) {
+      measurement.calculate();
+    }
+  });
 }
 Meshy.prototype.getMeasurementItem = function(idx) {
   return this.measurementData[idx];
