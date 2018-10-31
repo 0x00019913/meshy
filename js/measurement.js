@@ -491,6 +491,12 @@ var Measurement = (function() {
       this.positionPreviewMarker();
     },
 
+    setParams: function(params) {
+      Object.assign(this.params, params);
+
+      return this;
+    },
+
     getParams: function() {
       return this.params;
     },
