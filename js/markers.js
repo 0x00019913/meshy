@@ -28,7 +28,7 @@
 //  ContourMarker
 //  PointerMarker
 //
-// usage:
+// example:
 //  var marker = Markers.create(Markers.Types.sphere, params);
 //
 //  see the individual marker constructors for typical usage functions;
@@ -137,14 +137,7 @@ var Markers = (function() {
     removeFromScene: function() {
       if (!this.object || !this.scene) return;
 
-      var scene = this.scene;
-
-      for (var i = scene.children.length - 1; i >= 0; i--) {
-        var child = scene.children[i];
-        if (child.name === this.object.name) {
-          scene.remove(child);
-        }
-      }
+      this.scene.remove(this.object);
     },
 
     activate: function() {

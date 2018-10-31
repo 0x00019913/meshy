@@ -1,3 +1,16 @@
+// pointer.js
+//
+// dependencies:
+//  three.js
+//
+// description:
+//  computation of various quantities from a THREE.Mesh
+//
+// classes:
+//  none
+
+
+
 var Calculate = (function() {
 
   // shorthands for Three.js constructors
@@ -186,11 +199,24 @@ var Calculate = (function() {
   }
 
   // apply a function to each face
-  // - the callback takes three vertices, a normal, and an index, all in world
+  // arguments:
+  //  objects: an array of THREE.Mesh objects, or a single THREE.Mesh
+  //  callback: takes three vertices, a normal, and an index, all in world
   //   space; these vectors are local variables in this function and should be
   //   copied, never stored directly
-  // - both THREE.Geometry and THREE.BufferGeometry are supported
-  function _traverseFaces(mesh, callback) {
+  function _traverseFaces(objects, callback) {
+    if (Array.isArray(objects)) {
+      for (var o = 0, ol = objects.length; o < ol; o++) {
+        var mesh = objects[o];
+
+        _traverseFaces(mesh, callback);
+      }
+
+      return;
+    }
+
+    var mesh = objects;
+
     var geo = mesh.geometry;
     var matrixWorld = mesh.matrixWorld;
 
@@ -383,7 +409,7 @@ var Calculate = (function() {
     // about 0; use this fact to find the closest contour
     var minDist = Infinity;
 
-    var closestPoint = new THREE.Vector3();
+    var closestPoint = new Vector3();
 
     for (var c = 0, lc = contours.length; c < lc; c++) {
       var contour = contours[c];
@@ -449,8 +475,8 @@ var Calculate = (function() {
     // the resulting 3D hull will consist of triangles with two verts on
     // the intended 2D hull and the remaining vert on either above or
     // below vert
-    var center = new THREE.Vector3();
-    var size = new THREE.Vector3();
+    var center = new Vector3();
+    var size = new Vector3();
     boundingBox.getCenter(center);
     boundingBox.getSize(size);
     var maxSize = Math.max(size.x, size.y, size.z);

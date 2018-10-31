@@ -14,7 +14,7 @@
 //   - domElement: DOM element with which to interact - usually renderer.domElement
 //   - scene: THREE.Scene necessary to add cursors
 //
-// usage:
+// example:
 //  var pointer = new Pointer(camera, domElement, scene);
 //  pointer.addObject(obj); // object for raycasting
 //
@@ -24,12 +24,18 @@
 //  pointer.setCursorPointer(); // explicitly shows the surface normal
 //
 //  pointer.addCallback(callback); // callback after a click
-//  pointer.activate();
+//  pointer.activate(); // make interactive
 //
-//  /* do stuff with the pointer */
+//  /* call this in the render loop to scale the cursor in proportion to its
+//  distance from the camera */
+//  pointer.updateCursor();
+//
+//  /* do stuff with the pointer here */
 //
 //  pointer.deactivate(); // make noninteractive
-//  pointer.dispose(); // destroy
+//
+//  /* when done, destroy */
+//  pointer.dispose();
 
 
 

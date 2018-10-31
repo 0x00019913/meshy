@@ -4,6 +4,7 @@
 //  three.js
 //  markers.js
 //  pointer.js
+//  calculate.js
 //
 // description:
 //  does interactive mouse-controlled measurements
@@ -14,59 +15,159 @@
 //   - pointer: an instance of Pointer
 //   - scene: THREE.Scene for adding measurement markers
 //
-// usage:
-//  /* making a fresh measurement */
-//  var pointer = new Pointer(camera, domElement, scene);
-//  var measurement = new Measurement(pointer, scene);
-//  var params = {
-//    type: Measurement.Types.circle
-//  };
-//  measurement.start(params); // make measurement interactive
-//  measurement.deactivate(); // disengage the pointer but leave the measurement
-//  measurement.activate(); // activate the existing measurement again
-//  measurement.dispose(); // destroy
+// examples:
+//  - making a fresh measurement:
+//     var pointer = new Pointer(camera, domElement, scene);
+//     var measurement = new Measurement(pointer, scene); // blank measurement
+//     measurement.onResultChange = function(result) {
+//       // do something with the result
+//     };
+//     var params = {
+//       type: Measurement.Types.circle,
+//       color: 0x2adeff
+//     };
+//     measurement.start(params); // start measurement
+//     measurement.deactivate(); // turn off the pointer but leave the measurement
+//     measurement.activate(); // make the measurement active again
+//     measurement.dispose(); // destroy
 //
-//  /* restoring an old measurement */
-//  - todo -
+//  - restoring an old measurement:
+//     var params = measurement.getParams(); // save the params
+//     measurement.dispose();
+//     var measurement2 = new Measurement(pointer, scene);
+//     measurement2.start(params);
 //
-//  shared params:
-//   type: measurement type
-//   color: marker color, shared between all markers
-//   calculateManually: if true, don't autocalculate the measurement when
-//    enough markers have been placed; false by default
+//  - making a manual oriented cross-section measurement of one part of the mesh:
+//     var pointer = new Pointer(camera, domElement, scene);
+//     var measurement = new Measurement(pointer, scene); // blank measurement
+//     measurement.onResultChange = function(result) { // do something w/ result };
+//     var params = {
+//       type: Measurement.Types.orientedCrossSection,
+//       calculateManually: true, // true, so call .calculate() manually
+//       nearestContour: true, // only take one part of the mesh
+//       convexHull: true, // compute the convex hull of the cross-section
+//       showPreviewMarker: true, // show a preview marker while not yet calculated
+//       previewMarkerRadiusOffset: 0.1, // expand preview marker radius by this much
+//       previewMarkerColor: 0x2adeff
+//     };
+//     measurement.start(params);
 //
-//  measurement types:
-//   length:
-//    point-to-point measurement
+//     /* place the three markers as necessary */
 //
-//   angle:
-//    angle between three consecutive points
+//     /* now calculate the measurement; this "snaps the preview marker to the mesh" */
+//     measurement.calculate();
+//     measurement.deactivate(); // measurement is finalized, so deactivate
+//     measurement.dispose(); // call when done
 //
-//   circle:
-//    quantities calculated from a circle subtended by three points
+// measurement types:
+//  Length:
+//   point-to-point measurement
 //
-//   cross-section:
-//    measurements of a cross-section of the mesh by an axis-aligned plane
-//    params:
-//     axis: "x", "y", or "z", signifies plane normal
-//     normal: normal vector, if axis is unspecified
-//     nearestContour: if true, only use the closest contour from the
-//      cross-section
-//     splitContours: if true, split the cross-section into contours;
-//      necessarily true if nearestContour is true
+//   params:
+//    {
+//      type: measurement type
+//      color: marker color, shared between all markers (0x2adeff by default)
+//      calculateManually: if true, don't autocalculate the measurement when
+//       enough markers have been placed; false by default (false by default)
+//    }
 //
-//   oriented cross-section:
-//    cross-section by a plane determined by three points
-//    params:
-//     nearestContour: if true, only use the closest contour from the
-//      cross-section
-//     splitContours: if true, split the cross-section into contours;
-//      necessarily true if nearestContour is true
-//     showPreviewMarker: if true and calculating manually, show a preview
-//      marker when the measurement is ready to calculate
-//     previewMarkerRadiusOffset: expand the marker radially by this much from
-//      the circle subtended by the three points
-//     previewMarkerColor: optional custom color for the preview marker
+//   result:
+//    {
+//      ready: true if valid result
+//      length: point-to-point distance
+//    }
+//
+//  Angle:
+//   angle between three consecutive points
+//
+//   params:
+//    {
+//      type: measurement type
+//      color: marker color, shared between all markers (0x2adeff by default)
+//      calculateManually: if true, don't autocalculate the measurement when
+//       enough markers have been placed; false by default (false by default)
+//    }
+//
+//   result:
+//    {
+//      ready: true if valid result
+//      angle: angle in radians
+//      angleDegrees: angle in degrees
+//    }
+//
+//  Circle:
+//   quantities calculated from a circle subtended by three points
+//
+//   params:
+//    {
+//      type: measurement type
+//      color: marker color, shared between all markers (0x2adeff by default)
+//      calculateManually: if true, don't autocalculate the measurement when
+//       enough markers have been placed; false by default (false by default)
+//    }
+//
+//   result:
+//    {
+//      ready: true if valid result
+//      radius: circle radius
+//      diameter: circle diameter
+//      circumference: circle circumference
+//      area: circle area
+//      center: circle center (THREE.Vector3)
+//      normal: normalized circle normal (THREE.Vector3)
+//    }
+//
+//  Cross-section:
+//   measurements of a cross-section of the mesh by an axis-aligned plane
+//
+//   params:
+//    {
+//      axis: "x", "y", or "z", signifies plane normal
+//      normal: normal vector, if axis is unspecified
+//      nearestContour: if true, only use the closest contour from the
+//       cross-section
+//      splitContours: if true, split the cross-section into contours;
+//       necessarily true if nearestContour is true
+//    }
+//
+//   result:
+//    {
+//      ready: true if valid result
+//      area: total cross-section area
+//      boundingBox: total bounding box of the cross-section (THREE.Box3)
+//      length: total contour length of the cross-section
+//      contours: array of objects of the format:
+//       {
+//         segments: a (potentially unordered) array of segments (THREE.Line3)
+//         boundingBox: contour bounding box (THREE.Box3)
+//         area: contour area
+//         length: contour length
+//       }
+//       - if params.nearestContour, the array will only contain one contour
+//       - if params.splitContours, the array will contain as many contours as
+//       the full cross-section contains
+//       - if neither params.nearestContour nor params.splitContours, the array
+//       will contain one object and the segment array will be unordered)
+//    }
+//
+//  Oriented cross-section:
+//   cross-section by a plane determined by three points
+//
+//   params:
+//    {
+//      nearestContour: if true, only use the closest contour from the
+//       cross-section
+//      splitContours: if true, split the cross-section into contours;
+//       necessarily true if nearestContour is true
+//      showPreviewMarker: if true and calculating manually, show a preview
+//       marker when the measurement is ready to calculate
+//      previewMarkerRadiusOffset: expand the marker radially by this much from
+//       the circle subtended by the three points
+//      previewMarkerColor: optional custom color for the preview marker
+//    }
+//
+//   result:
+//    (same as regular axis-aligned cross-section)
 
 
 
@@ -74,6 +175,8 @@ var Measurement = (function() {
 
   var Vector3 = THREE.Vector3;
   var Plane = THREE.Plane;
+
+
 
   // utility functions
 
@@ -140,8 +243,6 @@ var Measurement = (function() {
     this.ptype = Markers.Types.none;
     this.stype = Markers.Types.none;
 
-    this.mesh = null;
-
     // optionally called when a result has been calculated
     this.onResultChange = null;
   }
@@ -199,8 +300,8 @@ var Measurement = (function() {
 
       this.result = this.makeResult(false);
 
-      var pparams = { name: "measurementMarker" + this.uuid };
-      var sparams = { name: "measurementMarker" + this.uuid };
+      var pparams = { name: "measurementMarkerPrimary" + this.uuid };
+      var sparams = { name: "measurementMarkerSecondary" + this.uuid };
 
       var scene = this.scene;
       var type = this.params.type;
@@ -280,7 +381,9 @@ var Measurement = (function() {
 
         // make a special preview marker if necessary
         if (this.params.showPreviewMarker) {
-          this.previewMarker = Markers.create(Markers.Types.circle, sparams);
+          this.previewMarker = Markers.create(Markers.Types.circle, {
+            name: "measurementMarkerPreview" + this.uuid
+          });
           this.previewMarker.setColor(this.params.previewMarkerColor);
           this.previewMarker.addToScene(scene);
         }
@@ -311,15 +414,25 @@ var Measurement = (function() {
         this.pidx = 0;
 
         this.calculate();
-
-        this.positionPrimaryMarkers();
       }
-      // else, initialize the points
-      else {
+      // else if params.p is not an array in the right format, initialize the points
+      else if (!Array.isArray(this.params.p) || this.params.p.length !== this.pnum){
         this.params.p = [];
 
         for (var p = 0; p < this.pnum; p++) this.params.p.push(null);
       }
+      // else, params.p is a valid array with the right number of entries
+      else {
+        // move the current index to the first null entry
+        for (var p = 0; p < this.pnum; p++) {
+          if (this.params.p[p] === null) {
+            this.pidx = p;
+            break;
+          }
+        }
+      }
+
+      this.positionPrimaryMarkers();
 
       this.activate();
     },
@@ -327,7 +440,17 @@ var Measurement = (function() {
     dispose: function() {
       this.deactivate();
 
-      removeMeshByName(this.scene, "measurementMarker" + this.uuid);
+      var namePrimary = "measurementMarkerPrimary" + this.uuid;
+      var nameSecondary = "measurementMarkerSecondary" + this.uuid;
+      var namePreview = "measurementMarkerPreview" + this.uuid;
+
+      for (var i = this.scene.children.length - 1; i >= 0; i--) {
+        var child = this.scene.children[i];
+
+        if (child.name === namePrimary || child.name === nameSecondary || child.name === namePreview) {
+          this.scene.remove(child);
+        }
+      }
 
       this.onResultChange = null;
     },
@@ -357,9 +480,6 @@ var Measurement = (function() {
 
     placePoint: function(intersection) {
       var point = intersection.point;
-      var mesh = intersection.object;
-
-      this.mesh = mesh;
 
       this.params.p[this.pidx] = point;
       this.pnumactive = Math.min(this.pnum, this.pnumactive + 1);
@@ -367,7 +487,7 @@ var Measurement = (function() {
 
       if (!this.params.calculateManually) this.calculate();
 
-      this.positionPrimaryMarkers();
+      this.positionMarkers();
       this.positionPreviewMarker();
     },
 
@@ -495,7 +615,7 @@ var Measurement = (function() {
         plane.setFromNormalAndCoplanarPoint(normal, point);
 
         // having the plane, we can compute the cross-section
-        var contours = Calculate.crossSection(plane, this.mesh, this.params.splitContours);
+        var contours = Calculate.crossSection(plane, this.pointer.objects, this.params.splitContours);
 
         // if getting the nearest contour, retrieve it and use it as the measurement result
         if (this.params.nearestContour) {
@@ -614,8 +734,8 @@ var Measurement = (function() {
 
         // if result is valid, position the marker and turn it on
         if (this.result.ready) {
-          var normal = this.result.normal;
           var center = this.result.center;
+          var normal = this.result.normal;
           var radius = this.result.radius;
 
           marker.setCenter(this.result.center);
