@@ -1,4 +1,4 @@
-// pointer.js
+// calculate.js
 //
 // dependencies:
 //  three.js
@@ -8,6 +8,8 @@
 //
 // classes:
 //  none
+
+// Anton Bovin, 2018
 
 
 
