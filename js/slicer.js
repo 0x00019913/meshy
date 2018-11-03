@@ -539,7 +539,7 @@ Slicer.prototype.setLevel = function(level) {
 
         // if the face is entirely below the slicing plane, include it whole
         if (bounds.max < slicePos) {
-          var verts = Calculate.faceVertices(face, vertices);
+          var verts = Compute.faceVertices(face, vertices);
 
           for (var v = 0; v < 3; v++) {
             position.setX(idx, verts[v].x);

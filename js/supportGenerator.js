@@ -121,7 +121,7 @@ var SupportGenerator = (function() {
       for (var f = 0, l = fs.length; f < l; f++) {
         var face = fs[f];
 
-        Calculate.faceVertices(face, vs, matrixWorld, a, b, c);
+        Compute.faceVertices(face, vs, matrixWorld, a, b, c);
         var faceMax = Math.max(a[axis], b[axis], c[axis]);
 
         normal.copy(face.normal).transformDirection(matrixWorld);
@@ -150,10 +150,10 @@ var SupportGenerator = (function() {
       for (var f = 0, l = supportFaces.length; f < l; f++) {
         var face = supportFaces[f];
 
-        Calculate.faceVertices(face, vs, matrixWorld, a, b, c);
+        Compute.faceVertices(face, vs, matrixWorld, a, b, c);
 
         // bounding box for the face
-        var facebb = Calculate.faceBoundingBox(face, vs, matrixWorld);
+        var facebb = Compute.faceBoundingBox(face, vs, matrixWorld);
 
         // normal in world space
         var normal = face.normal.clone().transformDirection(matrixWorld);

@@ -119,7 +119,7 @@ var HDS = (function() {
     var hemap = {};
 
     // traverse each face in the mesh and build the halfedge structure
-    Calculate.traverseFaces(mesh, function(va, vb, vc, normal, idx) {
+    Compute.traverseFaces(mesh, function(va, vb, vc, normal, idx) {
       var hva = addVertex(va);
       var hvb = addVertex(vb);
       var hvc = addVertex(vc);
@@ -146,7 +146,7 @@ var HDS = (function() {
     // internal functions
 
     function addVertex(v) {
-      var vhash = Calculate.vectorHash(v, p);
+      var vhash = Compute.vectorHash(v, p);
 
       if (vmap.hasOwnProperty(vhash)) {
         return vmap[vhash];

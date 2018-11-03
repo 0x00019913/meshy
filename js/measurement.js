@@ -4,7 +4,7 @@
 //  three.js
 //  markers.js
 //  pointer.js
-//  calculate.js
+//  compute.js
 //
 // description:
 //  does interactive mouse-controlled measurements
@@ -575,7 +575,7 @@ var Measurement = (function() {
         var p1 = this.params.p[1];
         var p2 = this.params.p[2];
 
-        var circle = (p0 && p1 && p2) ? Calculate.circleFromThreePoints(p0, p1, p2) : null;
+        var circle = (p0 && p1 && p2) ? Compute.circleFromThreePoints(p0, p1, p2) : null;
 
         if (!circle) return;
 
@@ -609,7 +609,7 @@ var Measurement = (function() {
           var p2 = this.params.p[2];
 
           // compute the circle parameters from three points
-          var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+          var circle = Compute.circleFromThreePoints(p0, p1, p2);
 
           if (!circle) return;
 
@@ -623,11 +623,11 @@ var Measurement = (function() {
         plane.setFromNormalAndCoplanarPoint(normal, point);
 
         // having the plane, we can compute the cross-section
-        var contours = Calculate.crossSection(plane, this.pointer.objects, this.params.splitContours);
+        var contours = Compute.crossSection(plane, this.pointer.objects, this.params.splitContours);
 
         // if getting the nearest contour, retrieve it and use it as the measurement result
         if (this.params.nearestContour) {
-          contours = [Calculate.nearestContourToPoints(contours, this.params.p)];
+          contours = [Compute.nearestContourToPoints(contours, this.params.p)];
         }
 
         // final quantities
@@ -643,7 +643,7 @@ var Measurement = (function() {
 
         // if computing the convex hull, get the result from that
         if (this.params.convexHull) {
-          var hull = Calculate.planarConvexHull(plane, segments);
+          var hull = Compute.planarConvexHull(plane, segments);
 
           if (hull) {
             segments = hull.segments;
@@ -776,7 +776,7 @@ var Measurement = (function() {
       var p2 = this.params.p[2];
 
       // compute the circle parameters from three points
-      var circle = Calculate.circleFromThreePoints(p0, p1, p2);
+      var circle = Compute.circleFromThreePoints(p0, p1, p2);
 
       if (!circle) return;
 

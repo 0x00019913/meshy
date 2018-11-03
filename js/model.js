@@ -375,17 +375,17 @@ Model.prototype.flipNormals = function() {
 
 // Calculate surface area.
 Model.prototype.calculateSurfaceArea = function() {
-  this.surfaceArea = Calculate.surfaceArea(this.baseMesh);
+  this.surfaceArea = Compute.surfaceArea(this.baseMesh);
 }
 
 // Calculate volume.
 Model.prototype.calculateVolume = function() {
-  this.volume = Calculate.volume(this.baseMesh);
+  this.volume = Compute.volume(this.baseMesh);
 }
 
 // Calculate center of mass.
 Model.prototype.calculateCenterOfMass = function() {
-  this.centerOfMass = Calculate.centerOfMass(this.baseMesh);
+  this.centerOfMass = Compute.centerOfMass(this.baseMesh);
 }
 
 // Calculate cross-section.
@@ -396,7 +396,7 @@ Model.prototype.calcCrossSection = function(axis, pos) {
   point[axis] = pos;
   var plane = new THREE.Plane().setFromNormalAndCoplanarPoint(axisVector, point);
 
-  return Calculate.crossSection(plane, this.baseMesh);
+  return Compute.crossSection(plane, this.baseMesh);
 }
 
 
@@ -728,7 +728,7 @@ Model.prototype.viewThickness = function(threshold) {
     var face = faces[f];
 
     // compute ray in world space
-    ray.origin = Calculate.faceCenter(face, vertices, matrixWorld);
+    ray.origin = Compute.faceCenter(face, vertices, matrixWorld);
     ray.direction = normal.copy(face.normal).transformDirection(matrixWorld).negate();
 
     var intersection = octree.raycastInternal(ray);
