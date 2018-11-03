@@ -37,6 +37,8 @@
 //  /* when done, destroy */
 //  pointer.dispose();
 
+// Anton Bovin, 2018
+
 
 
 var Pointer = (function() {

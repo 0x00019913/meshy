@@ -6,7 +6,7 @@
   margin-left: 15px;
   background-color: #000;
   overflow-y: auto;
-  max-height: 100%;
+  max-height: calc(100% - 120px);
 
   color: #eee;
   font: 11px Lucida Grande, sans-serif;

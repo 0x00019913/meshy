@@ -38,8 +38,7 @@ var InfoBox = (function() {
     domElement = domElement || document;
 
     this.container = document.createElement("div");
-    this.container.id = "infoBox"
-    //this.styleContainer();
+    this.container.id = "infoBox";
     document.body.appendChild(this.container);
 
     this.lists = {};
@@ -89,22 +88,6 @@ var InfoBox = (function() {
     // adding a line to the InfoBox adds it to the default list
     add: function(title, source, props, def) {
       this.lists.default.add(title, source, props, def);
-    },
-
-    // Style the div container.
-    styleContainer: function() {
-      this.container.style.position = "absolute";
-      this.container.style.left = "0";
-      this.container.style.top = "0";
-      this.container.style.width = "255px";
-      this.container.style.marginLeft = "15px";
-      this.container.style.backgroundColor = "#000";
-      this.container.style.overflowY = "auto";
-      this.container.style.maxHeight = "100%";
-
-      this.container.style.color = "#eee";
-      this.container.style.font = "11px Lucida Grande, sans-serif";
-      this.container.style.textShadow = "0 -1px 0 #111";
     }
 
   });
@@ -119,22 +102,18 @@ var InfoBox = (function() {
 
     this.container = document.createElement("div");
     this.container.className = "listContainer";
-    //this.styleContainer(color);
     if (color !== undefined) this.container.style.border = "1px solid #" + color.toString(16);
 
     if (title !== undefined && title !== "default") {
       this.title = document.createElement("div");
       this.title.textContent = title;
       this.title.className = "listTitle";
-      //this.styleTitle();
       this.container.appendChild(this.title);
     }
 
     this.ul = document.createElement("ul");
     this.container.appendChild(this.ul);
     this.ul.className = "listUL";
-    //this.styleUL();
-
     this.items = [];
   }
 
@@ -159,11 +138,9 @@ var InfoBox = (function() {
     createLine: function(title) {
       var li = document.createElement("li");
       li.className = "listLI";
-      //this.styleLI(li);
 
       var liTitle = document.createElement("span");
       liTitle.className = "listLITitle";
-      //this.styleLITitle(liTitle);
       var liTitleText = document.createTextNode(title);
       liTitle.appendChild(liTitleText);
 
@@ -171,7 +148,6 @@ var InfoBox = (function() {
 
       var liValue = document.createElement("span");
       liValue.className = "listLIValue";
-      //this.styleLIValue(liValue);
 
       li.appendChild(liValue);
 
@@ -233,53 +209,6 @@ var InfoBox = (function() {
       else value = source;
 
       return value;
-    },
-
-    styleContainer: function(color) {
-      this.container.style.boxSizing = "border-box";
-      this.container.style.width = "100%";
-      this.container.style.height = "auto";
-      this.container.style.margin = "2px 0";
-      this.container.style.padding = "0 6px";
-      if (color !== undefined) this.container.style.border = "1px solid #" + color.toString(16);
-    },
-
-    styleTitle: function() {
-      this.title.style.padding = "8px 0";
-      this.title.style.borderBottom = "solid 1px #222";
-      this.title.style.fontWeight = "bold";
-    },
-
-    styleUL: function() {
-      this.ul.style.width = "100%";
-      this.ul.style.height = "auto";
-      this.ul.style.margin = "0";
-      this.ul.style.padding = "0";
-    },
-
-    // Style list item.
-    styleLI: function(listItem) {
-      listItem.style.width = "100%";
-      listItem.style.minHeight = "21px";
-      listItem.style.overflow = "hidden";
-      listItem.style.paddingTop = "5px";
-    },
-
-    // Style the span containing the title of a list item.
-    styleLITitle: function(listItemTitle) {
-      listItemTitle.style.width = "40%";
-      listItemTitle.style.overflow = "hidden";
-      listItemTitle.style.textOverflow = "ellipsis";
-      listItemTitle.style.display = "inline-block";
-      listItemTitle.style.verticalAlign = "top";
-    },
-
-    // Style the span containing the value of a list item.
-    styleLIValue: function(listItemTitle) {
-      listItemTitle.style.width = "60%";
-      listItemTitle.style.overflow = "hidden";
-      listItemTitle.style.textOverflow = "ellipsis";
-      listItemTitle.style.display = "inline-block";
     }
 
   });

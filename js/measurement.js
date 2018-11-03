@@ -169,6 +169,8 @@
 //   result:
 //    (same as regular axis-aligned cross-section)
 
+// Anton Bovin, 2018
+
 
 
 var Measurement = (function() {
