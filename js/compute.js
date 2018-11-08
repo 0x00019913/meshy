@@ -202,25 +202,36 @@ var Compute = (function() {
 
   // apply a function to each face
   // arguments:
-  //  objects: an array of THREE.Mesh objects, or a single THREE.Mesh
+  //  source: THREE.Mesh/THREE.Geometry/THREE.BufferGeometry or an array of them
   //  callback: takes three vertices, a normal, and an index, all in world
   //   space; these vectors are local variables in this function and should be
   //   copied, never stored directly
-  function _traverseFaces(objects, callback) {
-    if (Array.isArray(objects)) {
-      for (var o = 0, ol = objects.length; o < ol; o++) {
-        var mesh = objects[o];
+  //  objectSpace: if true, don't apply matrixWorld (if any) to the geometry
+  function _traverseFaces(source, callback, objectSpace) {
+    if (Array.isArray(source)) {
+      for (var o = 0, ol = source.length; o < ol; o++) {
+        var object = source[o];
 
-        _traverseFaces(mesh, callback);
+        _traverseFaces(object, callback);
       }
 
       return;
     }
 
-    var mesh = objects;
+    var geo, matrixWorld;
 
-    var geo = mesh.geometry;
-    var matrixWorld = mesh.matrixWorld;
+    // if mesh, extract geometry and set matrixWorld if !objectSpace
+    if (source.isMesh) {
+      geo = source.geometry;
+      matrixWorld = objectSpace ? null : source.matrixWorld;
+    }
+    // else, if geometry, just use that in object space
+    else if (source.isGeometry || source.isBufferGeometry) {
+      geo = source;
+      matrixWorld = null;
+    }
+    // else, bad input
+    else return;
 
     var va = new Vector3();
     var vb = new Vector3();
@@ -238,9 +249,15 @@ var Compute = (function() {
           var b = index.getX(i + 1);
           var c = index.getX(i + 2);
 
-          va.fromBufferAttribute(position, a).applyMatrix4(matrixWorld);
-          vb.fromBufferAttribute(position, b).applyMatrix4(matrixWorld);
-          vc.fromBufferAttribute(position, c).applyMatrix4(matrixWorld);
+          va.fromBufferAttribute(position, a);
+          vb.fromBufferAttribute(position, b);
+          vc.fromBufferAttribute(position, c);
+
+          if (matrixWorld) {
+            va.applyMatrix4(matrixWorld);
+            vb.applyMatrix4(matrixWorld);
+            vc.applyMatrix4(matrixWorld);
+          }
 
           THREE.Triangle.getNormal(va, vb, vc, normal);
 
@@ -251,9 +268,15 @@ var Compute = (function() {
       // face
       else {
         for (var i = 0, l = position.count; i < l; i += 3) {
-          va.fromBufferAttribute(position, i).applyMatrix4(matrixWorld);
-          vb.fromBufferAttribute(position, i + 1).applyMatrix4(matrixWorld);
-          vc.fromBufferAttribute(position, i + 2).applyMatrix4(matrixWorld);
+          va.fromBufferAttribute(position, i);
+          vb.fromBufferAttribute(position, i + 1);
+          vc.fromBufferAttribute(position, i + 2);
+
+          if (matrixWorld) {
+            va.applyMatrix4(matrixWorld);
+            vb.applyMatrix4(matrixWorld);
+            vc.applyMatrix4(matrixWorld);
+          }
 
           THREE.Triangle.getNormal(va, vb, vc, normal);
 
@@ -267,8 +290,14 @@ var Compute = (function() {
       for (var f = 0; f < faces.length; f++) {
         var face = faces[f];
 
-        _faceVertices(face, vertices, matrixWorld, va, vb, vc);
-        normal.copy(face.normal).transformDirection(matrixWorld);
+        if (matrixWorld) {
+          _faceVertices(face, vertices, matrixWorld, va, vb, vc);
+          normal.copy(face.normal).transformDirection(matrixWorld);
+        }
+        else {
+          _faceVertices(face, vertices, undefined, va, vb, vc);
+          normal.copy(face.normal);
+        }
 
         callback(va, vb, vc, normal, f);
       }
@@ -688,7 +717,10 @@ var Compute = (function() {
     crossSection: _crossSection,
     nearestContourToPoints: _nearestContourToPoints,
     planarConvexHull: _planarConvexHull,
-    circleFromThreePoints: _circleFromThreePoints
+    circleFromThreePoints: _circleFromThreePoints,
+
+    numHash: _numHash,
+    vectorHash: _vectorHash
   };
 
 })();
