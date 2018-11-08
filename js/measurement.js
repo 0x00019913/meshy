@@ -18,6 +18,7 @@
 // examples:
 //  - making a fresh measurement:
 //     var pointer = new Pointer(camera, domElement, scene);
+//     pointer.addObject(mesh); // add a THREE.Mesh to raycast
 //     var measurement = new Measurement(pointer, scene); // blank measurement
 //     measurement.onResultChange = function(result) {
 //       // do something with the result
@@ -39,8 +40,11 @@
 //
 //  - making a manual oriented cross-section measurement of one part of the mesh:
 //     var pointer = new Pointer(camera, domElement, scene);
+//     pointer.addObject(mesh); // add a THREE.Mesh to raycast
 //     var measurement = new Measurement(pointer, scene); // blank measurement
-//     measurement.onResultChange = function(result) { // do something w/ result };
+//     measurement.onResultChange = function(result) {
+//       // do something w/ result
+//     };
 //     var params = {
 //       type: Measurement.Types.orientedCrossSection,
 //       calculateManually: true, // true, so call .calculate() manually
