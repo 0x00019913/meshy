@@ -1,5 +1,75 @@
 var Repair = (function() {
 
+  function Repair(mesh) {
+    this.mesh = mesh;
+
+    this.bmesh = new BMesh().fromGeometry(mesh.geometry);
+  }
+
+  Object.assign(Repair.prototype, {
+
+    updateGeometry: function() {
+      this.mesh.geometry = this.bmesh.toGeometry();
+    },
+
+    // based on "As-exact-as-possible repair of unprintable STL files" by
+    // Marco Attene
+    fixFaceOrientation: function() {
+      while (true) {
+        // find the first face whose correct orientation can be unambiguously
+        // established
+
+        // first, get the vert with the greatest x coord
+        var maxvert = null;
+
+        this.bmesh.forEachVert(function(vert) {
+          if (!maxvert || vert.v.x > maxvert.v.x) maxvert = vert;
+        });
+
+        // then get the edge least parallel to the x axis
+        var maxedge = null, xmin = Infinity;
+        var eiter = maxvert.diskIterator();
+
+        do {
+          var edge = eiter.val();
+          var xabs = Math.abs(edge.edgeVector().x);
+
+          if (!maxedge || xabs < xmin) {
+            maxedge = edge;
+            xmin = xabs;
+          }
+        } while (eiter.next() !== eiter.start());
+
+        // lastly, find the face incident to the edge whose normal is most
+        // parallel to the x axis
+        var maxface = null, xmax = 0;
+        var fiter = maxedge.radialIterator();
+
+        do {
+          var face = fiter.val().face;
+          var normal = face.normal;
+          var xabs = Math.abs(normal.x);
+
+          if (!maxface || xabs > xmax) {
+            maxface = face;
+            xmax = xabs;
+          }
+        } while (fiter.next() !== fiter.start());
+
+        this.bmesh.debugFace(maxface, this.mesh.matrixWorld);
+
+        break;
+      }
+    }
+
+  });
+
+  return Repair;
+
+})();
+
+/*var Repair = (function() {
+
 
   // the algorithm is like this:
   //  1. generate an adjacency map
@@ -726,3 +796,4 @@ var Repair = (function() {
   };
 
 })();
+*/
