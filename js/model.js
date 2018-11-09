@@ -909,5 +909,6 @@ Model.prototype.dispose = function() {
   removeMeshByName(this.scene, "base");
   removeMeshByName(this.scene, "support");
   removeMeshByName(this.scene, "slice");
+  removeMeshByName(this.scene, "wireframe");
   removeMeshByName(this.scene, "centerOfMassIndicator");
 }
