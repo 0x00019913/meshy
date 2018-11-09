@@ -17,6 +17,8 @@ var BMesh = (function() {
   // utility for checking element uniqueness
   function tupleHash(i, j) { return i + "_" + j; }
 
+
+
   // BMesh vertex
   // a single point in the BMesh
   //
@@ -28,52 +30,60 @@ var BMesh = (function() {
     this.edge = edge || null;
   }
 
-  BMVert.prototype.addEdgeToDiskCycle = function(newedge) {
-    if (this.edge === null) {
-      this.edge = newedge;
+  Object.assign(BMVert.prototype, {
+    // returns an iterator over the vert's disk cycle
+    diskIterator: function() {
+      if (!this.edge) return null;
 
-      return;
+      return new DiskIterator(this);
+    },
+
+    addEdgeToDiskCycle: function(newedge) {
+      if (this.edge === null) {
+        this.edge = newedge;
+
+        return;
+      }
+
+      // get the edge and disk node for this vertex
+      var thisedge = this.edge;
+      var thisdisk = thisedge.getVertDisk(this);
+
+      // get the next disk node
+      var nextedge = thisdisk.next;
+      var nextdisk = nextedge.getVertDisk(this);
+
+      // get edge disk node to add
+      var newedgedisk = newedge.getVertDisk(this);
+
+      // todo: maybe check if edge is already present?
+
+      // insert new disk node after current node
+      thisdisk.next = newedge;
+      newedgedisk.prev = thisedge;
+      nextdisk.prev = newedge;
+      newedgedisk.next = nextedge;
+    },
+
+    getDisk: function() {
+      return this.edge.getVertDisk(this);
+    },
+
+    findEdgeWithOtherEndpointInDisk: function(other) {
+      var iter = this.diskIterator();
+
+      if (!iter) return null;
+
+      do {
+        var edge = iter.val();
+
+        if (edge.v1 === this && edge.v2 === other) return edge;
+        if (edge.v2 === this && edge.v1 === other) return edge;
+      } while (iter.next() !== iter.start());
+
+      return null;
     }
-
-    // get the edge and disk node for this vertex
-    var thisedge = this.edge;
-    var thisdisk = thisedge.getVertDisk(this);
-
-    // get the next disk node
-    var nextedge = thisdisk.next;
-    var nextdisk = nextedge.getVertDisk(this);
-
-    // get edge disk node to add
-    var newedgedisk = newedge.getVertDisk(this);
-
-    // todo: maybe check if edge is already present?
-
-    // insert new disk node after current node
-    thisdisk.next = newedge;
-    newedgedisk.prev = thisedge;
-    nextdisk.prev = newedge;
-    newedgedisk.next = nextedge;
-  }
-
-  BMVert.prototype.getDisk = function() {
-    return this.edge.getVertDisk(this);
-  }
-
-  BMVert.prototype.findEdgeWithOtherEndpointInDisk = function(other) {
-    var start = this.edge;
-
-    if (start === null) return null;
-
-    var curr = start;
-    do {
-      if (curr.v1 === this && curr.v2 === other) return curr;
-      if (curr.v2 === this && curr.v1 === other) return curr;
-
-      curr = curr.getVertDisk(this).next;
-    } while (curr !== start);
-
-    return null;
-  }
+  });
 
   // node in a disk cycle (doubly linked circular list) of edges around a vert;
   // two of these exist per edge
@@ -89,41 +99,54 @@ var BMesh = (function() {
   // arguments:
   //  v1, v2: pair of BMVerts signifying the endpoints, in no particular order
   function BMEdge(v1, v2) {
-    this.v1 = v1 || null;
-    this.v2 = v2 || null;
+    this.v1 = v1;
+    this.v2 = v2;
 
-    this.radial = new BMLoop(this);
+    this.radial = null;
     this.v1disk = new BMDisk(this);
     this.v2disk = new BMDisk(this);
   }
 
-  // get the disk cycle corresponding to the vert
-  BMEdge.prototype.getVertDisk = function(vert) {
-    if (this.v1 === vert) return this.v1disk;
-    if (this.v2 === vert) return this.v2disk;
+  Object.assign(BMEdge.prototype, {
+    // returns an iterator over the edge's radial cycle
+    radialIterator: function() {
+      if (!this.radial) return null;
 
-    return null;
-  }
+      return new RadialIterator(this);
+    },
 
-  // add a face to the radial cycle
-  BMEdge.prototype.addFaceToRadialCycle = function(face) {
-    var node = new BMLoop(this.v1, this, face);
+    // get the disk cycle corresponding to the vert
+    getVertDisk: function(vert) {
+      if (this.v1 === vert) return this.v1disk;
+      if (this.v2 === vert) return this.v2disk;
 
-    // insert the new node after the radial cycle's root node
-    this.radial.insertAfter(node);
-  }
+      return null;
+    },
+
+    // add a face to the radial cycle
+    addFaceToRadialCycle: function(face) {
+      var node = new BMLoop(this.v1, this, face);
+
+      // if isolated edge, init the radial cycle
+      if (!this.radial) {
+        this.radial = node;
+      }
+      // else, insert the new node after the radial cycle's root node
+      else {
+        this.radial.insertAfter(node);
+      }
+    },
+
+    // returns a THREE.Vector3 pointing along this edge
+    edgeVector: function() {
+      return this.v2.v.clone().sub(this.v1.v).normalize();
+    }
+  });
 
   // BMesh face
   // one face, possibly an n-gon
-  function BMFace() {
-    this.id = -1;
-
-    this.normal = null;
-    this.loop = null;
-  }
-
-  // make the circular doubly linked list of BMLoops around the face
-  BMFace.prototype.makeLoopCycle = function(verts, edges) {
+  function BMFace(verts, edges) {
+    // make the loop cycle
     var n = verts.length;
     var prev = null, start = null;
 
@@ -148,25 +171,57 @@ var BMesh = (function() {
     prev.next = start;
     start.prev = prev;
 
+    // set loop cycle
     this.loop = start;
+
+    this.normal = new THREE.Vector3();
+
+    // compute normal by Newell's method:
+    // https://www.khronos.org/opengl/wiki/Calculating_a_Surface_Normal
+    if (n > 2) {
+      for (var i = 0, j = 1; i < n; i++, j++) {
+        if (j === n) j = 0;
+
+        var vi = verts[i].v;
+        var vj = verts[j].v;
+
+        this.normal.x += (vi.y - vj.y) * (vi.z + vj.z);
+        this.normal.y += (vi.z - vj.z) * (vi.x + vj.x);
+        this.normal.z += (vi.x - vj.x) * (vi.y + vj.y);
+      }
+
+      this.normal.normalize();
+    }
   }
 
-  // flip face orientation by reversing its loop cycle
-  BMFace.prototype.flip = function() {
-    var start = this.loop;
-    var node = start;
+  // make the circular doubly linked list of BMLoops around the face
+  Object.assign(BMFace.prototype, {
+    // returns an iterator over the face's loop cycle
+    loopIterator: function() {
+      if (!this.loop) return null;
 
-    // go forward along each node's original .next pointer, flipping the .next
-    // and .prev pointers
-    do {
-      var tmp = node.next;
-      node.next = node.prev;
-      node.prev = tmp;
+      return new LoopIterator(this);
+    },
 
-      // go to node's original .next
-      node = tmp;
-    } while (node !== start);
-  }
+    // flip face orientation by reversing its loop cycle
+    flip: function() {
+      var start = this.loop;
+      var node = start;
+
+      // go forward along each node's original .next pointer, flipping the .next
+      // and .prev pointers
+      do {
+        var tmp = node.next;
+        node.next = node.prev;
+        node.prev = tmp;
+
+        // go to node's original .next
+        node = tmp;
+      } while (node !== start);
+
+      if (this.normal) this.normal.negate();
+    }
+  });
 
   // BMesh loop
   //
@@ -195,6 +250,7 @@ var BMesh = (function() {
 
 
 
+  // BMesh constructor
   function BMesh() {
     this.verts = [];
     this.faces = [];
@@ -259,14 +315,12 @@ var BMesh = (function() {
       // same number of verts and edges
       if (n !== edges.length) return;
 
-      var face = new BMFace();
+      var face = new BMFace(verts, edges);
 
       // add face to each edge's radial cycle
       for (var e = 0; e < n; e++) {
         edges[e].addFaceToRadialCycle(face);
       }
-
-      face.makeLoopCycle(verts, edges);
 
       this.faces.push(face);
 
@@ -302,6 +356,11 @@ var BMesh = (function() {
         var face = createFace([bmva, bmvb, bmvc], [bmeab, bmebc, bmeca]);
       });
 
+      // todo: remove
+      //console.log("verts", this.verts.length);
+      //console.log("edges", this.edges.length);
+      //console.log("faces", this.faces.length);
+
       return this;
     },
 
@@ -310,39 +369,72 @@ var BMesh = (function() {
 
       for (var f = 0, l = this.faces.length; f < l; f++) {
         var face = this.faces[f];
-        var loop = face.loop, curr = loop;
-
-        do {
-          geo.vertices.push(curr.vert.v);
-
-          curr = curr.next;
-        } while (curr !== loop);
-
         var n = geo.vertices.length;
 
-        geo.faces.push(new THREE.Face3(n, n + 1, n + 2));
+        var iter = face.loopIterator();
+
+        do {
+          var loop = iter.val();
+          geo.vertices.push(loop.vert.v);
+        } while (iter.next() !== iter.start());
+
+        var face3 = new THREE.Face3(n, n + 1, n + 2);
+        face3.normal.copy(face.normal);
+
+        geo.faces.push(face3);
       }
 
       return geo;
     },
 
-    debugVert: function(idx, matrix) {
-      var vert = this.verts[idx];
+    forEachVert: function(callback) {
+      for (var v = 0, l = this.verts.length; v < l; v++) {
+        callback(this.verts[v]);
+      }
+    },
 
-      if (!vert) return;
+    forEachEdge: function(callback) {
+      for (var e = 0, l = this.edges.length; e < l; e++) {
+        callback(this.edges[e]);
+      }
+    },
 
+    forEachFace: function(callback) {
+      for (var f = 0, l = this.faces.length; f < l; f++) {
+        callback(this.faces[f]);
+      }
+    },
+
+
+
+    // debugging functions
+    // todo: remove
+    debugVerts: function(matrix) {
       debug.cleanup();
 
-      var start = vert.edge;
-      var curr = start;
+      for (var v = 0; v < this.verts.length; v++) {
+        var vert = this.verts[v];
+
+        this.debugVert(vert, matrix, true);
+      }
+
+      debug.lines();
+    },
+
+    debugVert: function(vert, matrix, group) {
+      if (!group) debug.cleanup();
+
+      var iter = vert.diskIterator();
 
       var total = new THREE.Vector3();
+      var v1 = vert.v.clone().applyMatrix4(matrix);
+      var ct = 0;
 
       do {
-        var other = curr.v1 === vert ? curr.v2 : curr.v1;
-        console.log(vert, other);
+        ct++;
+        var edge = iter.val();
 
-        var v1 = vert.v.clone().applyMatrix4(matrix);
+        var other = edge.v1 === vert ? edge.v2 : edge.v1;
         var v2 = other.v.clone().applyMatrix4(matrix);
         var d = v2.clone().sub(v1);
         var dist = d.length();
@@ -350,16 +442,255 @@ var BMesh = (function() {
 
         total.add(d);
 
-        debug.line(v1, v1.clone().add(d));
+        debug.line(v1, v1.clone().addScaledVector(d, dist/4));
+      } while (iter.next() !== iter.start());
 
-        curr = curr.getVertDisk(vert).next;
-      } while (curr !== start);
+      debug.line(v1, v1.clone().add(total.negate().setLength(0.1 * ct)));
 
-      debug.line(v1, v1.clone().addScaledVector(total, -1));
+      if (!group) debug.lines();
+    },
+
+    debugEdges: function(matrix) {
+      debug.cleanup();
+
+      for (var e = 0; e < this.edges.length; e++) {
+        var edge = this.edges[e];
+
+        this.debugEdge(edge, matrix, true);
+      }
 
       debug.lines();
+    },
+
+    debugEdge: function(edge, matrix, group) {
+      if (!group) debug.cleanup();
+
+      var ecenter = edge.v1.v.clone().add(edge.v2.v).multiplyScalar(0.5).applyMatrix4(matrix);
+
+      var riter = edge.radialIterator();
+
+      do {
+        var face = riter.val().face;
+        var fcenter = new THREE.Vector3();
+        var vnum = 0;
+
+        var fiter = face.loopIterator();
+
+        do {
+          fcenter.add(fiter.val().vert.v);
+          vnum++;
+        } while (fiter.next() !== fiter.start());
+
+        fcenter.divideScalar(vnum).applyMatrix4(matrix);
+
+        var d = fcenter.clone().sub(ecenter);
+        var dist = d.length();
+        d.normalize();
+
+        debug.line(ecenter, ecenter.clone().addScaledVector(d, dist/4));
+      } while (riter.next() !== riter.start());
+
+      if (!group) debug.lines();
+    },
+
+    debugFaces: function(matrix) {
+      debug.cleanup();
+
+      for (var f = 0; f < this.faces.length; f++) {
+        var face = this.faces[f];
+
+        this.debugFace(face, matrix, true);
+      }
+
+      debug.lines();
+    },
+
+    debugFace: function(face, matrix, group) {
+      if (!group) debug.cleanup();
+
+      // face center
+      var fcenter = new THREE.Vector3();
+      var vnum = 0;
+
+      var fiter = face.loopIterator();
+
+      do {
+        fcenter.add(fiter.val().vert.v);
+        vnum++;
+      } while (fiter.next() !== fiter.start());
+
+      fcenter.divideScalar(vnum).applyMatrix4(matrix);
+
+      var iter = face.loopIterator();
+      var len = 0;
+      var ct = 0;
+
+      do {
+        ct++;
+
+        var loop = iter.val();
+        var ploop = iter.peekPrev();
+        var nloop = iter.peekNext();
+
+        var v = loop.vert.v.clone().applyMatrix4(matrix);
+        var pv = ploop.vert.v.clone().applyMatrix4(matrix);
+        var nv = nloop.vert.v.clone().applyMatrix4(matrix);
+
+        var dp = pv.clone().sub(v);
+        var dn = nv.clone().sub(v);
+
+        len += dn.length();
+        dp.normalize();
+        dn.normalize();
+
+        var angle = dp.angleTo(dn) / 2;
+        var b = dp.add(dn).multiplyScalar(0.5).normalize();
+
+        var dist = v.distanceTo(nv);
+
+        var vnew = v.clone().addScaledVector(b, 0.025 / Math.sin(angle));
+        var nvnew = vnew.clone().addScaledVector(dn, dist * 0.75);
+
+        debug.line(vnew, nvnew);
+        debug.line(nvnew, nvnew.clone().multiplyScalar(0.8).add(fcenter.clone().multiplyScalar(0.2)));
+      } while (iter.next() !== iter.start());
+
+      debug.line(fcenter, fcenter.clone().addScaledVector(face.normal, len * 0.1 / ct));
+
+      if (!group) debug.lines();
     }
 
+  });
+
+
+
+  // iterator types
+
+  // base type
+  function Iterator(source) {
+    this._source = source;
+    this._val = null;
+    this._start = null;
+  }
+
+  Object.assign(Iterator.prototype, {
+    constructor: Iterator,
+
+    val: function() {
+      return this._val;
+    },
+
+    start: function() {
+      return this._start;
+    },
+
+    next: function() {
+      return this._val;
+    },
+
+    prev: function() {
+      return this._val;
+    },
+
+    // peek ahead
+    peekNext: function() {
+      var val = this.next();
+
+      this.prev();
+
+      return val;
+    },
+
+    // peek back
+    peekPrev: function() {
+      var val = this.prev();
+
+      this.next();
+
+      return val;
+    }
+  });
+
+
+
+  // iterates over a vert's disk cycle
+  function DiskIterator(vert) {
+    Iterator.call(this, vert);
+
+    this._val = vert.edge;
+    this._start = this._val;
+  }
+
+  DiskIterator.prototype = Object.create(Iterator.prototype);
+  Object.assign(DiskIterator.prototype, {
+    constructor: DiskIterator,
+
+    // go to the next edge in the disk
+    next: function() {
+      if (!this._val) return null;
+
+      this._val = this._val.getVertDisk(this._source).next;
+
+      return this._val;
+    },
+
+    // go to the previous edge in the disk
+    prev: function() {
+      if (!this._val) return null;
+
+      this._val = this._val.getVertDisk(this._source).prev;
+
+      return this._val;
+    }
+  });
+
+
+
+  // iterates over the BMLoops in a face's loop cycle
+  function LoopIterator(face) {
+    Iterator.call(this, face);
+
+    this._val = face.loop;
+    this._start = this._val;
+  }
+
+  LoopIterator.prototype = Object.create(Iterator.prototype);
+  Object.assign(LoopIterator.prototype, {
+    constructor: LoopIterator,
+
+    // go to the next loop in the cycle
+    next: function() {
+      if (!this._val) return null;
+
+      this._val = this._val.next;
+
+      return this._val;
+    },
+
+    // go to the previous loop in the cycle
+    prev: function() {
+      if (!this._val) return null;
+
+      this._val = this._val.prev;
+
+      return this._val;
+    }
+  });
+
+
+
+  // iterates over the BMLoops in an edge's radial cycle
+  function RadialIterator(edge) {
+    Iterator.call(this, edge);
+
+    this._val = edge.radial;
+    this._start = this._val;
+  }
+
+  // member functions are the same as those of LoopIterator
+  RadialIterator.prototype = Object.create(LoopIterator.prototype);
+  Object.assign(RadialIterator.prototype, {
+    constructor: RadialIterator
   });
 
 
