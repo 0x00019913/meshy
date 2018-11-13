@@ -3,21 +3,28 @@
 // description:
 //  Dead-simple queue implementation.
 //
-//  _data = [ ., ..., ., a0, a1, a2, ..., an ]
-//                       ^
-//                    _outpos
+//  _data = [ ., ..., ., a_0, a_1, a_2, ..., a_(size-1) ]
+//                        ^
+//                     _outpos
 //
 //  The _data array has _outpos invalid entries, followed by size valid
-//  entries. Newly queueued entries are pushed onto the end of the array.
+//  entries. Newly queued entries are pushed onto the end of the array.
 //  Dequeuing returns _data[_outpos].
 //
 //  When the number of invalid entries is >= the number of valid size, shift
 //  the entire array left by _outpos, thereby eliminating all invalid entries.
-//  This is an O(n) operation that will occur for every n dequeue operations,
-//  so dequeue is, on average, O(1).
+//  This is an O(n) operation that will occur once for every n dequeue
+//  operations, so dequeue is, on average, O(1).
+//
+// example:
+//  var q = new Queue();
+//  q.enqueue('a');
+//  q.enqueue('b');
+//  q.dequeue();  // 'a'
+//  q.enqueue('c');
+//  q.dequeue();  // 'b'
 
 var Queue = (function() {
-
 
   function Queue() {
     this._data = [];
@@ -31,11 +38,15 @@ var Queue = (function() {
 
   Object.assign(Queue.prototype, {
 
+    // returns the new queue size after insertion
     enqueue: function(item) {
       this._data.push(item);
       this.size++;
+
+      return this.size;
     },
 
+    // returns the oldest entry if present, else undefined
     dequeue: function() {
       if (this.size === 0) return undefined;
 
