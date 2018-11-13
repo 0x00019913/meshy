@@ -2211,8 +2211,10 @@ Meshy.prototype.createModel = function(geometry, filename) {
 
   this.infoBox.update();
 
-  meshy.rep = new Repair(this.model.baseMesh);
-  meshy.rep.fixFaceOrientation();
+  this.rep = new Repair(this.model.baseMesh);
+  this.bmesh = this.rep.bmesh;
+  //this.rep.fixFaceOrientation();
+  //this.rep.updateGeometry();
 }
 
 // Interface for the dat.gui button. Saves the model.

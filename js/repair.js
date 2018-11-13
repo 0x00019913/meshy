@@ -8,6 +8,51 @@ var Repair = (function() {
 
   Object.assign(Repair.prototype, {
 
+    // test functions
+    // todo: remove
+    removeFace: function(i, j) {
+      if (j === undefined) j = i;
+
+      var faces = this.bmesh.faces.slice();
+
+      for (; i<=j; i++) {
+        this.bmesh.destroyFace(faces[i], true);
+      }
+
+      this.updateGeometry();
+      this.bmesh.debugEdges(this.mesh.matrixWorld);
+    },
+
+    removeVert: function(i, j) {
+      if (j === undefined) j = i;
+
+      var verts = this.bmesh.verts.slice();
+
+      for (; i<=j; i++) {
+        var vert = verts[i];
+
+        this.bmesh.destroyVert(vert, true);
+      }
+
+      this.updateGeometry();
+      this.bmesh.debugEdges(this.mesh.matrixWorld);
+    },
+
+    debugVert: function(i, j) {
+      if (j === undefined) j = i;
+
+      debug.cleanup();
+
+      var verts = this.bmesh.verts.slice();
+
+      for (; i<=j; i++) {
+        var vert = verts[i];
+
+        this.bmesh.debugVert(vert, this.mesh.matrixWorld, true);
+      }
+      debug.lines();
+    },
+
     updateGeometry: function() {
       this.mesh.geometry = this.bmesh.toGeometry();
     },
@@ -20,43 +65,46 @@ var Repair = (function() {
         // established
 
         // first, get the vert with the greatest x coord
-        var maxvert = null;
+        var seedvert = null;
 
         this.bmesh.forEachVert(function(vert) {
-          if (!maxvert || vert.v.x > maxvert.v.x) maxvert = vert;
+          if (!seedvert || vert.v.x > seedvert.v.x) seedvert = vert;
         });
 
         // then get the edge least parallel to the x axis
-        var maxedge = null, xmin = Infinity;
-        var eiter = maxvert.diskIterator();
+        var seededge = null, xmin = Infinity;
+        var eiter = seedvert.diskIterator();
 
         do {
           var edge = eiter.val();
           var xabs = Math.abs(edge.edgeVector().x);
 
-          if (!maxedge || xabs < xmin) {
-            maxedge = edge;
+          if (!seededge || xabs < xmin) {
+            seededge = edge;
             xmin = xabs;
           }
         } while (eiter.next() !== eiter.start());
 
         // lastly, find the face incident to the edge whose normal is most
         // parallel to the x axis
-        var maxface = null, xmax = 0;
-        var fiter = maxedge.radialIterator();
+        var seedface = null, xmax = 0;
+        var fiter = seededge.radialIterator();
 
         do {
           var face = fiter.val().face;
           var normal = face.normal;
           var xabs = Math.abs(normal.x);
 
-          if (!maxface || xabs > xmax) {
-            maxface = face;
+          if (!seedface || xabs > xmax) {
+            seedface = face;
             xmax = xabs;
           }
         } while (fiter.next() !== fiter.start());
 
-        this.bmesh.debugFace(maxface, this.mesh.matrixWorld);
+        // if the face's normal points the wrong way, fix it
+        if (seedface.normal.x < 0) seedface.flip();
+
+        this.bmesh.debugFace(seedface, this.mesh.matrixWorld);
 
         break;
       }
