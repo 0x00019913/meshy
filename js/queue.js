@@ -37,7 +37,7 @@ var Queue = (function() {
     },
 
     dequeue: function() {
-      if (this.size === 0) return null;
+      if (this.size === 0) return undefined;
 
       // get the value to dequeue
       var value = this._data[this._outpos++];
