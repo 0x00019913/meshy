@@ -38,6 +38,21 @@ var Repair = (function() {
       this.bmesh.debugEdges(this.mesh.matrixWorld);
     },
 
+    removeEdge: function(i, j) {
+      if (j === undefined) j = i;
+
+      var edges = this.bmesh.edges.slice();
+
+      for (; i<=j; i++) {
+        var edge = edges[i];
+
+        this.bmesh.destroyEdge(edge, true);
+      }
+
+      this.updateGeometry();
+      this.bmesh.debugEdges(this.mesh.matrixWorld);
+    },
+
     debugVert: function(i, j) {
       if (j === undefined) j = i;
 
@@ -50,6 +65,23 @@ var Repair = (function() {
 
         this.bmesh.debugVert(vert, this.mesh.matrixWorld, true);
       }
+
+      debug.lines();
+    },
+
+    debugEdge: function(i, j) {
+      if (j === undefined) j = i;
+
+      debug.cleanup();
+
+      var edges = this.bmesh.edges.slice();
+
+      for (; i<=j; i++) {
+        var edge = edges[i];
+
+        this.bmesh.debugEdge(edge, this.mesh.matrixWorld, true);
+      }
+
       debug.lines();
     },
 
