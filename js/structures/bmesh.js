@@ -126,11 +126,11 @@ var BMesh = (function() {
       if (!iter) return null;
 
       do {
-        var edge = iter.val();
+        var edge = iter.val;
 
         if (edge.v1 === this && edge.v2 === other) return edge;
         if (edge.v2 === this && edge.v1 === other) return edge;
-      } while (iter.next() !== iter.start());
+      } while (iter.next() !== iter.start);
 
       return null;
     }
@@ -188,8 +188,24 @@ var BMesh = (function() {
       return this.hasFlag(BMesh.Flags.destroyed);
     },
 
+    // true if wire edge
     wire: function() {
-      return this.radial === null;
+      return this.nfaces === 0;;
+    },
+
+    // true if border edge
+    border: function() {
+      return this.nfaces === 1;
+    },
+
+    // true if regular edge
+    regular: function() {
+      return this.nfaces === 2;
+    },
+
+    // true if singular edge
+    singular: function() {
+      return this.nfaces > 2;
     },
 
     // get the disk cycle corresponding to the vert
@@ -224,13 +240,13 @@ var BMesh = (function() {
 
       // find the BMLoop with the given face
       do {
-        var loop = riter.val();
+        var loop = riter.val;
 
         if (loop.face === face) {
           faceloop = loop;
           break;
         }
-      } while (riter.next() !== riter.start());
+      } while (riter.next() !== riter.start);
 
       // if failed to find BMLoop with the face, return
       if (faceloop === null) return;
@@ -254,62 +270,54 @@ var BMesh = (function() {
     // returns a THREE.Vector3 pointing along this edge
     edgeVector: function() {
       return this.v2.v.clone().sub(this.v1.v).normalize();
+    },
+
+    // given one endpoint, return the other
+    otherVert: function(vert) {
+      return this.v1 === vert ? this.v2 : this.v1;
+    },
+
+    // given one endpoint, replace it with a different vert
+    replaceVert: function(original, final) {
+      var isv1 = this.v1 === original;
+
+      original.removeEdgeFromDiskCycle(this);
+
+      if (isv1) this.v1 = final;
+      else this.v2 = final;
+
+      final.addEdgeToDiskCycle(this);
     }
   });
 
   // BMesh face
   // one face, possibly an n-gon
-  function BMFace(verts, edges) {
+  function BMFace(loop) {
     this.id = -1;
 
     this.flags = BMesh.Flags.none;
 
-    // make the loop cycle
-    var n = verts.length;
-    var prev = null, start = null;
-
-    for (var i = 0; i < n; i++) {
-      var vert = verts[i];
-      var edge = edges[i];
-
-      var node = new BMLoop(vert, edge, this);
-
-      // if no start, record first node
-      if (start === null) start = node;
-      // else, link current node to prev node
-      else {
-        prev.next = node;
-        node.prev = prev;
-      }
-
-      prev = node;
-    }
-
-    // link start and end
-    prev.next = start;
-    start.prev = prev;
-
     // set loop cycle
-    this.loop = start;
+    this.loop = loop;
 
-    this.normal = new THREE.Vector3();
+    // compute normal and set number of verts
+    var normal = new THREE.Vector3(), n = 0;
+    var iter = loop.iterator();
 
     // compute normal by Newell's method:
     // https://www.khronos.org/opengl/wiki/Calculating_a_Surface_Normal
-    if (n > 2) {
-      for (var i = 0, j = 1; i < n; i++, j++) {
-        if (j === n) j = 0;
+    do {
+      var vi = iter.val.vert.v;
+      var vj = iter.val.next.vert.v;
 
-        var vi = verts[i].v;
-        var vj = verts[j].v;
+      normal.x += (vi.y - vj.y) * (vi.z + vj.z);
+      normal.y += (vi.z - vj.z) * (vi.x + vj.x);
+      normal.z += (vi.x - vj.x) * (vi.y + vj.y);
 
-        this.normal.x += (vi.y - vj.y) * (vi.z + vj.z);
-        this.normal.y += (vi.z - vj.z) * (vi.x + vj.x);
-        this.normal.z += (vi.x - vj.x) * (vi.y + vj.y);
-      }
+      n++;
+    } while (iter.next() !== iter.start);
 
-      this.normal.normalize();
-    }
+    this.normal = normal.normalize();
 
     this.nverts = n;
   }
@@ -320,7 +328,7 @@ var BMesh = (function() {
     loopIterator: function() {
       if (!this.loop) return null;
 
-      return new LoopIterator(this);
+      return this.loop.iterator();
     },
 
     setFlag: function(flag) {
@@ -339,6 +347,38 @@ var BMesh = (function() {
       return this.hasFlag(BMesh.Flags.destroyed);
     },
 
+    setVertFlags: function(flag) {
+      var iter = this.loopIterator();
+
+      do {
+        iter.val.vert.setFlag(flag);
+      } while (iter.next() !== iter.start);
+    },
+
+    unsetVertFlags: function(flag) {
+      var iter = this.loopIterator();
+
+      do {
+        iter.val.vert.unsetFlag(flag);
+      } while (iter.next() !== iter.start);
+    },
+
+    setEdgeFlags: function(flag) {
+      var iter = this.loopIterator();
+
+      do {
+        iter.val.edge.setFlag(flag);
+      } while (iter.next() !== iter.start);
+    },
+
+    unsetEdgeFlags: function(flag) {
+      var iter = this.loopIterator();
+
+      do {
+        iter.val.edge.unsetFlag(flag);
+      } while (iter.next() !== iter.start);
+    },
+
     // flip face orientation by reversing its loop cycle
     flip: function() {
       var start = this.loop;
@@ -353,6 +393,9 @@ var BMesh = (function() {
 
         // go to node's original .next
         node = tmp;
+
+        // flip edge winding direction
+        node.forward = !node.forward;
       } while (node !== start);
 
       if (this.normal) this.normal.negate();
@@ -363,10 +406,10 @@ var BMesh = (function() {
       var iter = this.loopIterator();
 
       do {
-        var loop = iter.val();
+        var loop = iter.val;
 
         if (loop.edge === edge) return loop;
-      } while (iter.next() !== iter.start());
+      } while (iter.next() !== iter.start);
 
       return null;
     },
@@ -374,9 +417,7 @@ var BMesh = (function() {
     // return true if face's verts agree with the edge's .v1 and .v2; if it's
     // the opposite, return false
     windsForwardAlongEdge: function(edge) {
-      var loop = this.findLoopCycleNodeWithEdge(edge);
-
-      return loop.v1 === edge.v1 && loop.v2 === edge.v2;
+      return this.findLoopCycleNodeWithEdge(edge).forward;
     },
 
     // return true if the other face's orientation (given the common edge) is
@@ -388,6 +429,31 @@ var BMesh = (function() {
       // return true if one face is wound forward along the edge but the other
       // is not
       return thisforward !== otherforward;
+    },
+
+    // gets the other face across the given edge; assumes that this face
+    // borders the given edge
+    //
+    // for a wire/border edge (0/1 faces), returns null
+    // for a regular edge (2 faces), returns the other face
+    // for a singular edge (3+ faces), return the "upward continuation" of the
+    //   face in the polygon fan
+    other: function(edge) {
+      var nfaces = edge.nfaces;
+
+      // wire or border edge
+      if (nfaces < 2) return null;
+      else if (nfaces === 2) {
+        var radial = edge.radial;
+
+        if (radial.face === this) radial = radial.next;
+
+        return radial.face;
+      }
+      // todo: upward continuation
+      else {
+
+      }
     }
   });
 
@@ -402,11 +468,19 @@ var BMesh = (function() {
     this.vert = vert || null;
     this.face = face || null;
 
+    // used in loop cycles: true if edge's .v1 and .v2 agree with the vert
+    // order in the loop, else false
+    this.forward = false;
+
     this.next = this;
     this.prev = this;
   }
 
   Object.assign(BMLoop.prototype, {
+    iterator: function() {
+      return new LoopIterator(this);
+    },
+
     // insert another BMLoop node after this node
     insertAfter: function(loop) {
       var next = this.next;
@@ -425,6 +499,36 @@ var BMesh = (function() {
 
       this.next = this;
       this.prev = this;
+    },
+
+    // replace a vert in the loop cycle
+    replaceVert: function(original, final) {
+      var iter = this.iterator();
+      var loop = null;
+
+      do {
+        if (iter.val.vert === original) {
+          loop = iter.val;
+          break;
+        }
+      } while (iter.next() !== iter.start);
+
+      if (loop) loop.vert = final;
+    },
+
+    // replace an edge in the loop cycle
+    replaceEdge: function(original, final) {
+      var iter = this.iterator();
+      var loop = null;
+
+      do {
+        if (iter.val.edge === original) {
+          loop = iter.val;
+          break;
+        }
+      } while (iter.next() !== iter.start);
+
+      if (loop) loop.edge = final;
     }
   });
 
@@ -439,13 +543,16 @@ var BMesh = (function() {
     this.nverts = 0;
     this.nedges = 0;
     this.nfaces = 0;
+
+    this.vertid = 0;
+    this.edgeid = 0;
+    this.faceid = 0;
   }
 
   BMesh.Flags = {
     none: 0,
-    destroyed: 1,
-    inside: 2,
-    outside: 4,
+    destroyed: 1<<0,
+    visited: 1<<1
   };
 
   Object.assign(BMesh.prototype, {
@@ -464,7 +571,7 @@ var BMesh = (function() {
       }
 
       var vert = new BMVert(v.clone());
-      vert.id = this.nverts;
+      vert.id = this.vertid++;
 
       if (vertmap) vertmap[hash] = vert;
 
@@ -488,7 +595,7 @@ var BMesh = (function() {
       }
 
       edge = new BMEdge(bmv1, bmv2);
-      edge.id = this.nedges;
+      edge.id = this.edgeid++;
 
       this.edges.push(edge);
       this.nedges++;
@@ -499,24 +606,98 @@ var BMesh = (function() {
       return edge;
     },
 
-    createFace: function(verts, edges, unique) {
+    createLoop: function(verts, edges) {
+      // make the loop cycle
       var n = verts.length;
 
-      // todo: if unique, check if duplicate face exists
-      if (unique) {
-
-      }
-
       // same number of verts and edges
-      if (n !== edges.length) return;
+      if (n !== edges.length) return null;
 
-      var face = new BMFace(verts, edges);
-      face.id = this.nfaces;
+      var prev = null, start = null;
 
-      // add face to each edge's radial cycle
-      for (var e = 0; e < n; e++) {
-        edges[e].addFaceToRadialCycle(face);
+      for (var i = 0, j = 1; i < n; i++, j++) {
+        if (j === n) j = 0;
+
+        var vi = verts[i];
+        var vj = verts[j];
+        var edge = edges[i];
+
+        var node = new BMLoop(vi, edge);
+        node.forward = edge.v1 === vi;
+
+        // if no start, record first node
+        if (start === null) start = node;
+        // else, link current node to prev node
+        else {
+          prev.next = node;
+          node.prev = prev;
+        }
+
+        prev = node;
       }
+
+      // link the start and end
+      prev.next = start;
+      start.prev = prev;
+
+      return start;
+    },
+
+    createFace: function(loop, unique) {
+      var face = new BMFace(loop);
+
+      // if unique, check if a duplicate face exists: take an edge in the loop,
+      // iterate over the faces in its radial cycle, check if any of them have
+      // an equivalent loop (forward or backward)
+      if (unique) {
+        var edge = loop.edge;
+        var riter = edge.radialIterator();
+
+        if (riter) {
+          do {
+            var otherface = riter.val.face;
+
+            // different n-gon, won't be a duplicate
+            if (otherface.nverts !== face.nverts) continue;
+
+            var otherloop = otherface.loop;
+
+            // find starting point that matches the current loop
+            while (otherloop.edge !== edge) otherloop = otherloop.next;
+
+            // true if going in the same direction along both loops
+            var windSameDirection = loop.forward === otherloop.forward;
+
+            // go through both loops simultaneously, break on any mismatching
+            // edges
+            var liter = loop, oliter = otherloop;
+
+            do {
+              if (liter.edge !== oliter.edge) break;
+
+              liter = liter.next;
+              oliter = windSameDirection ? oliter.next : oliter.prev;
+            } while (oliter !== otherloop);
+
+            // if we made it all the way through without finding a mismatched
+            // edge, the face is a duplicate
+            if (oliter === otherloop) return null;
+          } while (riter.next() !== riter.start);
+        }
+      }
+
+      // all clear, so proceed to increment id, etc.
+      face.id = this.faceid++;
+
+      // add the face to each edge's radial cycle
+      var iter = loop;
+
+      do {
+        iter.face = face;
+        iter.edge.addFaceToRadialCycle(face);
+
+        iter = iter.next;
+      } while (iter !== loop);
 
       this.faces.push(face);
       this.nfaces++;
@@ -578,7 +759,7 @@ var BMesh = (function() {
       var iter = face.loopIterator();
 
       do {
-        var edge = iter.val().edge;
+        var edge = iter.val.edge;
 
         // erase the edge's adjacency to the face
         edge.removeFaceFromRadialCycle(face);
@@ -586,15 +767,15 @@ var BMesh = (function() {
         // if cleaning up and edge became isolated after removing this face,
         // destroy the edge
         if (cleanup && edge.wire()) this.destroyEdge(edge);
-      } while (iter.next() !== iter.start());
+      } while (iter.next() !== iter.start);
 
       // if cleaning up, remove any resulting isolated verts
       if (cleanup) {
         do {
-          var vert = iter.val().vert;
+          var vert = iter.val.vert;
 
           if (vert.isolated()) this.destroyVert(vert);
-        } while (iter.next() !== iter.start());
+        } while (iter.next() !== iter.start);
       }
 
       this.destroyFaceFinal(face);
@@ -699,6 +880,231 @@ var BMesh = (function() {
       return result;
     },
 
+    // set a flag on all verts
+    setVertFlags: function(flag) {
+      this.forEachVert(function(vert) {
+        vert.setFlag(flag);
+      });
+    },
+
+    // unset a flag on all verts
+    unsetVertFlags: function(flag) {
+      this.forEachVert(function(vert) {
+        vert.unsetFlag(flag);
+      });
+    },
+
+    // set a flag on all edges
+    setEdgeFlags: function(flag) {
+      this.forEachEdge(function(edge) {
+        edge.setFlag(flag);
+      });
+    },
+
+    // unset a flag on all edges
+    unsetEdgeFlags: function(flag) {
+      this.forEachEdge(function(edge) {
+        edge.unsetFlag(flag);
+      });
+    },
+
+    // set a flag on all faces
+    setFaceFlags: function(flag) {
+      this.forEachFace(function(face) {
+        face.setFlag(flag);
+      });
+    },
+
+    // unset a flag on all faces
+    unsetFaceFlags: function(flag) {
+      this.forEachFace(function(face) {
+        face.unsetFlag(flag);
+      });
+    },
+
+    detachSingularEdges: function() {
+      // id-to-vert hash map of endpoints of singular edges
+      var singularEdgeEndpoints = {};
+
+      this.forEachEdge(function(edge) {
+        if (edge.singular()) {
+          var v1 = edge.v1;
+          var v2 = edge.v2;
+
+          singularEdgeEndpoints[v1.id] = v1;
+          singularEdgeEndpoints[v2.id] = v2;
+        }
+      });
+
+      // for each vert, build an array of chains of edges such that 1. all
+      // edges are incident on the vert, 2. consecutive pairs of edges share a
+      // face, and 3. each chain begins and ends on singular/border edges; in
+      // effect, each chain represents a discrete fan of faces incident on the
+      // vert
+
+      for (var vertid in singularEdgeEndpoints) {
+        var vert = singularEdgeEndpoints[vertid];
+
+        // faces seen so far
+        var facesSeen = {};
+
+        // chains of edges
+        var chains = [];
+
+        var diter = vert.diskIterator();
+
+        if (!diter) continue;
+
+        // go through all edges in the vert's disk cycle and build the edge
+        // chains
+        do {
+          var edge = diter.val;
+
+          // if singular or border edge, one or more chains start here; build
+          // all chains emanating from here
+          if (!edge.regular()) {
+            getEdgeChainsFromEdge(vert, edge, facesSeen, chains);
+          }
+        } while (diter.next() !== diter.start);
+
+        // detach the vert: for all but one of the edge chains,
+        // 1. create a duplicate vert,
+        // 2. duplicate first and last chain edge (but only if singular),
+        //   attaching one end to the duplicate and the other to the original
+        //   other vert,
+        // 3. replace the original start/end edges in the start/end faces of
+        //   the chain with their duplicates,
+        // 4. remove the start/end faces of the chain from the original
+        //   start/end edges' radial cycles,
+        //
+        // so, in the end, every chain of faces terminates with a border edge
+
+        for (var ci = 0, cl = chains.length; ci < cl; ci++) {
+          var chain = chains[ci];
+
+          var edges = chain.edges, faces = chain.faces;
+          var elen = edges.length, flen = faces.length;
+
+          // don't need to detach anything if chain starts and ends in border
+          // edges
+          if (edges[0].border() && edges[elen - 1].border()) continue;
+
+          // if start and end edges are the same edge, just leave it as a
+          // connected disk
+          if (edges[0] === edges[elen - 1]) continue;
+
+          // duplicate vert
+          var vertclone = this.createVert(vert.v);
+
+          for (var ei = 0; ei < elen; ei++) {
+            var edge = edges[ei];
+
+            // move edge to new vert's disk cycle
+
+            // if first edge and not a border edge, duplicate it and assign the
+            // first face to the duplicate
+            if (ei === 0 && !edge.border()) {
+              var edgeclone = this.createEdge(vertclone, edge.other(vert));
+              var face = faces[0];
+
+              edge.removeFaceFromRadialCycle(face);
+              edgeclone.addFaceToRadialCycle(face);
+
+              vert.removeEdgeFromDiskCycle(edge);
+              verclone.addEdgeToDiskCycle(edgeclone);
+            }
+            // ditto for last edge
+            else if (ei === (elen - 1) && !edge.border()) {
+              var edgeclone = this.createEdge(vertclone, edge.other(vert));
+              var face = faces[flen - 1];
+
+              edge.removeFaceFromRadialCycle(face);
+              edgeclone.addFaceToRadialCycle(face);
+
+              vert.removeEdgeFromDiskCycle(edge);
+              verclone.addEdgeToDiskCycle(edgeclone);
+            }
+            // else, if intermediate edge, just replace the endpoint with the
+            // duplicate vert
+            else {
+              edge.replaceVert(vert, vertclone);
+            }
+          }
+        }
+      }
+
+      // args:
+      //  vert: current vertex on which all edges and faces are incident
+      //  edge: current border/singular edge from which chains emanate
+      //  facesSeen: record of faces seen so far, prevents duplicate chains
+      //  chains: output array
+      function getEdgeChainsFromEdge(vert, edge, facesSeen, chains) {
+        var riter = edge.radialIterator();
+
+        if (!riter) return;
+
+        do {
+          var face = riter.val.face;
+
+          getEdgeChainFromFace(vert, edge, face, facesSeen, chains);
+        } while (riter.next() !== riter.start);
+      }
+
+      // args:
+      //  vert: current vertex on which all edges and faces are incident
+      //  edge: current border/singular edge from which chains emanate
+      //  face: start face of a chain
+      //  facesSeen: record of faces seen so far, prevents duplicate chains
+      //  chains: output array
+      function getEdgeChainFromFace(vert, edge, face, facesSeen, chains) {
+        // face already included in a chain, so do nothing
+        if (facesSeen.hasOwnProperty(face.id)) return;
+
+        // stores edge chain
+        var chain = {
+          edges: [edge],
+          faces: []
+        };
+
+        var edgeprev = null;
+
+        // go through a chain of faces incident on the vert until we hit
+        // a border/singular edge
+        do {
+          facesSeen[face.id] = face;
+
+          edgeprev = edge;
+
+          // find another edge on the face that's incident on the vert
+          var liter = face.loopIterator();
+
+          do {
+            var loopedge = liter.val.edge;
+
+            if (loopedge !== edge && (loopedge.v1 === vert || loopedge.v2 === vert)) {
+              edge = loopedge;
+              break;
+            }
+          } while (liter.next() !== liter.start);
+
+          // if face doesn't have a second edge touching the vert, ignore it
+          if (edge === edgeprev) return;
+
+          // store the edge and face
+          chain.edges.push(edge);
+          chain.faces.push(face);
+
+          // end the chain if we hit a border/singular edge
+          if (!edge.regular()) break;
+
+          // get the next face
+          face = face.other(edge);
+        } while (edge.regular());
+
+        chains.push(chain);
+      }
+    },
+
     fromGeometry: function(geometry, p) {
       // precision factor
       p = p || 1e5;
@@ -712,6 +1118,7 @@ var BMesh = (function() {
 
       var createVert = this.createVert.bind(this);
       var createEdge = this.createEdge.bind(this);
+      var createLoop = this.createLoop.bind(this);
       var createFace = this.createFace.bind(this);
 
       Compute.traverseFaces(geometry, function(va, vb, vc) {
@@ -725,7 +1132,12 @@ var BMesh = (function() {
         var bmebc = createEdge(bmvb, bmvc, true);
         var bmeca = createEdge(bmvc, bmva, true);
 
-        var face = createFace([bmva, bmvb, bmvc], [bmeab, bmebc, bmeca]);
+        // if edge creation failed (two verts coincident), do nothing
+        if (!bmeab || !bmebc || !bmeca) return;
+
+        var loop = createLoop([bmva, bmvb, bmvc], [bmeab, bmebc, bmeca]);
+
+        var face = createFace(loop, true);
       });
 
       // todo: remove
@@ -745,9 +1157,9 @@ var BMesh = (function() {
         var iter = face.loopIterator();
 
         do {
-          var loop = iter.val();
+          var loop = iter.val;
           geo.vertices.push(loop.vert.v);
-        } while (iter.next() !== iter.start());
+        } while (iter.next() !== iter.start);
 
         var face3 = new THREE.Face3(n, n + 1, n + 2);
         face3.normal.copy(face.normal);
@@ -762,7 +1174,7 @@ var BMesh = (function() {
       for (var v = 0, l = this.verts.length; v < l; v++) {
         var vert = this.verts[v];
 
-        if (!vert.destroyed()) callback(vert);
+        if (!vert.destroyed()) callback(vert, v);
       }
     },
 
@@ -770,7 +1182,7 @@ var BMesh = (function() {
       for (var e = 0, l = this.edges.length; e < l; e++) {
         var edge = this.edges[e];
 
-        if (!edge.destroyed()) callback(edge);
+        if (!edge.destroyed()) callback(edge, e);
       }
     },
 
@@ -778,7 +1190,7 @@ var BMesh = (function() {
       for (var f = 0, l = this.faces.length; f < l; f++) {
         var face = this.faces[f];
 
-        if (!face.destroyed()) callback(face);
+        if (!face.destroyed()) callback(face, f);
       }
     },
 
@@ -808,7 +1220,7 @@ var BMesh = (function() {
 
       do {
         ct++;
-        var edge = iter.val();
+        var edge = iter.val;
 
         var other = edge.v1 === vert ? edge.v2 : edge.v1;
         var v2 = other.v.clone().applyMatrix4(matrix);
@@ -819,7 +1231,7 @@ var BMesh = (function() {
         total.add(d);
 
         debug.line(v1, v1.clone().addScaledVector(d, dist/4));
-      } while (iter.next() !== iter.start());
+      } while (iter.next() !== iter.start);
 
       debug.line(v1, v1.clone().add(total.negate().setLength(0.1 * ct)));
 
@@ -851,7 +1263,7 @@ var BMesh = (function() {
       }
 
       do {
-        var face = riter.val().face;
+        var face = riter.val.face;
 
         if (face.destroyed()) {
           continue;
@@ -863,9 +1275,9 @@ var BMesh = (function() {
         var fiter = face.loopIterator();
 
         do {
-          fcenter.add(fiter.val().vert.v);
+          fcenter.add(fiter.val.vert.v);
           vnum++;
-        } while (fiter.next() !== fiter.start());
+        } while (fiter.next() !== fiter.start);
 
         fcenter.divideScalar(vnum).applyMatrix4(matrix);
 
@@ -874,7 +1286,7 @@ var BMesh = (function() {
         d.normalize();
 
         debug.line(ecenter, ecenter.clone().addScaledVector(d, dist/4));
-      } while (riter.next() !== riter.start());
+      } while (riter.next() !== riter.start);
 
       if (!group) debug.lines();
     },
@@ -900,9 +1312,9 @@ var BMesh = (function() {
       var fiter = face.loopIterator();
 
       do {
-        fcenter.add(fiter.val().vert.v);
+        fcenter.add(fiter.val.vert.v);
         vnum++;
-      } while (fiter.next() !== fiter.start());
+      } while (fiter.next() !== fiter.start);
 
       fcenter.divideScalar(vnum).applyMatrix4(matrix);
 
@@ -913,7 +1325,7 @@ var BMesh = (function() {
       do {
         ct++;
 
-        var loop = iter.val();
+        var loop = iter.val;
         var ploop = iter.peekPrev();
         var nloop = iter.peekNext();
 
@@ -938,7 +1350,7 @@ var BMesh = (function() {
 
         debug.line(vnew, nvnew);
         debug.line(nvnew, nvnew.clone().multiplyScalar(0.8).add(fcenter.clone().multiplyScalar(0.2)));
-      } while (iter.next() !== iter.start());
+      } while (iter.next() !== iter.start);
 
       debug.line(fcenter, fcenter.clone().addScaledVector(face.normal, len * 0.1 / ct));
 
@@ -956,33 +1368,25 @@ var BMesh = (function() {
   // var iter = edge.radialIterator();
   //
   // do {
-  //   loop = iter.val(); // BMLoop
-  // } while (iter.next() !== iter.start());
+  //   loop = iter.val; // a BMLoop, if radial iterator
+  // } while (iter.next() !== iter.start);
 
   // base type
   function Iterator(source) {
     this._source = source;
-    this._val = null;
-    this._start = null;
+    this.val = null;
+    this.start = null;
   }
 
   Object.assign(Iterator.prototype, {
     constructor: Iterator,
 
-    val: function() {
-      return this._val;
-    },
-
-    start: function() {
-      return this._start;
-    },
-
     next: function() {
-      return this._val;
+      return this.val;
     },
 
     prev: function() {
-      return this._val;
+      return this.val;
     },
 
     // peek ahead
@@ -1010,8 +1414,8 @@ var BMesh = (function() {
   function DiskIterator(vert) {
     Iterator.call(this, vert);
 
-    this._val = vert.edge;
-    this._start = this._val;
+    this.val = vert.edge;
+    this.start = this.val;
   }
 
   DiskIterator.prototype = Object.create(Iterator.prototype);
@@ -1020,31 +1424,31 @@ var BMesh = (function() {
 
     // go to the next edge in the disk
     next: function() {
-      if (!this._val) return null;
+      if (!this.val) return null;
 
-      this._val = this._val.getVertDisk(this._source).next;
+      this.val = this.val.getVertDisk(this._source).next;
 
-      return this._val;
+      return this.val;
     },
 
     // go to the previous edge in the disk
     prev: function() {
-      if (!this._val) return null;
+      if (!this.val) return null;
 
-      this._val = this._val.getVertDisk(this._source).prev;
+      this.val = this.val.getVertDisk(this._source).prev;
 
-      return this._val;
+      return this.val;
     }
   });
 
 
 
-  // iterates over the BMLoops in a face's loop cycle
-  function LoopIterator(face) {
-    Iterator.call(this, face);
+  // iterates over BMLoops
+  function LoopIterator(loop) {
+    Iterator.call(this, loop);
 
-    this._val = face.loop;
-    this._start = this._val;
+    this.val = loop;
+    this.start = this.val;
   }
 
   LoopIterator.prototype = Object.create(Iterator.prototype);
@@ -1053,20 +1457,20 @@ var BMesh = (function() {
 
     // go to the next loop in the cycle
     next: function() {
-      if (!this._val) return null;
+      if (!this.val) return null;
 
-      this._val = this._val.next;
+      this.val = this.val.next;
 
-      return this._val;
+      return this.val;
     },
 
     // go to the previous loop in the cycle
     prev: function() {
-      if (!this._val) return null;
+      if (!this.val) return null;
 
-      this._val = this._val.prev;
+      this.val = this.val.prev;
 
-      return this._val;
+      return this.val;
     }
   });
 
@@ -1076,8 +1480,8 @@ var BMesh = (function() {
   function RadialIterator(edge) {
     Iterator.call(this, edge);
 
-    this._val = edge.radial;
-    this._start = this._val;
+    this.val = edge.radial;
+    this.start = this.val;
   }
 
   // member functions are the same as those of LoopIterator
