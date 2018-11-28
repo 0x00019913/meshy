@@ -89,56 +89,134 @@ var Repair = (function() {
       this.mesh.geometry = this.bmesh.toGeometry();
     },
 
-    // based on "As-exact-as-possible repair of unprintable STL files" by
-    // Marco Attene
+    // based roughly on "As-exact-as-possible repair of unprintable STL files"
+    // by Marco Attene
+    // assumes no singular edges
     fixFaceOrientation: function() {
-      while (true) {
-        // find the first face whose correct orientation can be unambiguously
-        // established
+      var bmesh = this.bmesh;
+      var seedface = null;
 
-        // first, get the vert with the greatest x coord
-        var seedvert = null;
+      while ((seedface = getSeedFace()) !== null) {
+        // now we have a correctly oriented seed face; propagate the orientation
+        // to all edge-connected faces
 
-        this.bmesh.forEachVert(function(vert) {
-          if (!seedvert || vert.v.x > seedvert.v.x) seedvert = vert;
-        });
+        //this.bmesh.debugFace(seedface, this.mesh.matrixWorld);
 
-        // then get the edge least parallel to the x axis
-        var seededge = null, xmin = Infinity;
-        var eiter = seedvert.diskIterator();
+        var q = new Queue();
 
+        var iter = seedface.loopIterator();
         do {
-          var edge = eiter.val();
-          var xabs = Math.abs(edge.edgeVector().x);
+          q.enqueue({
+            face: seedface,
+            edge: iter.val.edge
+          });
+        } while (iter.next() !== iter.start);
 
-          if (!seededge || xabs < xmin) {
-            seededge = edge;
-            xmin = xabs;
-          }
-        } while (eiter.next() !== eiter.start());
+        var visited = BMesh.Flags.visited;
 
-        // lastly, find the face incident to the edge whose normal is most
-        // parallel to the x axis
-        var seedface = null, xmax = 0;
-        var fiter = seededge.radialIterator();
+        seedface.setFlag(visited);
 
-        do {
-          var face = fiter.val().face;
-          var normal = face.normal;
-          var xabs = Math.abs(normal.x);
+        var entry;
 
-          if (!seedface || xabs > xmax) {
-            seedface = face;
-            xmax = xabs;
-          }
-        } while (fiter.next() !== fiter.start());
+        while ((entry = q.dequeue()) !== undefined) {
+          var edge = entry.edge;
+          var face = entry.face;
+          var other = face.other(edge);
 
-        // if the face's normal points the wrong way, fix it
-        if (seedface.normal.x < 0) seedface.flip();
+          if (!other) continue;
 
-        this.bmesh.debugFace(seedface, this.mesh.matrixWorld);
+          if (other.hasFlag(visited)) continue;
+
+          if (!other.orientationConsistent(face, edge)) other.flip();
+
+          other.setFlag(visited);
+          other.setVertFlags(visited);
+
+          iter = other.loopIterator();
+          do {
+            var loop = iter.val;
+
+            q.enqueue({
+              face: other,
+              edge: loop.edge
+            });
+          } while (iter.next() !== iter.start);
+        }
+
+        debug.lines();
 
         break;
+      }
+
+      // find the first face whose correct orientation can be unambiguously
+      // established
+      function getSeedFace() {
+          // first, get the vert with the greatest x coord
+          var seedvert = null;
+
+          bmesh.forEachVert(function(vert) {
+            if (!vert.hasFlag(visited)) {
+              if (!seedvert || vert.v.x > seedvert.v.x) seedvert = vert;
+            }
+          });
+
+          if (!seedvert) return null;
+
+          // then get the edge least parallel to the x axis
+          var seededge = null, xmin = Infinity;
+          var eiter = seedvert.diskIterator();
+
+          do {
+            var edge = eiter.val;
+            var xabs = Math.abs(edge.edgeVector().x);
+
+            if (!seededge || xabs < xmin) {
+              seededge = edge;
+              xmin = xabs;
+            }
+          } while (eiter.next() !== eiter.start);
+
+          if (!seededge) return null;
+
+          // lastly, find the face incident to the edge whose normal is most
+          // parallel to the x axis
+          var seedface = null, xmax = 0;
+          var fiter = seededge.radialIterator();
+
+          do {
+            var face = fiter.val.face;
+            var normal = face.normal;
+            var xabs = Math.abs(normal.x);
+
+            if (!seedface || xabs > xmax) {
+              seedface = face;
+              xmax = xabs;
+            }
+          } while (fiter.next() !== fiter.start);
+
+          if (!seedface) return null;
+
+          // if the face's normal points the wrong way, fix it
+          if (seedface.normal.x < 0) seedface.flip();
+
+          return seedface;
+      }
+    },
+
+    // todo: rework/remove
+    detachSingularEdges: function(vidx, cidx) {
+      var chains = this.bmesh.detachSingularEdges(vidx);
+
+      return;
+
+      if (cidx !== undefined && chains.length > 0 && chains[0].length > cidx) {
+        debug.cleanup()
+        var chain = chains[0][cidx].edges;
+
+        for (var i = 0; i < chain.length; i++) {
+          this.bmesh.debugEdge(chain[i], this.mesh.matrixWorld, true);
+        }
+        debug.lines();
       }
     }
 

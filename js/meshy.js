@@ -2211,10 +2211,42 @@ Meshy.prototype.createModel = function(geometry, filename) {
 
   this.infoBox.update();
 
+  // debugging repair stuff
+  // todo: remove
+  var geo = this.model.baseMesh.geometry;
+
+  for (var f = 0; f < geo.faces.length; f++) {
+    break;
+    if (f%4 !== 0) continue;
+
+    var face = geo.faces[f];
+
+    // flip winding order on each face
+    var tmp = face.a;
+    face.a = face.b;
+    face.b = tmp;
+
+    // flip face normal
+    face.normal.negate();
+
+    // also flip vertex normals if present
+    if (face.vertexNormals) {
+      for (var n = 0; n < face.vertexNormals.length; n++) {
+        face.vertexNormals[n].negate();
+      }
+    }
+  }
+
+  geo.elementsNeedUpdate = true;
+  geo.normalsNeedUpdate = true;
+
   this.rep = new Repair(this.model.baseMesh);
   this.bmesh = this.rep.bmesh;
-  //this.rep.fixFaceOrientation();
-  //this.rep.updateGeometry();
+
+  this.fixFaceOrientation = function() {
+    this.rep.fixFaceOrientation();
+    this.rep.updateGeometry();
+  }
 }
 
 // Interface for the dat.gui button. Saves the model.
