@@ -45,6 +45,8 @@ var Octree = (function() {
       // should be good
       depth = Math.round(Math.log(faces.length) * 0.6);
 
+      /* Commented out - it appears that this can lead to excessive depth and
+         cause meshy death.
       // adjustment for meshes that may occupy only a small fraction of the
       // octree root volume - increment the depth based on the ratio of the
       // octree root volume to the mesh bounding box volume (the factor is
@@ -53,6 +55,7 @@ var Octree = (function() {
       var vratio = (size * size * size) / (vsize.x * vsize.y * vsize.z);
 
       depth += Math.round(vratio / 16);
+      */
     }
 
     this.depth = depth;
