@@ -134,7 +134,7 @@ Meshy.prototype.generateUI = function() {
   displayFolder.add(this, "cameraToModel").name("Camera to model")
     .title("Snap camera to model (F).");
   this.backgroundColor = "#222222";
-  this.meshColor = "#481a1a";
+  this.meshColor = "#ffffff";//"#481a1a";
   this.wireframeColor = "#000000";
   this.meshRoughness = 0.3;
   this.meshMetalness = 0.5;
