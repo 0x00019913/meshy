@@ -1092,6 +1092,7 @@ Meshy.prototype.buildMeasurementFolder = function() {
   this.crossSectionArrayOffset = 0.5;
   this.crossSectionArrayIncrement = 1;
   this.crossSectionArrayFilename = "cross_section_results";
+  this.crossSectionArrayFormat = "json";
 
   this.crossSectionArrayFolder = this.measurementFolder.addFolder("Cross-section array", "Make multiple cross-section measurements.");
   this.crossSectionArrayFolder.add(this, "crossSectionArrayAxis", ["x", "y", "z"]).name("Axis")
@@ -1102,6 +1103,8 @@ Meshy.prototype.buildMeasurementFolder = function() {
     .title("Distance between adjacent cross-section planes.");
   this.crossSectionArrayFolder.add(this, "crossSectionArrayFilename").name("Filename")
     .title("Filename for the measurement result.")
+  this.crossSectionArrayFolder.add(this, "crossSectionArrayFormat", ["json", "csv"]).name("Format")
+    .title("Output format for the measurement result.");
   this.crossSectionArrayFolder.add(this, "measureCrossSectionArray").name("Measure")
     .title("Measure an array of cross-sections and export a JSON file with the results.");
 
@@ -1292,16 +1295,23 @@ Meshy.prototype.measureCrossSectionArray = function() {
     });
   }
 
-  console.log(results);
+  var format = this.crossSectionArrayFormat;
 
-  // https://stackoverflow.com/a/30800715
-  var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
-    axis: axis,
-    results: results
-  }));
+  var dataStr;
+  if (format === "json") {
+    // https://stackoverflow.com/a/30800715
+    dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+      axis: axis,
+      results: results
+    }));
+  }
+  else {
+    var csvContent = results.map(function(result) { return result.position + ", " + result.area + '\n'; }).join('');
+    dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
+  }
   var downloadAnchorNode = document.createElement('a');
   downloadAnchorNode.setAttribute("href", dataStr);
-  downloadAnchorNode.setAttribute("download", this.crossSectionArrayFilename + ".json");
+  downloadAnchorNode.setAttribute("download", this.crossSectionArrayFilename + "." + format);
   document.body.appendChild(downloadAnchorNode); // required for firefox
   downloadAnchorNode.click();
   downloadAnchorNode.remove();
