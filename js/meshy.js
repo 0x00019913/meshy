@@ -410,6 +410,7 @@ Meshy.prototype.setDisplayPrecision = function() {
   }
 
   this.setFolderDisplayPrecision(this.editFolder);
+  this.setFolderDisplayPrecision(this.crossSectionArrayFolder);
 }
 
 // Functions corresponding to buttons in the dat.gui.
@@ -1076,6 +1077,7 @@ Meshy.prototype.buildMeasurementFolder = function() {
     .title("Measure cross-section on y axis.");
   this.measurementFolder.add(this, "measureCrossSectionZ").name("Cross-section z")
     .title("Measure cross-section on z axis.");
+
   // todo: remove
   if (this.calculateManually === undefined) this.calculateManually = false;
   if (this.showPreviewMarker === undefined) this.showPreviewMarker = false;
@@ -1085,6 +1087,23 @@ Meshy.prototype.buildMeasurementFolder = function() {
   this.measurementFolder.add(this, "measureConvexHull").name("Convex hull")
     .title("Compute the convex hull for cross-sections.")
     .onChange(this.onToggleConvexHull.bind(this));
+
+  this.crossSectionArrayAxis = "z";
+  this.crossSectionArrayOffset = 0.5;
+  this.crossSectionArrayIncrement = 1;
+  this.crossSectionArrayFilename = "cross_section_results";
+
+  this.crossSectionArrayFolder = this.measurementFolder.addFolder("Cross-section array", "Make multiple cross-section measurements.");
+  this.crossSectionArrayFolder.add(this, "crossSectionArrayAxis", ["x", "y", "z"]).name("Axis")
+    .title("Axis normal to the cross-section planes.");
+  this.crossSectionArrayFolder.add(this, "crossSectionArrayOffset", 0).precision(4).name("Min offset")
+    .title("Offset from the mesh's minimum bound on the measurement axis.");
+  this.crossSectionArrayFolder.add(this, "crossSectionArrayIncrement", 0.0001).precision(4).name("Increment")
+    .title("Distance between adjacent cross-section planes.");
+  this.crossSectionArrayFolder.add(this, "crossSectionArrayFilename").name("Filename")
+    .title("Filename for the measurement result.")
+  this.crossSectionArrayFolder.add(this, "measureCrossSectionArray").name("Measure")
+    .title("Measure an array of cross-sections and export a JSON file with the results.");
 
   if (this.measurementsExist()) {
     var indices = {};
@@ -1229,6 +1248,63 @@ Meshy.prototype.measureCrossSectionZ = function() {
     axis: "z",
     convexHull: this.measureConvexHull
   });
+}
+Meshy.prototype.measureCrossSectionArray = function() {
+  // slice mode keeps its own copy of the mesh, so don't allow measuring
+  if (this.sliceModeOn) {
+    this.printout.warn("Cannot measure mesh while slice mode is on.");
+    return;
+  }
+
+  if (!this.model) return;
+
+  var axis = this.crossSectionArrayAxis;
+  var increment = this.crossSectionArrayIncrement;
+  var offset = this.crossSectionArrayOffset;
+  var size = this.model.getSize()[axis];
+  var min = this.model.getMin()[axis];
+
+  if (size < offset) {
+    this.printout.warn("Offset is larger than the model size.");
+    return;
+  }
+
+  var measurement = new Measurement(this.pointer, this.scene);
+  var results = [];
+
+  var numberOfSteps = Math.ceil((size - offset) / increment);
+  var start = new THREE.Vector3();
+  start[axis] = min + offset;
+
+  for (var i = 0; i < numberOfSteps; i++) {
+    var point = start.clone();
+    point[axis] += i * increment;
+
+    var result = measurement.calculateNoninteractive({
+      type: Measurement.Types.crossSection,
+      axis: this.crossSectionArrayAxis,
+      p: [point]
+    });
+    results.push({
+      position: point[axis],
+      area: result.area,
+      length: result.length
+    });
+  }
+
+  console.log(results);
+
+  // https://stackoverflow.com/a/30800715
+  var dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+    axis: axis,
+    results: results
+  }));
+  var downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", this.crossSectionArrayFilename + ".json");
+  document.body.appendChild(downloadAnchorNode); // required for firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
 }
 Meshy.prototype.measureLocalCrossSection = function() {
   this.addMeasurement({

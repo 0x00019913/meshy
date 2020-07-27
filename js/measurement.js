@@ -536,6 +536,17 @@ var Measurement = (function() {
       else return true;
     },
 
+    calculateNoninteractive: function(params) {
+      this.params = params || {};
+      this.params.type = this.params.type || Measurement.Types.length;
+      this.params.normal = this.params.normal || axisToVector3(this.params.axis);
+      this.params.p = this.params.p || [];
+
+      this.calculate();
+
+      return this.result;
+    },
+
     calculate: function() {
       // if not enough points, do nothing
       if (!this.isFullyDetermined()) return;
@@ -670,7 +681,9 @@ var Measurement = (function() {
         }
 
         // set the contour marker from the segment array
-        this.smarkers[0].setFromSegments(segments);
+        if (this.smarkers && this.smarkers.length > 0) {
+          this.smarkers[0].setFromSegments(segments);
+        }
 
         // fill the measurement result
         this.result.area = area;
@@ -727,6 +740,10 @@ var Measurement = (function() {
 
     // position secondary markers
     positionSecondaryMarkers: function() {
+      if (!this.smarkers || this.smarkers.length === 0) {
+        return;
+      }
+
       if (this.stype === Markers.Types.line) {
         for (var m = 0; m < this.snum; m++) {
           var ps = this.params.p[(this.pidx + m) % this.pnum];
