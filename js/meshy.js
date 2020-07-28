@@ -1306,7 +1306,7 @@ Meshy.prototype.measureCrossSectionArray = function() {
     }));
   }
   else {
-    var csvContent = results.map(function(result) { return result.position + ", " + result.area + '\n'; }).join('');
+    var csvContent = results.map(function(result) { return result.position + ',' + result.area + ',' + result.length + '\n'; }).join('');
     dataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvContent);
   }
   var downloadAnchorNode = document.createElement('a');
