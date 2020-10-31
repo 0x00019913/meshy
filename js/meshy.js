@@ -1380,6 +1380,7 @@ Meshy.prototype.addMeasurement = function(params) {
     item.list.add("Diameter", item, ["result", "diameter"]);
     item.list.add("Circumference", item, ["result", "circumference"]);
     item.list.add("Area", item, ["result", "area"]);
+    item.list.add("Normal", item, ["result", "normal"]);
   }
   else if (type === Measurement.Types.crossSection) {
     item.list = this.infoBox.addList(item.measurement.uuid, "Cross-section " + params.axis, params.color);
