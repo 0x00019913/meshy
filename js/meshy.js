@@ -1369,6 +1369,9 @@ Meshy.prototype.addMeasurement = function(params) {
   if (type === Measurement.Types.length) {
     item.list = this.infoBox.addList(item.measurement.uuid, "Length", params.color);
     item.list.add("Length", item, ["result", "length"]);
+    item.list.add("X", item, ["result", "vector", "x"]);
+    item.list.add("Y", item, ["result", "vector", "y"]);
+    item.list.add("Z", item, ["result", "vector", "z"]);
   }
   else if (type === Measurement.Types.angle) {
     item.list = this.infoBox.addList(item.measurement.uuid, "Angle", params.color);

@@ -567,7 +567,9 @@ var Measurement = (function() {
 
         if (p0 === null || p1 === null) return;
 
-        this.result.length = p0.distanceTo(p1);
+        var diff = p0.clone().sub(p1);
+        this.result.length = diff.length();
+        this.result.vector = vector3Abs(diff);
         this.result.ready = true;
       }
       else if (type === Measurement.Types.angle) {
